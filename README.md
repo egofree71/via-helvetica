@@ -211,9 +211,15 @@ Application-wide design belongs in `docs/ARCHITECTURE.md`; routing-specific
 design belongs in `docs/ROUTING.md`; `README.md` should stay concise and
 user-oriented.
 
+## Author
+
+Created and maintained by Philippe De Pol.
+
 ## License
 
 The source code is released under the MIT License.
 
 swisstopo and other external geodata remain subject to their own usage,
 licensing, and attribution terms.
+
+Change copyright holder in LICENSE
