@@ -221,5 +221,3 @@ The source code is released under the MIT License.
 
 swisstopo and other external geodata remain subject to their own usage,
 licensing, and attribution terms.
-
-Change copyright holder in LICENSE
