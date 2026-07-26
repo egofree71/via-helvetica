@@ -7,7 +7,8 @@ import type { Coordinate } from 'ol/coordinate.js';
 import { describe, expect, it } from 'vitest';
 import type { RouteClosure, RouteStep } from '../map/routeState';
 import { toWgs84 } from '../map/projection';
-import { createRouteGpx } from './gpx';
+import { calculateRouteDistance } from '../metrics/routeMetrics';
+import { createRouteGpx, createRouteSegmentsGpx } from './gpx';
 
 const START: Coordinate = [2_600_000, 1_200_000];
 const EAST: Coordinate = [2_601_000, 1_200_000];
@@ -36,8 +37,8 @@ function parseGpx(xml: string): Document {
   return document;
 }
 
-function readTrackPoints(document: Document): ParsedTrackPoint[] {
-  return Array.from(document.getElementsByTagNameNS('*', 'trkpt')).map(
+function readTrackPoints(container: Document | Element): ParsedTrackPoint[] {
+  return Array.from(container.getElementsByTagNameNS('*', 'trkpt')).map(
     (element) => {
       const elevationElement = element.getElementsByTagNameNS('*', 'ele')[0];
 
@@ -218,5 +219,69 @@ describe('createRouteGpx', () => {
     expect(
       readTrackPoints(document).map((point) => point.elevationMeters),
     ).toEqual([null, null]);
+  });
+});
+
+describe('createRouteSegmentsGpx', () => {
+  it('preserves independent geometry as separate GPX track segments', () => {
+    const secondSegmentStart: Coordinate = [2_602_000, 1_202_000];
+    const secondSegmentEnd: Coordinate = [2_603_000, 1_202_000];
+    const document = parseGpx(
+      createRouteSegmentsGpx(
+        [
+          [START, EAST],
+          [secondSegmentStart, secondSegmentEnd],
+        ],
+        new Date('2026-07-26T12:00:00.000Z'),
+        'Public route',
+      ),
+    );
+    const trackSegments = Array.from(
+      document.getElementsByTagNameNS('*', 'trkseg'),
+    );
+
+    expect(trackSegments).toHaveLength(2);
+    expect(
+      trackSegments.map((segment) =>
+        segment.getElementsByTagNameNS('*', 'trkpt').length,
+      ),
+    ).toEqual([2, 2]);
+  });
+
+  it('keeps distinct elevations on both sides of a segment gap', () => {
+    const secondSegmentStart: Coordinate = [2_602_000, 1_202_000];
+    const secondSegmentEnd: Coordinate = [2_603_000, 1_202_000];
+    const firstDistance = calculateRouteDistance([START, EAST]);
+    const secondDistance = calculateRouteDistance([
+      secondSegmentStart,
+      secondSegmentEnd,
+    ]);
+    const document = parseGpx(
+      createRouteSegmentsGpx(
+        [
+          [START, EAST],
+          [secondSegmentStart, secondSegmentEnd],
+        ],
+        new Date('2026-07-26T12:00:00.000Z'),
+        'Elevated public route',
+        [
+          { distanceMeters: 0, elevationMeters: 500 },
+          { distanceMeters: firstDistance, elevationMeters: 550 },
+          { distanceMeters: firstDistance, elevationMeters: 700 },
+          {
+            distanceMeters: firstDistance + secondDistance,
+            elevationMeters: 750,
+          },
+        ],
+      ),
+    );
+    const trackSegments = Array.from(
+      document.getElementsByTagNameNS('*', 'trkseg'),
+    );
+    const firstSegmentPoints = readTrackPoints(trackSegments[0]);
+    const secondSegmentPoints = readTrackPoints(trackSegments[1]);
+
+    expect(firstSegmentPoints.at(-1)?.elevationMeters).toBe(550);
+    expect(secondSegmentPoints[0]?.elevationMeters).toBe(700);
   });
 });

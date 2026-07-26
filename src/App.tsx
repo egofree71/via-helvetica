@@ -1,8 +1,8 @@
 /**
  * Business context: coordinates the map-centred application shell around one
  * disposable OpenLayers runtime. It composes search, geolocation, editable-route,
- * imported-GPX, information-layer, and itinerary-metrics capabilities while
- * delegating their imperative lifecycles and provider contracts to focused
+ * editable and read-only itinerary, information-layer, and metrics capabilities
+ * while delegating their imperative lifecycles and provider contracts to focused
  * modules.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,8 +17,12 @@ import RouteExportDialog from './components/RouteExportDialog';
 import PublicTransportStopPopup from './components/PublicTransportStopPopup';
 import ShootingDangerZonePopup from './components/ShootingDangerZonePopup';
 import TrailClosurePopup from './components/TrailClosurePopup';
+import SwitzerlandMobilityHikingPanel from './components/SwitzerlandMobilityHikingPanel';
 import RouteStatistics from './components/RouteStatistics';
-import { downloadRouteGpx } from './export/gpx';
+import {
+  downloadRouteGpx,
+  downloadRouteSegmentsGpx,
+} from './export/gpx';
 import { useI18n } from './i18n/I18nContext';
 import { LOCATION_SEARCH_ZOOM, MAP_EXTENT } from './map/config';
 import { fromWgs84 } from './map/projection';
@@ -40,6 +44,9 @@ import {
 } from './map/searchResult';
 import { useItineraryMetrics } from './metrics/useItineraryMetrics';
 import type { LocationSearchResult } from './search/locationSearch';
+
+/** Itinerary source named by the shared GPX export dialog. */
+type RouteExportSource = 'editable' | 'switzerlandMobility';
 
 /**
  * Builds an unambiguous local timestamp for the proposed GPX name. The ISO-like
@@ -66,6 +73,8 @@ export default function App() {
   const [locationSearchResetVersion, setLocationSearchResetVersion] =
     useState(0);
   const [routeExportDefaultName, setRouteExportDefaultName] = useState('');
+  const [routeExportSource, setRouteExportSource] =
+    useState<RouteExportSource>('editable');
   const initialHikingTrailsVisibility = useMemo(
     resolveInitialHikingTrailsVisibility,
     [],
@@ -161,7 +170,7 @@ export default function App() {
     reverseRoute,
     toggleRouteLoop,
     deleteRoute,
-    replaceWithImportedItinerary,
+    replaceWithReadOnlyItinerary,
     showTemporaryRouteMessage,
     isPointerInteractionActive,
   } = useEditableRoute({
@@ -172,8 +181,8 @@ export default function App() {
 
   const handleImportedRouteAccepted = useCallback(() => {
     clearSelectedSearchResult();
-    replaceWithImportedItinerary();
-  }, [clearSelectedSearchResult, replaceWithImportedItinerary]);
+    replaceWithReadOnlyItinerary();
+  }, [clearSelectedSearchResult, replaceWithReadOnlyItinerary]);
 
   const handleImportedRouteError = useCallback(
     (message: string) => showTemporaryRouteMessage(message, 'error'),
@@ -192,6 +201,17 @@ export default function App() {
     onImportError: handleImportedRouteError,
   });
 
+  /** Makes one validated public route the sole current itinerary. */
+  const handleSwitzerlandMobilityHikingRouteAccepted = useCallback(() => {
+    clearSelectedSearchResult();
+    clearImportedRoute();
+    replaceWithReadOnlyItinerary();
+  }, [
+    clearImportedRoute,
+    clearSelectedSearchResult,
+    replaceWithReadOnlyItinerary,
+  ]);
+
   const handleToggleRouteCreation = useCallback(() => {
     if (!isRouteCreationActive) {
       clearSelectedSearchResult();
@@ -207,6 +227,33 @@ export default function App() {
   ]);
 
   const {
+    areTrailClosuresVisible,
+    setAreTrailClosuresVisible,
+    areShootingDangerZonesVisible,
+    setAreShootingDangerZonesVisible,
+    arePublicTransportStopsVisible,
+    setArePublicTransportStopsVisible,
+    trailClosurePopup,
+    shootingDangerZonePopup,
+    publicTransportStopPopup,
+    switzerlandMobilityHikingPanel,
+    selectSwitzerlandMobilityHikingCandidate,
+    switzerlandMobilityHikingMapHoverDistanceMeters,
+    handleSwitzerlandMobilityHikingProfileHoverDistanceChange,
+    closeMapInformationPopup,
+    dismissSwitzerlandMobilityHikingPanel,
+  } = useMapInformationLayers({
+    mapRuntimeRef,
+    initialVisibility: initialMapInformationVisibility,
+    language,
+    isSwitzerlandMobilityHikingVisible,
+    isRouteCreationActive,
+    onInformationSelected: clearSelectedSearchResult,
+    onSwitzerlandMobilityHikingRouteAccepted:
+      handleSwitzerlandMobilityHikingRouteAccepted,
+  });
+
+  const {
     activeRouteSegments,
     distanceMeters: routeDistanceMeters,
     elevationStatus: routeElevationStatus,
@@ -220,27 +267,12 @@ export default function App() {
     importedRouteSegments,
     importedRouteElevationSummary,
     isRoutePointerInteractionActive,
+    // The selected public route owns the shared black marker and profile cursor
+    // while it is the current read-only itinerary.
+    isProfileInteractionEnabled:
+      switzerlandMobilityHikingPanel === null,
     isPointerInteractionActive,
     isRouteOperationPending,
-  });
-
-  const {
-    areTrailClosuresVisible,
-    setAreTrailClosuresVisible,
-    areShootingDangerZonesVisible,
-    setAreShootingDangerZonesVisible,
-    arePublicTransportStopsVisible,
-    setArePublicTransportStopsVisible,
-    trailClosurePopup,
-    shootingDangerZonePopup,
-    publicTransportStopPopup,
-    closeMapInformationPopup,
-  } = useMapInformationLayers({
-    mapRuntimeRef,
-    initialVisibility: initialMapInformationVisibility,
-    language,
-    isRouteCreationActive,
-    onInformationSelected: clearSelectedSearchResult,
   });
 
   /** Opens project information after dismissing any map-feature popup behind it. */
@@ -288,22 +320,64 @@ export default function App() {
     setRouteExportDefaultName(
       createRouteExportDefaultName(t('gpx.routeName')),
     );
+    setRouteExportSource('editable');
+    setIsRouteExportDialogOpen(true);
+  };
+
+  /** Opens the shared name dialog for the selected public hiking route. */
+  const requestSwitzerlandMobilityHikingExport = () => {
+    if (switzerlandMobilityHikingPanel?.state !== 'ready') {
+      return;
+    }
+
+    const route = switzerlandMobilityHikingPanel.route;
+    const baseName = route.routeName
+      ?? (route.routeNumber
+        ? t('switzerlandMobilityHiking.routeNumber', {
+            number: route.routeNumber,
+          })
+        : t('switzerlandMobilityHiking.unnamedRoute'));
+    const stageName = route.stageNumber
+      ? `${baseName} — ${t('switzerlandMobilityHiking.stage', {
+          number: route.stageNumber,
+        })}`
+      : baseName;
+
+    setRouteExportDefaultName(
+      route.sectionName
+        ? `${stageName} — ${route.sectionName}`
+        : stageName,
+    );
+    setRouteExportSource('switzerlandMobility');
     setIsRouteExportDialogOpen(true);
   };
 
   /** Downloads the exact displayed route geometry under the chosen route name. */
   const exportRoute = (routeName: string) => {
-    if (isRouteOperationPending) {
-      return;
-    }
-
     try {
-      downloadRouteGpx(
-        routeHistory.steps,
-        routeName,
-        routeElevation?.points ?? [],
-        routeHistory.closure,
-      );
+      if (routeExportSource === 'switzerlandMobility') {
+        if (switzerlandMobilityHikingPanel?.state !== 'ready') {
+          return;
+        }
+
+        downloadRouteSegmentsGpx(
+          switzerlandMobilityHikingPanel.route.segments,
+          routeName,
+          switzerlandMobilityHikingPanel.elevation?.points ?? [],
+        );
+      } else {
+        if (isRouteOperationPending) {
+          return;
+        }
+
+        downloadRouteGpx(
+          routeHistory.steps,
+          routeName,
+          routeElevation?.points ?? [],
+          routeHistory.closure,
+        );
+      }
+
       setIsRouteExportDialogOpen(false);
     } catch (error) {
       console.error('Unable to export the route as GPX.', error);
@@ -392,7 +466,10 @@ export default function App() {
           onExport={requestRouteExport}
         />
 
-        <RouteImportControl onSelectFile={importRouteFile} />
+        <RouteImportControl
+          onOpen={closeMapInformationPopup}
+          onSelectFile={importRouteFile}
+        />
 
         <MapLayersSelector
           baseMapStyle={baseMapStyle}
@@ -544,20 +621,36 @@ export default function App() {
         />
       )}
 
-      {activeRouteSegments.length > 0 && (
-        <RouteStatistics
-          distanceMeters={routeDistanceMeters}
-          elevationStatus={routeElevationStatus}
-          ascentMeters={routeElevation?.ascentMeters ?? null}
-          descentMeters={routeElevation?.descentMeters ?? null}
-          durationMinutes={routeDurationMinutes}
-          elevationPoints={routeElevation?.points ?? []}
+      {switzerlandMobilityHikingPanel && (
+        <SwitzerlandMobilityHikingPanel
+          status={switzerlandMobilityHikingPanel}
+          onSelectCandidate={selectSwitzerlandMobilityHikingCandidate}
           onProfileHoverDistanceChange={
-            handleProfileHoverDistanceChange
+            handleSwitzerlandMobilityHikingProfileHoverDistanceChange
           }
-          routeHoverDistanceMeters={routeMapHoverDistanceMeters}
+          routeHoverDistanceMeters={
+            switzerlandMobilityHikingMapHoverDistanceMeters
+          }
+          onExport={requestSwitzerlandMobilityHikingExport}
+          onClose={dismissSwitzerlandMobilityHikingPanel}
         />
       )}
+
+      {activeRouteSegments.length > 0 &&
+        !switzerlandMobilityHikingPanel && (
+          <RouteStatistics
+            distanceMeters={routeDistanceMeters}
+            elevationStatus={routeElevationStatus}
+            ascentMeters={routeElevation?.ascentMeters ?? null}
+            descentMeters={routeElevation?.descentMeters ?? null}
+            durationMinutes={routeDurationMinutes}
+            elevationPoints={routeElevation?.points ?? []}
+            onProfileHoverDistanceChange={
+              handleProfileHoverDistanceChange
+            }
+            routeHoverDistanceMeters={routeMapHoverDistanceMeters}
+          />
+        )}
 
       {routeMessage && (
         <div

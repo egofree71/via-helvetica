@@ -30,10 +30,10 @@ application can remain usable without an account or a project-owned backend.
 
 | Area | Highlights |
 |---|---|
-| Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional SwitzerlandMobility hiking routes, search, geolocation, scale, and fullscreen mode |
+| Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, search, geolocation, scale, and fullscreen mode |
 | Route planning | Editable ordered waypoints, start and finish markers, sparse direction arrows, optional swissTLM3D snapping in a dedicated routing Worker, undo, redo, reversal, loop closure, route deletion, and straight fallback segments when no routable path is found |
 | Route information | Distance, ascent, descent, Swiss hiking-time estimate, and a collapsible elevation profile with pointer synchronisation between the chart and the map |
-| Import and export | Read-only GPX loading with route statistics and elevation profile, plus named GPX export with simplified geometry and smoothed elevations when available |
+| Import and export | Read-only GPX loading with route statistics and elevation profile, plus named GPX export for editable and selected SwitzerlandMobility routes with simplified geometry and smoothed elevations when available |
 | Safety | Official hiking-trail closures and detours, plus military shooting notices and danger zones with localized details |
 | Public transport | Passenger-relevant stops, mode-specific symbols, next departures grouped by date, and links to the official SBB/CFF/FFS timetable |
 | Interface | Compact floating controls, no permanent toolbar, French, German, Italian, and English translations, and a localized About dialog with project, support, professional profile, safety, and data-credit information |
@@ -104,8 +104,14 @@ http://localhost:5173/
   profile are shown in the bottom summary.
 - When the profile is open, moving over the route or the chart mirrors the same
   position in both directions.
-- Outside route-creation mode, click visible closures, danger zones, or public
-  transport stops to inspect their available information.
+- Outside route-creation mode, click visible closures, danger zones, public
+  transport stops, or green SwitzerlandMobility routes to inspect their available
+  information. A selected public hiking route is highlighted and framed in full;
+  its calculated elevation profile can be opened from the summary and remains
+  synchronized with the map. Once its complete geometry is available, it replaces
+  any editable route or imported GPX as the single current itinerary. The export
+  button in the route header downloads that selected stage as GPX. When several
+  named routes share the clicked path, choose one before framing.
 - Use the information button to open the localized About dialog with the
   project summary, support contact, source code, license, professional profile,
   and official data credits.
@@ -126,7 +132,9 @@ and `transport.opendata.ch` departure data.
 - **GeoAdmin** is the federal geodata platform used for maps, bounded routing,
   elevation, and map-information requests.
 - **SwitzerlandMobility / ASTRA** provides the national, regional, and local
-  hiking-route portrayal exposed as the optional green route layer.
+  hiking-route portrayal plus public route identity and geometry used for route
+  selection. Via Helvetica calculates the displayed distance, elevation totals,
+  and walking-time estimate from that geometry.
 - **LV95 / EPSG:2056** is the Swiss national projected coordinate system used
   internally by the map, routing graph, and editable geometries.
 
@@ -145,7 +153,8 @@ are documented in [Browser routing](docs/ROUTING.md).
   resolved.
 - Closures and danger zones are informational and do not automatically change
   route calculation.
-- Imported GPX routes are read-only and replace the current editable route.
+- Imported GPX and selected SwitzerlandMobility routes are read-only and replace
+  the previous current itinerary.
 - Routes are not persisted locally or remotely.
 - External map, elevation, routing, and timetable services can be temporarily
   unavailable or incomplete.

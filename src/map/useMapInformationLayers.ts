@@ -1,8 +1,9 @@
 /**
  * Business context: coordinates optional planning information shown above the
  * Via Helvetica map. It persists layer choices, loads passenger stops for the
- * current viewport, and owns the prioritized stop/closure/danger-zone inspection
- * workflow without mixing these asynchronous concerns into the root component.
+ * current viewport, and owns the prioritized stop/closure/route/danger-zone
+ * inspection workflow, including validated public-route acceptance and profile
+ * exploration, without mixing these asynchronous concerns into the root component.
  */
 import {
   useCallback,
@@ -28,6 +29,9 @@ import {
 } from '../dangers/shootingDangerZones';
 import type { Language } from '../i18n/translations';
 import { isAbortedRequest } from '../network/abort';
+import type {
+  SwitzerlandMobilityHikingRouteCandidate,
+} from '../switzerlandMobility/hikingRoutes';
 import {
   createPublicTransportStopsViewportCoverage,
   getPublicTransportStopFromFeature,
@@ -39,8 +43,15 @@ import {
   updatePublicTransportStopsDisplay,
   updatePublicTransportStopSelection,
 } from '../transport/publicTransportStops';
-import { HIKING_TRAILS_MIN_ZOOM } from './config';
+import {
+  HIKING_TRAILS_MIN_ZOOM,
+  SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM,
+} from './config';
 import type { MapRuntime } from './mapRuntime';
+import {
+  useSwitzerlandMobilityHikingSelection,
+  type SwitzerlandMobilityHikingPanelStatus,
+} from './useSwitzerlandMobilityHikingSelection';
 
 /** Browser preference key for the safety-information overlay. */
 const TRAIL_CLOSURES_VISIBILITY_STORAGE_KEY =
@@ -59,7 +70,7 @@ const PUBLIC_TRANSPORT_STOP_HIT_TOLERANCE_PX = 8;
  */
 const PUBLIC_TRANSPORT_STOPS_MOVEEND_DEBOUNCE_MS = 180;
 
-/** Persisted visibility of the three inspectable information layers. */
+/** Persisted visibility of the three independently controlled information layers. */
 export interface MapInformationLayerVisibility {
   /** Whether official hiking closures and detours start visible. */
   trailClosures: boolean;
@@ -77,10 +88,14 @@ export interface UseMapInformationLayersOptions {
   initialVisibility: MapInformationLayerVisibility;
   /** Current interface language used by GeoAdmin and stop normalization. */
   language: Language;
+  /** Whether the public SwitzerlandMobility hiking portrayal is enabled. */
+  isSwitzerlandMobilityHikingVisible: boolean;
   /** Disables information inspection while route clicks own the map. */
   isRouteCreationActive: boolean;
   /** Clears temporary map context when an information feature is selected. */
   onInformationSelected: () => void;
+  /** Replaces the current itinerary once a public route has usable geometry. */
+  onSwitzerlandMobilityHikingRouteAccepted: () => void;
 }
 
 /** State and actions consumed by the root map controls and popup components. */
@@ -103,8 +118,22 @@ export interface MapInformationLayersController {
   shootingDangerZonePopup: ShootingDangerZonePopupStatus | null;
   /** Selected passenger stop shown in the structured timetable popup. */
   publicTransportStopPopup: PublicTransportStop | null;
+  /** Compact public-route panel or overlap chooser shown at the map bottom. */
+  switzerlandMobilityHikingPanel: SwitzerlandMobilityHikingPanelStatus | null;
+  /** Selects one public route after the user resolves an overlap. */
+  selectSwitzerlandMobilityHikingCandidate: (
+    candidate: SwitzerlandMobilityHikingRouteCandidate,
+  ) => void;
+  /** Cumulative distance selected by hovering the public route on the map. */
+  switzerlandMobilityHikingMapHoverDistanceMeters: number | null;
+  /** Mirrors public-route profile distance onto the shared map marker. */
+  handleSwitzerlandMobilityHikingProfileHoverDistanceChange: (
+    distanceMeters: number | null,
+  ) => void;
   /** Closes every information popup, selection, and pending request. */
   closeMapInformationPopup: () => void;
+  /** Closes the public-route panel without changing the current map view. */
+  dismissSwitzerlandMobilityHikingPanel: () => void;
 }
 
 /**
@@ -168,7 +197,7 @@ export function resolveInitialMapInformationLayerVisibility(): MapInformationLay
  * lifecycle for the mounted map.
  *
  * @param options - Runtime ref, language, route mode, and selection callback.
- * @returns Controlled visibility values, popup state, and one close action.
+ * @returns Visibility values, popup state, selection actions, and close behaviors.
  */
 export function useMapInformationLayers(
   options: UseMapInformationLayersOptions,
@@ -177,8 +206,10 @@ export function useMapInformationLayers(
     mapRuntimeRef,
     initialVisibility,
     language,
+    isSwitzerlandMobilityHikingVisible,
     isRouteCreationActive,
     onInformationSelected,
+    onSwitzerlandMobilityHikingRouteAccepted,
   } = options;
   const informationRequestRef = useRef<AbortController | null>(null);
   const [areTrailClosuresVisible, setAreTrailClosuresVisible] = useState(
@@ -194,9 +225,25 @@ export function useMapInformationLayers(
     useState<ShootingDangerZonePopupStatus | null>(null);
   const [publicTransportStopPopup, setPublicTransportStopPopup] =
     useState<PublicTransportStop | null>(null);
+  const {
+    panelStatus: switzerlandMobilityHikingPanel,
+    inspectAt: inspectSwitzerlandMobilityHikingAt,
+    selectCandidate: selectSwitzerlandMobilityHikingCandidate,
+    mapHoverDistanceMeters:
+      switzerlandMobilityHikingMapHoverDistanceMeters,
+    handleProfileHoverDistanceChange:
+      handleSwitzerlandMobilityHikingProfileHoverDistanceChange,
+    closeSelection: closeSwitzerlandMobilityHikingSelection,
+    dismissSelection: dismissSwitzerlandMobilityHikingSelection,
+  } = useSwitzerlandMobilityHikingSelection({
+    mapRuntimeRef,
+    language,
+    onInformationSelected,
+    onRouteAccepted: onSwitzerlandMobilityHikingRouteAccepted,
+  });
 
-  /** Cancels obsolete work and clears both structured and vector selections. */
-  const closeMapInformationPopup = useCallback(() => {
+  /** Cancels obsolete work and clears non-route structured and vector selections. */
+  const clearInformationContext = useCallback(() => {
     informationRequestRef.current?.abort();
     informationRequestRef.current = null;
     setTrailClosurePopup(null);
@@ -218,6 +265,24 @@ export function useMapInformationLayers(
       null,
     );
   }, [mapRuntimeRef]);
+
+  /** Cancels obsolete work and clears every information-layer selection. */
+  const closeMapInformationPopup = useCallback(() => {
+    clearInformationContext();
+    closeSwitzerlandMobilityHikingSelection();
+  }, [
+    clearInformationContext,
+    closeSwitzerlandMobilityHikingSelection,
+  ]);
+
+  /** Closes the explicit public-route panel while preserving the fitted view. */
+  const dismissSwitzerlandMobilityHikingPanel = useCallback(() => {
+    clearInformationContext();
+    dismissSwitzerlandMobilityHikingSelection();
+  }, [
+    clearInformationContext,
+    dismissSwitzerlandMobilityHikingSelection,
+  ]);
 
   useEffect(() => {
     persistVisibility(
@@ -276,6 +341,19 @@ export function useMapInformationLayers(
     closeMapInformationPopup,
     mapRuntimeRef,
     shootingDangerZonePopup,
+  ]);
+
+  useEffect(() => {
+    if (
+      !isSwitzerlandMobilityHikingVisible &&
+      switzerlandMobilityHikingPanel
+    ) {
+      closeMapInformationPopup();
+    }
+  }, [
+    closeMapInformationPopup,
+    isSwitzerlandMobilityHikingVisible,
+    switzerlandMobilityHikingPanel,
   ]);
 
   useEffect(() => {
@@ -496,15 +574,17 @@ export function useMapInformationLayers(
 
   /**
    * Registers one prioritized click pipeline for optional information layers.
-   * Already loaded passenger stops win first, then closures, then military
-   * danger zones, so overlapping official portrayals produce deterministic UI.
+   * Already loaded passenger stops win first, then closures, public hiking
+   * routes, and finally broad military polygons. This keeps safety lines
+   * prominent while allowing a named route inside a danger zone to be selected.
    */
   useEffect(() => {
     const runtime = mapRuntimeRef.current;
     const hasVisibleInformationLayer =
       areTrailClosuresVisible ||
       areShootingDangerZonesVisible ||
-      arePublicTransportStopsVisible;
+      arePublicTransportStopsVisible ||
+      isSwitzerlandMobilityHikingVisible;
 
     if (
       !runtime ||
@@ -532,14 +612,23 @@ export function useMapInformationLayers(
         zoom > PUBLIC_TRANSPORT_STOPS_MIN_ZOOM;
       const canInspectClosures =
         areTrailClosuresVisible && zoom > HIKING_TRAILS_MIN_ZOOM;
+      const canInspectSwitzerlandMobilityHiking =
+        isSwitzerlandMobilityHikingVisible &&
+        zoom > SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM;
       const canInspectShootingDangerZones =
         areShootingDangerZonesVisible && zoom > HIKING_TRAILS_MIN_ZOOM;
 
       if (
         !canInspectStops &&
         !canInspectClosures &&
+        !canInspectSwitzerlandMobilityHiking &&
         !canInspectShootingDangerZones
       ) {
+        // A full-route fit may move below the raster overview's inspection
+        // threshold. A later map click must still dismiss that temporary route.
+        if (switzerlandMobilityHikingPanel) {
+          closeMapInformationPopup();
+        }
         return;
       }
 
@@ -566,7 +655,11 @@ export function useMapInformationLayers(
         }
       }
 
-      if (!canInspectClosures && !canInspectShootingDangerZones) {
+      if (
+        !canInspectClosures &&
+        !canInspectSwitzerlandMobilityHiking &&
+        !canInspectShootingDangerZones
+      ) {
         return;
       }
 
@@ -609,6 +702,17 @@ export function useMapInformationLayers(
               console.error('Unable to load trail-closure details.', error);
               onInformationSelected();
               setTrailClosurePopup({ state: 'error', html: null });
+              return;
+            }
+          }
+
+          if (canInspectSwitzerlandMobilityHiking) {
+            const routeSelected = await inspectSwitzerlandMobilityHikingAt(
+              context,
+              abortController.signal,
+            );
+
+            if (routeSelected || abortController.signal.aborted) {
               return;
             }
           }
@@ -668,9 +772,14 @@ export function useMapInformationLayers(
         return;
       }
 
+      // A selected named route stays useful after its one-time full-geometry fit,
+      // even when that fit zooms below the overview portrayal's minimum scale.
       const isAnyLayerVisibleAtZoom =
+        switzerlandMobilityHikingPanel !== null ||
         (arePublicTransportStopsVisible &&
           zoom > PUBLIC_TRANSPORT_STOPS_MIN_ZOOM) ||
+        (isSwitzerlandMobilityHikingVisible &&
+          zoom > SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM) ||
         ((areTrailClosuresVisible || areShootingDangerZonesVisible) &&
           zoom > HIKING_TRAILS_MIN_ZOOM);
 
@@ -696,8 +805,11 @@ export function useMapInformationLayers(
     areShootingDangerZonesVisible,
     areTrailClosuresVisible,
     closeMapInformationPopup,
+    inspectSwitzerlandMobilityHikingAt,
     isRouteCreationActive,
+    isSwitzerlandMobilityHikingVisible,
     language,
+    switzerlandMobilityHikingPanel,
     mapRuntimeRef,
     onInformationSelected,
   ]);
@@ -719,6 +831,11 @@ export function useMapInformationLayers(
     trailClosurePopup,
     shootingDangerZonePopup,
     publicTransportStopPopup,
+    switzerlandMobilityHikingPanel,
+    selectSwitzerlandMobilityHikingCandidate,
+    switzerlandMobilityHikingMapHoverDistanceMeters,
+    handleSwitzerlandMobilityHikingProfileHoverDistanceChange,
     closeMapInformationPopup,
+    dismissSwitzerlandMobilityHikingPanel,
   };
 }

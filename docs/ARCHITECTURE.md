@@ -190,12 +190,12 @@ flowchart TB
 | Application composition | `src/App.tsx` | Connects focused hooks, resolves which temporary workflow owns the current itinerary, and owns modal state |
 | Map lifetime | `src/map/mapRuntime.ts`, `src/map/useMapRuntime.ts` | Creates and disposes the single OpenLayers runtime; synchronizes startup and fullscreen state |
 | Map controls | `src/map/useMapViewControls.ts` | Background choice, hiking-trail and SwitzerlandMobility overlay visibility, zoom, fullscreen, and explicit geolocation |
-| Information overlays | `src/map/useMapInformationLayers.ts` | Visibility, loading, inspection priority, popup state, selection, caching, and cancellation |
+| Information overlays | `src/map/useMapInformationLayers.ts`, `src/map/useSwitzerlandMobilityHikingSelection.ts`, `src/switzerlandMobility/hikingRoutes.ts` | Visibility, loading, inspection priority, public-route selection and fitting, popup state, caching, and cancellation |
 | Editable-route domain | `src/map/routeState.ts`, `src/map/useEditableRoute.ts` | Immutable route state, history, snap mode, serialized mutations, and route actions |
 | Pointer interaction | `src/map/useRouteInteractions.ts`, `src/map/routePointerInteraction.ts` | Waypoint and section hit detection, drag previews, click/drag lifecycle, and semantic edit requests |
 | Route presentation | `src/map/routeDisplay.ts`, `src/map/itineraryDirection.ts`, `src/map/itineraryEndpoints.ts` | Committed geometry, previews, direction arrows, and A/B markers |
 | Imported GPX | `src/import/gpx.ts`, `src/map/useImportedRoute.ts`, `src/map/importedRoute.ts` | Local parsing, projection, read-only display, elevation reuse, and responsive view fitting |
-| Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and map/profile synchronisation |
+| Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts`, `src/map/useRouteProfileSynchronization.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and exclusive map/profile synchronisation for the active itinerary or selected public route |
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
 | Search | `src/search/locationSearch.ts`, `src/components/LocationSearch.tsx` | Provider contract, session cache, result UI, keyboard navigation, and request cancellation |
 | Localization | `src/i18n/` | Typed dictionaries, language persistence, Swiss locales, and document metadata |
@@ -210,6 +210,9 @@ capabilities. Examples of cross-workflow coordination include:
 - starting route creation clears an imported GPX and temporary search marker;
 - a successful GPX import leaves route mode and clears editable history;
 - opening the About dialog closes map-feature information;
+- selecting a SwitzerlandMobility route keeps the previous itinerary until complete
+  public geometry has been validated, then clears editable history or an imported
+  GPX and makes the selected public route the single current read-only itinerary;
 - changing language clears temporary search state and provider selections;
 - a valid import or route change becomes the single current itinerary for
   metrics.
@@ -285,7 +288,17 @@ The import workflow owns:
 Starting a new editable route removes the imported itinerary without converting
 it into route history.
 
-### 4.3 Shared current-itinerary metrics
+### 4.3 Selected SwitzerlandMobility route
+
+A selected public route is another read-only current itinerary. The selection
+workflow retains independent LV95 segments, public identity metadata, calculated
+metrics, and the elevation samples required by its profile and GPX export.
+
+The previous editable route or imported GPX is cleared only after complete public
+geometry has been retrieved and validated. Identification, overlap choice, or a
+failed geometry request therefore cannot destroy the user's current itinerary.
+
+### 4.4 Shared current-itinerary metrics
 
 `useItineraryMetrics` receives either editable-route segments or imported-GPX
 segments. It calculates distance immediately and then resolves altitude-
@@ -389,6 +402,8 @@ GPX export:
 
 - asks for a route name;
 - simplifies each section independently so every waypoint remains exact;
+- preserves independent read-only geometry as separate GPX track segments, so
+  provider gaps are not connected artificially;
 - merges valid elevation samples without creating centimetre-scale duplicate
   points;
 - converts LV95 geometry to WGS 84;
@@ -488,8 +503,8 @@ The runtime creates one explicit layer order. In broad terms:
 1. selected raster background;
 2. rendered hiking-trail portrayal;
 3. optional green SwitzerlandMobility hiking routes;
-4. closure and military WMS overlays;
-5. selection and public-transport vectors;
+4. selected SwitzerlandMobility route vector and closure WMS overlay;
+5. public-transport and military information vectors and portrayals;
 6. imported read-only itinerary;
 7. editable route;
 8. temporary search and user-location markers.
@@ -498,7 +513,40 @@ Route and endpoint readability takes priority over informational overlays.
 Layer construction remains centralized so later features do not depend on
 implicit insertion order.
 
-### 6.3 Hiking closures and military danger zones
+### 6.3 SwitzerlandMobility route inspection
+
+Outside route-creation mode, the information-layer click pipeline can identify a
+feature beneath the optional `ch.astra.wanderland` portrayal. Identification first
+requests public metadata only. A single match is selected immediately; when
+several named routes share the same path, the compact bottom panel presents an
+explicit chooser before any map movement.
+
+After selection, a focused get-feature request retrieves the complete public
+geometry in LV95. Once that geometry is validated, the workflow clears any
+editable route or imported GPX and the public route becomes the single current
+read-only itinerary. A temporary vector layer draws an opaque dark-green line with
+a white casing above the semitransparent overview. The view fits the complete
+selected geometry once, with responsive bottom padding for the panel and the same
+maximum fit zoom and screen margins used by GPX imports. These margins keep route
+endpoints clear of the search field, the right-side map controls, and the compact
+bottom panel. Closing the panel clears the highlight and pending requests but
+preserves the fitted map view, so an explicit close does not undo the user's new
+navigation context.
+
+The panel uses public route identity, route number, stage number, and localized
+section text. Distance, ascent, descent, walking time, and profile samples are
+calculated by Via Helvetica from the retrieved geometry and the existing
+elevation-profile service; no SwitzerlandMobility editorial descriptions or photos
+are reproduced. The profile is collapsed by default and reuses the same chart and
+black map marker as editable routes and imported GPX tracks. The header export
+action reuses the shared naming dialog and writes the complete selected geometry as
+a GPX 1.1 track, preserving independent line segments and embedding calculated
+elevations when available. A shared synchronization hook grants marker ownership
+only to the visible summary. Starting route creation, hiding the layer, changing
+language, selecting another map information feature, or opening another temporary
+workflow clears the selection and profile state.
+
+### 6.4 Hiking closures and military danger zones
 
 Both safety layers use official server-rendered WMS portrayals and localized
 feature inspection. They are enabled independently and persist their visibility
@@ -511,7 +559,7 @@ avoid a visible closure or military zone because:
 - current applicability may depend on dates or local conditions;
 - information-layer availability should not change graph connectivity silently.
 
-### 6.4 Public-transport stops
+### 6.5 Public-transport stops
 
 The source dataset contains passenger stops as well as technical, retired, and
 operational records. Via Helvetica therefore loads vector features and applies a
@@ -684,10 +732,12 @@ appearance. They cover:
 - immutable route transformations and history;
 - affected-section reconstruction;
 - route-pointer interaction primitives;
-- GPX parsing, projection, metrics, and export;
+- GPX parsing, projection, metrics, editable export, and segmented read-only export;
 - directional-arrow placement;
 - location-search caching and normalization;
 - rendered-layer provider identifiers and persisted product defaults;
+- SwitzerlandMobility metadata normalization, full-geometry selection,
+  responsive route fitting, single-itinerary replacement, export, and profile-panel behavior;
 - public-transport filtering, viewport reuse, and API scale separation;
 - routing-grid footprints;
 - Worker request correlation, typed errors, cancellation, and disposal;
@@ -705,6 +755,8 @@ manual checks include:
 - mouse, pen, and touch route editing;
 - responsive control collisions and translated layer-label wrapping;
 - official hiking and SwitzerlandMobility portrayals across useful zooms;
+- selection, overlap choice, highlighting, full-route fitting, and profile
+  synchronization for named SwitzerlandMobility routes;
 - GPX fitting on narrow viewports;
 - map/profile pointer synchronisation;
 - provider portrayals and official popup content;
@@ -831,4 +883,4 @@ Provider usage and attribution remain subject to the respective official terms.
 | Worker | Browser execution context that isolates routing loading and computation from the map UI |
 | Snapping | Projection of a user-selected waypoint onto a nearby routable network segment |
 | Straight fallback | Direct section stored when normal coverage or connectivity cannot produce a network path |
-| Current itinerary | Either the editable route or one imported read-only GPX, never both as independent active routes |
+| Current itinerary | Either the editable route, one imported GPX, or one selected SwitzerlandMobility route, never several independent active routes |

@@ -947,6 +947,225 @@ select {
   height: auto;
 }
 
+/* The selected public route occupies the same lower map region as the
+   itinerary summary. Its optional profile expands upward so the compact panel
+   remains anchored and no second bottom overlay competes for map space. */
+.switzerland-mobility-hiking-summary {
+  position: absolute;
+  z-index: 25;
+  bottom: 1rem;
+  left: 50%;
+  display: flex;
+  width: min(50rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  flex-direction: column;
+  gap: 0.45rem;
+  transform: translateX(-50%);
+}
+
+.switzerland-mobility-hiking-panel {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgb(32 47 60 / 22%);
+  border-radius: 10px;
+  color: #17212b;
+  background: rgb(255 255 255 / 97%);
+  box-shadow: 0 4px 18px rgb(0 0 0 / 22%);
+  backdrop-filter: blur(8px);
+}
+
+/* Route choices contain short public labels rather than metrics or a profile.
+   A narrower panel keeps the decision visually tied to the clicked map area. */
+.switzerland-mobility-hiking-panel--choices {
+  width: min(36rem, 100%);
+  align-self: center;
+}
+
+.switzerland-mobility-hiking-panel-header {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.75rem 0.7rem 1rem;
+}
+
+.switzerland-mobility-hiking-panel-heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.18rem;
+  line-height: 1.3;
+}
+
+.switzerland-mobility-hiking-panel-heading strong,
+.switzerland-mobility-hiking-panel-heading span {
+  overflow-wrap: anywhere;
+}
+
+.switzerland-mobility-hiking-panel-heading strong {
+  font-size: 1rem;
+}
+
+.switzerland-mobility-hiking-panel-heading span {
+  color: #52606b;
+  font-size: 0.9rem;
+}
+
+.switzerland-mobility-hiking-panel-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+/* Export lives beside close because both actions apply to the complete selected
+   public route, while the profile toggle remains attached to route metrics. */
+.switzerland-mobility-hiking-panel-export,
+.switzerland-mobility-hiking-panel-close {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  color: #b71919;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.9rem;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.switzerland-mobility-hiking-panel-export {
+  color: #26323c;
+  font-size: 1rem;
+}
+
+.switzerland-mobility-hiking-panel-export svg {
+  width: 1.55rem;
+  height: 1.55rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.switzerland-mobility-hiking-panel-export:hover:not(:disabled) {
+  background: rgb(23 105 224 / 9%);
+}
+
+.switzerland-mobility-hiking-panel-export:disabled {
+  opacity: 0.42;
+  cursor: wait;
+}
+
+.switzerland-mobility-hiking-panel-close:hover {
+  background: rgb(183 25 25 / 9%);
+}
+
+.switzerland-mobility-hiking-panel-export:focus-visible,
+.switzerland-mobility-hiking-panel-close:focus-visible,
+.switzerland-mobility-hiking-route-choices button:focus-visible {
+  outline: 3px solid rgb(23 105 224 / 40%);
+  outline-offset: 1px;
+}
+
+.switzerland-mobility-hiking-panel-status {
+  margin: 0;
+  padding: 0 1rem 0.9rem;
+  color: #52606b;
+  font-size: 0.9rem;
+}
+
+.switzerland-mobility-hiking-panel-status--error,
+.switzerland-mobility-hiking-elevation-error {
+  color: #a33636;
+}
+
+.switzerland-mobility-hiking-metrics {
+  display: grid;
+  min-height: 3.2rem;
+  grid-template-columns: minmax(0, 1fr) 3.5rem;
+  border-top: 1px solid rgb(32 47 60 / 13%);
+  font-size: 0.96rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.switzerland-mobility-hiking-metric-values {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* Public-route figures use the same four balanced columns as editable and
+   imported itineraries so switching information sources does not shift the
+   visual hierarchy of the bottom bar. */
+.switzerland-mobility-hiking-metric-values .route-statistics-item {
+  padding-block: 0.75rem;
+}
+
+/* The profile action is part of the metrics bar, but keeps the same icon and
+   active-state language as editable and imported itineraries. */
+.switzerland-mobility-hiking-profile-toggle {
+  width: 100%;
+  min-height: 3.2rem;
+}
+
+.switzerland-mobility-hiking-elevation-error {
+  grid-column: 1 / -1;
+  padding: 0.45rem 0.75rem;
+  border-top: 1px solid rgb(32 47 60 / 10%);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.switzerland-mobility-hiking-route-choices {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid rgb(32 47 60 / 13%);
+}
+
+.switzerland-mobility-hiking-route-choices > p {
+  margin: 0.75rem 0;
+  color: #52606b;
+  font-size: 0.88rem;
+}
+
+.switzerland-mobility-hiking-route-choices > div {
+  display: grid;
+  max-height: min(15rem, calc(100vh - 13rem));
+  gap: 0.45rem;
+  overflow-y: auto;
+}
+
+.switzerland-mobility-hiking-route-choices button {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.18rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgb(32 47 60 / 16%);
+  border-radius: 8px;
+  color: #17212b;
+  background: rgb(8 127 44 / 6%);
+  cursor: pointer;
+  line-height: 1.3;
+  text-align: left;
+}
+
+.switzerland-mobility-hiking-route-choices button:hover {
+  background: rgb(8 127 44 / 12%);
+}
+
+.switzerland-mobility-hiking-route-choices button span {
+  color: #52606b;
+  font-size: 0.86rem;
+}
+
 .route-summary {
   position: absolute;
   z-index: 20;
@@ -1541,6 +1760,43 @@ select {
   .location-message {
     top: 10.7rem;
     right: 3.55rem;
+  }
+
+  .switzerland-mobility-hiking-summary {
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - 1.5rem);
+    max-width: calc(100vw - 1.5rem);
+  }
+
+  .switzerland-mobility-hiking-panel-header {
+    min-height: 3.2rem;
+    padding-left: 0.8rem;
+  }
+
+  .switzerland-mobility-hiking-metrics {
+    min-height: 2.85rem;
+    grid-template-columns: minmax(0, 1fr) 2.85rem;
+    font-size: clamp(0.78rem, 3.4vw, 0.92rem);
+  }
+
+  .switzerland-mobility-hiking-metric-values {
+    grid-template-columns:
+      minmax(3.4rem, 1fr)
+      minmax(3.2rem, 0.9fr)
+      minmax(3.2rem, 0.9fr)
+      minmax(4.2rem, 1.2fr);
+  }
+
+  .switzerland-mobility-hiking-metric-values .route-statistics-item {
+    padding-block: 0.4rem;
+  }
+
+  .switzerland-mobility-hiking-profile-toggle {
+    min-height: 2.85rem;
+  }
+
+  .switzerland-mobility-hiking-elevation-error {
+    width: 100%;
   }
 
   .route-summary {

@@ -48,6 +48,10 @@ import {
   type RouteProfileMarker,
 } from './routeProfileMarker';
 import {
+  createSwitzerlandMobilityHikingSelectionDisplay,
+  type SwitzerlandMobilityHikingSelectionDisplay,
+} from './switzerlandMobilityHikingSelection';
+import {
   createSearchResultMarker,
   type SearchResultMarker,
 } from './searchResult';
@@ -66,6 +70,8 @@ const GRAY_DETAIL_Z_INDEX = 1;
 const HIKING_TRAILS_Z_INDEX = 10;
 /** Layer order slot for green SwitzerlandMobility routes above hiking trails. */
 const SWITZERLAND_MOBILITY_HIKING_Z_INDEX = 11;
+/** Selected public route stays above the overview but below safety overlays. */
+const SWITZERLAND_MOBILITY_HIKING_SELECTION_Z_INDEX = 12;
 /** Layer order slot for closures above hiking portrayals and transport stops. */
 const TRAIL_CLOSURES_Z_INDEX = 13;
 /** Layer order slot for military danger zones above other information layers. */
@@ -118,6 +124,9 @@ export interface CreateMapRuntimeOptions {
 export interface MapRuntime {
   /** Sole OpenLayers map instance. */
   map: Map;
+  /** Client-side highlight for one selected SwitzerlandMobility hiking route. */
+  switzerlandMobilityHikingSelectionDisplay:
+    SwitzerlandMobilityHikingSelectionDisplay;
   /** Client-side highlight for the selected military danger zone. */
   shootingDangerZoneSelectionDisplay: ShootingDangerZoneSelectionDisplay;
   /** Filtered public-transport stop layers and vector sources. */
@@ -165,6 +174,8 @@ export function createMapRuntime(
     createSwitzerlandMobilityHikingSource();
   const trailClosuresSource = createTrailClosuresSource();
   const shootingDangerZonesSource = createShootingDangerZonesSource();
+  const switzerlandMobilityHikingSelectionDisplay =
+    createSwitzerlandMobilityHikingSelectionDisplay();
   const shootingDangerZoneSelectionDisplay =
     createShootingDangerZoneSelectionDisplay();
   const publicTransportStopsDisplay = createPublicTransportStopsDisplay();
@@ -214,6 +225,9 @@ export function createMapRuntime(
     zIndex: SHOOTING_DANGER_ZONES_Z_INDEX,
   });
 
+  switzerlandMobilityHikingSelectionDisplay.layer.setZIndex(
+    SWITZERLAND_MOBILITY_HIKING_SELECTION_Z_INDEX,
+  );
   shootingDangerZoneSelectionDisplay.layer.setMinZoom(
     HIKING_TRAILS_MIN_ZOOM,
   );
@@ -260,6 +274,7 @@ export function createMapRuntime(
       grayDetailLayer,
       hikingTrailsLayer,
       switzerlandMobilityHikingLayer,
+      switzerlandMobilityHikingSelectionDisplay.layer,
       trailClosuresLayer,
       publicTransportStopsDisplay.selectionLayer,
       publicTransportStopsDisplay.layer,
@@ -347,6 +362,7 @@ export function createMapRuntime(
 
   return {
     map,
+    switzerlandMobilityHikingSelectionDisplay,
     shootingDangerZoneSelectionDisplay,
     publicTransportStopsDisplay,
     userLocationMarker,

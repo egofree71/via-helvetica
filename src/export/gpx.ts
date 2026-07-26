@@ -1,10 +1,10 @@
 /**
- * Business context: exports the route currently edited in Via Helvetica
- * as a standalone GPX 1.1 track. Each route section is simplified within a
- * sub-metre tolerance while preserving its endpoints, so user waypoints and
- * visible bends survive without exporting redundant routing vertices. Smoothed
- * elevation samples are embedded when available so compatible applications do
- * not need to rebuild a noisier terrain profile.
+ * Business context: exports the itinerary currently presented by Via Helvetica
+ * as a standalone GPX 1.1 track. Editable sections and independent read-only
+ * route segments are simplified within a sub-metre tolerance while preserving
+ * endpoints and deliberate gaps. Smoothed elevation samples are embedded when
+ * available so compatible applications do not need to rebuild a noisier terrain
+ * profile.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import { getDistance } from 'ol/sphere.js';
@@ -77,6 +77,20 @@ interface GpxBounds {
   minLongitude: number;
   maxLatitude: number;
   maxLongitude: number;
+}
+
+/** One GPX track segment ready for XML serialization. */
+interface GpxTrackSegment {
+  /** Ordered points belonging to one continuous source line. */
+  points: GpxTrackPoint[];
+}
+
+/** Simplified export geometry paired with the distance scale used by its profile. */
+interface PreparedRouteSegment {
+  /** Simplified geometry used for GPX coordinates. */
+  route: MeasuredRoute;
+  /** Distance of the unsimplified source segment in metres. */
+  profileDistanceMeters: number;
 }
 
 /**
@@ -413,6 +427,91 @@ function normalizeElevationPoints(
   return normalizedPoints;
 }
 
+/** Returns finite elevation samples in provider order without collapsing gap boundaries. */
+function sortFiniteElevationPoints(
+  points: RouteElevationPoint[],
+): RouteElevationPoint[] {
+  return points
+    .filter(
+      (point) =>
+        Number.isFinite(point.distanceMeters) &&
+        Number.isFinite(point.elevationMeters),
+    )
+    .slice()
+    .sort((first, second) => first.distanceMeters - second.distanceMeters);
+}
+
+/**
+ * Extracts one segment-local profile from a cumulative multi-segment profile.
+ *
+ * GeoAdmin returns the final sample of one segment and the first sample of the
+ * next segment at the same cumulative distance. Keeping the first duplicate for
+ * the ending segment and the last duplicate for the starting segment preserves
+ * both elevations without inventing a climb across a deliberate geometry gap.
+ *
+ * @param points - Finite cumulative profile samples in ascending order.
+ * @param startDistanceMeters - Cumulative distance at the segment start.
+ * @param endDistanceMeters - Cumulative distance at the segment end.
+ * @param segmentIndex - Zero-based segment position.
+ * @param segmentCount - Number of exported segments.
+ * @returns Profile samples shifted to segment-local cumulative distances.
+ */
+function collectSegmentElevationPoints(
+  points: RouteElevationPoint[],
+  startDistanceMeters: number,
+  endDistanceMeters: number,
+  segmentIndex: number,
+  segmentCount: number,
+): RouteElevationPoint[] {
+  const matchingPoints = points.filter(
+    (point) =>
+      point.distanceMeters >=
+        startDistanceMeters - GPX_PROFILE_DISTANCE_DUPLICATE_TOLERANCE_METERS &&
+      point.distanceMeters <=
+        endDistanceMeters + GPX_PROFILE_DISTANCE_DUPLICATE_TOLERANCE_METERS,
+  );
+
+  if (segmentIndex > 0) {
+    const startBoundaryIndexes = matchingPoints
+      .map((point, index) =>
+        Math.abs(point.distanceMeters - startDistanceMeters) <=
+        GPX_PROFILE_DISTANCE_DUPLICATE_TOLERANCE_METERS
+          ? index
+          : -1,
+      )
+      .filter((index) => index >= 0);
+
+    if (startBoundaryIndexes.length > 1) {
+      const lastStartBoundaryIndex =
+        startBoundaryIndexes[startBoundaryIndexes.length - 1];
+      matchingPoints.splice(0, lastStartBoundaryIndex);
+    }
+  }
+
+  if (segmentIndex < segmentCount - 1) {
+    const firstEndBoundaryIndex = matchingPoints.findIndex(
+      (point) =>
+        Math.abs(point.distanceMeters - endDistanceMeters) <=
+        GPX_PROFILE_DISTANCE_DUPLICATE_TOLERANCE_METERS,
+    );
+
+    if (firstEndBoundaryIndex >= 0) {
+      matchingPoints.splice(firstEndBoundaryIndex + 1);
+    }
+  }
+
+  return matchingPoints.map((point) => ({
+    distanceMeters: Math.max(
+      0,
+      Math.min(
+        endDistanceMeters - startDistanceMeters,
+        point.distanceMeters - startDistanceMeters,
+      ),
+    ),
+    elevationMeters: point.elevationMeters,
+  }));
+}
+
 /**
  * Interpolates smoothed elevation at one distance along the profile.
  *
@@ -690,6 +789,56 @@ function serializeTrackPoint(point: GpxTrackPoint): string {
 }
 
 /**
+ * Serializes one continuous GPX track segment without connecting it to adjacent
+ * source lines.
+ *
+ * @param segment - Ordered points belonging to one continuous geometry.
+ * @returns XML for one `<trkseg>` node.
+ */
+function serializeTrackSegment(segment: GpxTrackSegment): string {
+  const serializedTrackPoints = segment.points
+    .map(serializeTrackPoint)
+    .join('\n');
+
+  return `    <trkseg>\n${serializedTrackPoints}\n    </trkseg>`;
+}
+
+/**
+ * Builds the shared GPX 1.1 envelope around one or more continuous segments.
+ *
+ * @param trackSegments - Non-empty continuous geometries to serialize.
+ * @param generatedAt - Timestamp written to GPX metadata.
+ * @param routeName - Track name written to metadata and track nodes.
+ * @returns Complete UTF-8 GPX 1.1 XML document.
+ */
+function createGpxDocument(
+  trackSegments: GpxTrackSegment[],
+  generatedAt: Date,
+  routeName: string,
+): string {
+  const trackPoints = trackSegments.flatMap((segment) => segment.points);
+  const serializedTrackSegments = trackSegments
+    .map(serializeTrackSegment)
+    .join('\n');
+  const serializedBounds = serializeBounds(calculateTrackBounds(trackPoints));
+  const escapedRouteName = escapeXml(routeName);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Via Helvetica" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+  <metadata>
+    <name>${escapedRouteName}</name>
+    <time>${generatedAt.toISOString()}</time>
+    ${serializedBounds}
+  </metadata>
+  <trk>
+    <name>${escapedRouteName}</name>
+${serializedTrackSegments}
+  </trk>
+</gpx>
+`;
+}
+
+/**
  * Builds a GPX 1.1 track from a sub-metre simplification of the displayed route.
  * @param steps - Applied route steps in display order.
  * @param generatedAt - Timestamp written to GPX metadata.
@@ -713,30 +862,118 @@ export function createRouteGpx(
   }
 
   const route = measureRoute(coordinates);
-  const trackPoints =
-    createElevationAwareTrackPoints(route, elevationPoints) ??
-    createGeometryTrackPoints(route);
-  const serializedTrackPoints = trackPoints
-    .map(serializeTrackPoint)
-    .join('\n');
-  const serializedBounds = serializeBounds(calculateTrackBounds(trackPoints));
-  const escapedRouteName = escapeXml(routeName);
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Via Helvetica" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
-  <metadata>
-    <name>${escapedRouteName}</name>
-    <time>${generatedAt.toISOString()}</time>
-    ${serializedBounds}
-  </metadata>
-  <trk>
-    <name>${escapedRouteName}</name>
-    <trkseg>
-${serializedTrackPoints}
-    </trkseg>
-  </trk>
-</gpx>
-`;
+  return createGpxDocument(
+    [
+      {
+        points:
+          createElevationAwareTrackPoints(route, elevationPoints) ??
+          createGeometryTrackPoints(route),
+      },
+    ],
+    generatedAt,
+    routeName,
+  );
+}
+
+/**
+ * Builds a GPX 1.1 track from independent read-only itinerary segments.
+ *
+ * Each source line becomes its own `<trkseg>`, so gaps in public or imported
+ * geometry remain gaps after export. The cumulative elevation profile is split
+ * back into segment-local samples before interpolation.
+ *
+ * @param segments - Independent itinerary lines in EPSG:2056.
+ * @param generatedAt - Timestamp written to GPX metadata.
+ * @param routeName - Localized track name written to metadata and track nodes.
+ * @param elevationPoints - Optional cumulative profile samples to embed as `<ele>` values.
+ * @returns Complete UTF-8 XML document.
+ * @throws {Error} If no segment contains at least two distinct coordinates.
+ */
+export function createRouteSegmentsGpx(
+  segments: Coordinate[][],
+  generatedAt: Date = new Date(),
+  routeName = 'Via Helvetica route',
+  elevationPoints: RouteElevationPoint[] = [],
+): string {
+  const preparedSegments = segments
+    .map((segment): PreparedRouteSegment | null => {
+      const sourceCoordinates: Coordinate[] = [];
+
+      for (const coordinate of segment) {
+        appendExportCoordinate(sourceCoordinates, coordinate);
+      }
+
+      if (sourceCoordinates.length < 2) {
+        return null;
+      }
+
+      const sourceRoute = measureRoute(sourceCoordinates);
+      const route = measureRoute(simplifyRouteSection(sourceCoordinates));
+
+      if (
+        sourceRoute.totalDistanceMeters <= 0 ||
+        route.totalDistanceMeters <= 0
+      ) {
+        return null;
+      }
+
+      return {
+        route,
+        profileDistanceMeters: sourceRoute.totalDistanceMeters,
+      };
+    })
+    .filter((segment): segment is PreparedRouteSegment => segment !== null);
+
+  if (preparedSegments.length === 0) {
+    throw new Error('A GPX route requires at least two coordinates.');
+  }
+
+  const finiteElevationPoints = sortFiniteElevationPoints(elevationPoints);
+  let cumulativeDistanceMeters = 0;
+  const trackSegments = preparedSegments.map((segment, segmentIndex) => {
+    const segmentStartDistanceMeters = cumulativeDistanceMeters;
+    const segmentEndDistanceMeters =
+      segmentStartDistanceMeters + segment.profileDistanceMeters;
+    const segmentElevationPoints = collectSegmentElevationPoints(
+      finiteElevationPoints,
+      segmentStartDistanceMeters,
+      segmentEndDistanceMeters,
+      segmentIndex,
+      preparedSegments.length,
+    );
+    cumulativeDistanceMeters = segmentEndDistanceMeters;
+
+    return {
+      points:
+        createElevationAwareTrackPoints(segment.route, segmentElevationPoints) ??
+        createGeometryTrackPoints(segment.route),
+    };
+  });
+
+  return createGpxDocument(trackSegments, generatedAt, routeName);
+}
+
+/**
+ * Starts a browser download for one already-generated GPX document.
+ *
+ * @param gpxDocument - Complete GPX XML payload.
+ * @param routeName - Name used to derive the portable download filename.
+ */
+function downloadGpxDocument(gpxDocument: string, routeName: string): void {
+  const blob = new Blob([gpxDocument], {
+    type: 'application/gpx+xml;charset=utf-8',
+  });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = window.document.createElement('a');
+
+  link.href = objectUrl;
+  link.download = createGpxFilename(routeName);
+  link.style.display = 'none';
+  window.document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 }
 
 /**
@@ -765,17 +1002,24 @@ export function downloadRouteGpx(
     elevationPoints,
     closure,
   );
-  const blob = new Blob([gpxDocument], {
-    type: 'application/gpx+xml;charset=utf-8',
-  });
-  const objectUrl = URL.createObjectURL(blob);
-  const link = window.document.createElement('a');
+  downloadGpxDocument(gpxDocument, routeName);
+}
 
-  link.href = objectUrl;
-  link.download = createGpxFilename(routeName);
-  link.style.display = 'none';
-  window.document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+/**
+ * Downloads independent read-only itinerary segments as one named GPX track.
+ *
+ * @param segments - Independent itinerary lines in EPSG:2056.
+ * @param routeName - Localized track name written into the GPX document.
+ * @param elevationPoints - Optional cumulative profile samples embedded in track points.
+ * @throws {Error} If no segment contains enough geometry to export.
+ */
+export function downloadRouteSegmentsGpx(
+  segments: Coordinate[][],
+  routeName = 'Via Helvetica route',
+  elevationPoints: RouteElevationPoint[] = [],
+): void {
+  downloadGpxDocument(
+    createRouteSegmentsGpx(segments, new Date(), routeName, elevationPoints),
+    routeName,
+  );
 }

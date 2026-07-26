@@ -90,8 +90,11 @@ export interface EditableRouteController {
   toggleRouteLoop: () => void;
   /** Clears the editable route while keeping route creation active. */
   deleteRoute: () => void;
-  /** Exits editing and clears route history before a GPX becomes current. */
-  replaceWithImportedItinerary: () => void;
+  /**
+   * Exits editing and clears route history before a read-only itinerary becomes
+   * current.
+   */
+  replaceWithReadOnlyItinerary: () => void;
   /** Displays an actionable route message for a bounded duration. */
   showTemporaryRouteMessage: (
     message: string,
@@ -121,7 +124,7 @@ interface AsyncRouteMutationOptions {
 /** Duration in milliseconds for actionable route errors before auto-dismissal. */
 const ROUTE_MESSAGE_DURATION_MS = 7_000;
 
-/** Creates the empty immutable history used by a new or imported itinerary. */
+/** Creates the empty immutable history used before any read-only itinerary. */
 function createEmptyRouteHistory(): RouteHistory {
   return {
     steps: [],
@@ -691,7 +694,7 @@ export function useEditableRoute(
     setIsRouteSnapEnabled((enabled) => !enabled);
   }, []);
 
-  const replaceWithImportedItinerary = useCallback(() => {
+  const replaceWithReadOnlyItinerary = useCallback(() => {
     routingAbortControllerRef.current?.abort();
     routingAbortControllerRef.current = null;
     routeOperationPendingRef.current = false;
@@ -781,7 +784,7 @@ export function useEditableRoute(
     reverseRoute,
     toggleRouteLoop,
     deleteRoute,
-    replaceWithImportedItinerary,
+    replaceWithReadOnlyItinerary,
     showTemporaryRouteMessage,
     isPointerInteractionActive,
   };

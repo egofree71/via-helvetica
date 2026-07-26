@@ -127,6 +127,23 @@ const frenchTranslations = {
   'map.baseMap.aerial': 'Photo aérienne',
   'hikingTrails.layer': 'Chemins de randonnée',
   'switzerlandMobilityHiking.layer': 'À pied SuisseMobile',
+  'switzerlandMobilityHiking.panelAria':
+    'Informations sur l’itinéraire SuisseMobile',
+  'switzerlandMobilityHiking.close': 'Fermer',
+  'switzerlandMobilityHiking.stage': 'Étape {number}',
+  'switzerlandMobilityHiking.stageSection':
+    'Étape {number} : {section}',
+  'switzerlandMobilityHiking.routeNumber': 'Itinéraire {number}',
+  'switzerlandMobilityHiking.unnamedRoute': 'Itinéraire SuisseMobile',
+  'switzerlandMobilityHiking.multipleTitle':
+    'Plusieurs itinéraires passent ici',
+  'switzerlandMobilityHiking.multipleHint':
+    'Choisissez l’itinéraire à afficher.',
+  'switzerlandMobilityHiking.loading': 'Chargement de l’itinéraire…',
+  'switzerlandMobilityHiking.loadError':
+    'Les informations de cet itinéraire n’ont pas pu être chargées.',
+  'switzerlandMobilityHiking.elevationUnavailable':
+    'Profil d’altitude indisponible.',
   'closures.layer': 'Fermetures / déviations',
   'closures.title': 'Fermeture / déviation',
   'closures.close': 'Fermer',
@@ -306,6 +323,23 @@ const germanTranslations: Record<TranslationKey, string> = {
   'map.baseMap.aerial': 'Luftbild',
   'hikingTrails.layer': 'Wanderwege',
   'switzerlandMobilityHiking.layer': 'Wanderland SchweizMobil',
+  'switzerlandMobilityHiking.panelAria':
+    'Informationen zur SchweizMobil-Wanderroute',
+  'switzerlandMobilityHiking.close': 'Schliessen',
+  'switzerlandMobilityHiking.stage': 'Etappe {number}',
+  'switzerlandMobilityHiking.stageSection':
+    'Etappe {number}: {section}',
+  'switzerlandMobilityHiking.routeNumber': 'Route {number}',
+  'switzerlandMobilityHiking.unnamedRoute': 'SchweizMobil-Wanderroute',
+  'switzerlandMobilityHiking.multipleTitle':
+    'Hier verlaufen mehrere Routen',
+  'switzerlandMobilityHiking.multipleHint':
+    'Wählen Sie die Route aus, die angezeigt werden soll.',
+  'switzerlandMobilityHiking.loading': 'Route wird geladen…',
+  'switzerlandMobilityHiking.loadError':
+    'Die Informationen zu dieser Route konnten nicht geladen werden.',
+  'switzerlandMobilityHiking.elevationUnavailable':
+    'Höhenprofil nicht verfügbar.',
   'closures.layer': 'Sperrungen / Umleitungen',
   'closures.title': 'Sperrung / Umleitung',
   'closures.close': 'Schliessen',
@@ -483,6 +517,24 @@ const italianTranslations: Record<TranslationKey, string> = {
   'map.baseMap.aerial': 'Foto aerea',
   'hikingTrails.layer': 'Sentieri escursionistici',
   'switzerlandMobilityHiking.layer': 'A piedi SvizzeraMobile',
+  'switzerlandMobilityHiking.panelAria':
+    'Informazioni sull’itinerario SvizzeraMobile',
+  'switzerlandMobilityHiking.close': 'Chiudi',
+  'switzerlandMobilityHiking.stage': 'Tappa {number}',
+  'switzerlandMobilityHiking.stageSection':
+    'Tappa {number}: {section}',
+  'switzerlandMobilityHiking.routeNumber': 'Itinerario {number}',
+  'switzerlandMobilityHiking.unnamedRoute':
+    'Itinerario escursionistico SvizzeraMobile',
+  'switzerlandMobilityHiking.multipleTitle':
+    'Qui passano diversi itinerari',
+  'switzerlandMobilityHiking.multipleHint':
+    'Scegli l’itinerario da visualizzare.',
+  'switzerlandMobilityHiking.loading': 'Caricamento dell’itinerario…',
+  'switzerlandMobilityHiking.loadError':
+    'Non è stato possibile caricare le informazioni su questo itinerario.',
+  'switzerlandMobilityHiking.elevationUnavailable':
+    'Profilo altimetrico non disponibile.',
   'closures.layer': 'Chiusure / deviazioni',
   'closures.title': 'Chiusura / deviazione',
   'closures.close': 'Chiudi',
@@ -658,6 +710,24 @@ const englishTranslations: Record<TranslationKey, string> = {
   'map.baseMap.aerial': 'Aerial imagery',
   'hikingTrails.layer': 'Hiking trails',
   'switzerlandMobilityHiking.layer': 'Hiking SwitzerlandMobility',
+  'switzerlandMobilityHiking.panelAria':
+    'SwitzerlandMobility hiking route information',
+  'switzerlandMobilityHiking.close': 'Close',
+  'switzerlandMobilityHiking.stage': 'Stage {number}',
+  'switzerlandMobilityHiking.stageSection':
+    'Stage {number}: {section}',
+  'switzerlandMobilityHiking.routeNumber': 'Route {number}',
+  'switzerlandMobilityHiking.unnamedRoute':
+    'SwitzerlandMobility hiking route',
+  'switzerlandMobilityHiking.multipleTitle':
+    'Several routes pass here',
+  'switzerlandMobilityHiking.multipleHint':
+    'Choose the route to display.',
+  'switzerlandMobilityHiking.loading': 'Loading route…',
+  'switzerlandMobilityHiking.loadError':
+    'Information for this route could not be loaded.',
+  'switzerlandMobilityHiking.elevationUnavailable':
+    'Elevation profile unavailable.',
   'closures.layer': 'Closures / detours',
   'closures.title': 'Closure / detour',
   'closures.close': 'Close',

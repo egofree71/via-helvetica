@@ -6,14 +6,17 @@
 import { useRef } from 'react';
 import { useI18n } from '../i18n/I18nContext';
 
-/** File-selection callback supplied by the root application. */
+/** Callbacks supplied by the root application for the GPX import workflow. */
 interface RouteImportControlProps {
+  /** Clears any temporary map selection before the native picker opens. */
+  onOpen?: () => void;
   /** Reads, validates, displays, and frames the selected GPX file. */
   onSelectFile: (file: File) => void | Promise<void>;
 }
 
 /** Opens the browser file picker for one GPX itinerary. */
 export default function RouteImportControl({
+  onOpen,
   onSelectFile,
 }: RouteImportControlProps) {
   const { t } = useI18n();
@@ -26,6 +29,11 @@ export default function RouteImportControl({
     if (!input) {
       return;
     }
+
+    // The imported route becomes the next temporary map workflow even when
+    // the user eventually cancels the native picker. Clear any public feature
+    // selection before the browser dialog temporarily hides the map context.
+    onOpen?.();
 
     // Resetting permits selecting the same GPX again after it was edited.
     input.value = '';
