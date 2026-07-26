@@ -17,6 +17,10 @@ interface MapLayersSelectorProps {
   areHikingTrailsVisible: boolean;
   /** Shows or hides the official hiking-trail overlay. */
   onHikingTrailsChange: (isVisible: boolean) => void;
+  /** Whether official SwitzerlandMobility hiking routes are visible. */
+  isSwitzerlandMobilityHikingVisible: boolean;
+  /** Shows or hides official SwitzerlandMobility hiking routes. */
+  onSwitzerlandMobilityHikingChange: (isVisible: boolean) => void;
   /** Whether official hiking closures and detours are currently visible. */
   areTrailClosuresVisible: boolean;
   /** Shows or hides the official closure overlay. */
@@ -52,6 +56,8 @@ export default function MapLayersSelector({
   onBaseMapChange,
   areHikingTrailsVisible,
   onHikingTrailsChange,
+  isSwitzerlandMobilityHikingVisible,
+  onSwitzerlandMobilityHikingChange,
   areTrailClosuresVisible,
   onTrailClosuresChange,
   areShootingDangerZonesVisible,
@@ -200,6 +206,41 @@ export default function MapLayersSelector({
                 className={[
                   'map-layer-option-toggle',
                   areHikingTrailsVisible
+                    ? 'map-layer-option-toggle--checked'
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                aria-hidden="true"
+              >
+                <span />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={[
+                'map-layer-option',
+                'map-layer-option--overlay',
+                isSwitzerlandMobilityHikingVisible
+                  ? 'map-layer-option--selected'
+                  : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              role="menuitemcheckbox"
+              aria-checked={isSwitzerlandMobilityHikingVisible}
+              onClick={() =>
+                onSwitzerlandMobilityHikingChange(
+                  !isSwitzerlandMobilityHikingVisible,
+                )
+              }
+            >
+              <span>{t('switzerlandMobilityHiking.layer')}</span>
+              <span
+                className={[
+                  'map-layer-option-toggle',
+                  isSwitzerlandMobilityHikingVisible
                     ? 'map-layer-option-toggle--checked'
                     : '',
                 ]

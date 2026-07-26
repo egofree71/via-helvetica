@@ -1,8 +1,9 @@
 /**
  * Business context: owns the compact controls that navigate and configure the
  * shared map without changing itinerary state. It keeps the selected official
- * background, rendered hiking-trail preference, zoom, fullscreen requests, and
- * explicit browser geolocation feedback outside the application shell.
+ * background, rendered hiking-trail and SwitzerlandMobility preferences, zoom,
+ * fullscreen requests, and explicit browser geolocation feedback outside the
+ * application shell.
  */
 import {
   useCallback,
@@ -34,6 +35,8 @@ export interface UseMapViewControlsOptions {
   fullscreenElementRef: RefObject<HTMLElement | null>;
   /** Persisted hiking-trail choice captured before the map is created. */
   initialHikingTrailsVisibility: boolean;
+  /** Persisted SwitzerlandMobility hiking choice captured before map creation. */
+  initialSwitzerlandMobilityHikingVisibility: boolean;
   /** Current fullscreen state published by the runtime lifecycle hook. */
   isFullscreen: boolean;
   /** Typed interface translation helper. */
@@ -50,6 +53,10 @@ export interface MapViewControlsController {
   areHikingTrailsVisible: boolean;
   /** Shows or hides the rendered official hiking overlay. */
   setAreHikingTrailsVisible: (visible: boolean) => void;
+  /** Whether official SwitzerlandMobility hiking routes are visible. */
+  isSwitzerlandMobilityHikingVisible: boolean;
+  /** Shows or hides official SwitzerlandMobility hiking routes. */
+  setIsSwitzerlandMobilityHikingVisible: (visible: boolean) => void;
   /** Current browser geolocation request state. */
   locationStatus: LocationStatus;
   /** Temporary localized geolocation feedback. */
@@ -71,6 +78,9 @@ const LOCATION_MESSAGE_DURATION_MS = 6_000;
 /** Browser preference key for the rendered hiking-trail overlay. */
 const HIKING_TRAILS_VISIBILITY_STORAGE_KEY =
   'via-helvetica.hiking-trails-visible';
+/** Browser preference key for the optional SwitzerlandMobility hiking overlay. */
+const SWITZERLAND_MOBILITY_HIKING_VISIBILITY_STORAGE_KEY =
+  'via-helvetica.switzerland-mobility-hiking-visible';
 
 /** Restores the hiking-trail preference, which is enabled by default. */
 export function resolveInitialHikingTrailsVisibility(): boolean {
@@ -82,6 +92,19 @@ export function resolveInitialHikingTrailsVisibility(): boolean {
     );
   } catch {
     return true;
+  }
+}
+
+/** Restores the SwitzerlandMobility hiking preference, disabled by default. */
+export function resolveInitialSwitzerlandMobilityHikingVisibility(): boolean {
+  try {
+    return (
+      window.localStorage.getItem(
+        SWITZERLAND_MOBILITY_HIKING_VISIBILITY_STORAGE_KEY,
+      ) === 'true'
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -101,6 +124,10 @@ export function useMapViewControls(
   const [areHikingTrailsVisible, setAreHikingTrailsVisible] = useState(
     options.initialHikingTrailsVisibility,
   );
+  const [
+    isSwitzerlandMobilityHikingVisible,
+    setIsSwitzerlandMobilityHikingVisible,
+  ] = useState(options.initialSwitzerlandMobilityHikingVisibility);
   const [locationStatus, setLocationStatus] =
     useState<LocationStatus>('idle');
   const [locationMessage, setLocationMessage] = useState('');
@@ -258,6 +285,23 @@ export function useMapViewControls(
     );
   }, [areHikingTrailsVisible, options.mapRuntimeRef]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        SWITZERLAND_MOBILITY_HIKING_VISIBILITY_STORAGE_KEY,
+        String(isSwitzerlandMobilityHikingVisible),
+      );
+    } catch {
+      // Layer visibility remains functional when browser storage is unavailable.
+    }
+  }, [isSwitzerlandMobilityHikingVisible]);
+
+  useEffect(() => {
+    options.mapRuntimeRef.current?.setSwitzerlandMobilityHikingVisible(
+      isSwitzerlandMobilityHikingVisible,
+    );
+  }, [isSwitzerlandMobilityHikingVisible, options.mapRuntimeRef]);
+
   useEffect(
     () => () => {
       clearLocationMessageTimer();
@@ -270,6 +314,8 @@ export function useMapViewControls(
     setBaseMapStyle,
     areHikingTrailsVisible,
     setAreHikingTrailsVisible,
+    isSwitzerlandMobilityHikingVisible,
+    setIsSwitzerlandMobilityHikingVisible,
     locationStatus,
     locationMessage,
     locationButtonLabel:

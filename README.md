@@ -30,7 +30,7 @@ application can remain usable without an account or a project-owned backend.
 
 | Area | Highlights |
 |---|---|
-| Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, search, geolocation, scale, and fullscreen mode |
+| Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional SwitzerlandMobility hiking routes, search, geolocation, scale, and fullscreen mode |
 | Route planning | Editable ordered waypoints, start and finish markers, sparse direction arrows, optional swissTLM3D snapping in a dedicated routing Worker, undo, redo, reversal, loop closure, route deletion, and straight fallback segments when no routable path is found |
 | Route information | Distance, ascent, descent, Swiss hiking-time estimate, and a collapsible elevation profile with pointer synchronisation between the chart and the map |
 | Import and export | Read-only GPX loading with route statistics and elevation profile, plus named GPX export with simplified geometry and smoothed elevations when available |
@@ -74,8 +74,9 @@ http://localhost:5173/
 
 - Use the **Layers** button to choose the background map and enable or disable
   information overlays.
-- The application uses official swisstopo portrayals for map backgrounds and
-  hiking trails.
+- The application uses official portrayals for map backgrounds, hiking trails,
+  and the optional **Hiking SwitzerlandMobility** routes. The latter is disabled
+  by default, and explicit layer choices are remembered in the browser.
 
 ### Create and edit a route
 
@@ -115,15 +116,17 @@ pressed. Deployed geolocation requires HTTPS.
 ## Data sources
 
 Via Helvetica uses official swisstopo backgrounds and swissTLM3D geodata,
-official hiking-closure and military danger-zone layers, Federal Office of
-Transport stop data, GeoAdmin services, and `transport.opendata.ch` departure
-data.
+official SwitzerlandMobility hiking routes, hiking-closure and military
+danger-zone layers, Federal Office of Transport stop data, GeoAdmin services,
+and `transport.opendata.ch` departure data.
 
 - **swisstopo** provides the official Swiss maps and geodata.
 - **swissTLM3D** is swisstopo's topographic landscape model and supplies the
   road-and-path network used for route snapping.
-- **GeoAdmin** is the federal geodata platform used for bounded routing,
+- **GeoAdmin** is the federal geodata platform used for maps, bounded routing,
   elevation, and map-information requests.
+- **SwitzerlandMobility / ASTRA** provides the national, regional, and local
+  hiking-route portrayal exposed as the optional green route layer.
 - **LV95 / EPSG:2056** is the Swiss national projected coordinate system used
   internally by the map, routing graph, and editable geometries.
 
@@ -160,8 +163,9 @@ are documented in [Browser routing](docs/ROUTING.md).
 
 The focused Vitest suite covers immutable route transformations, route editing,
 GPX parsing and export, route metrics, directional-arrow placement,
-location-search provider normalization, passenger-stop filtering and viewport
-loading, worker-client messaging, and the dynamic routing engine's corridor,
+location-search provider normalization, rendered-layer provider contracts and
+defaults, passenger-stop filtering and viewport loading, worker-client
+messaging, and the dynamic routing engine's corridor,
 cache, cancellation cleanup, retry, hiking-enrichment fallback, and
 straight-fallback behaviour.
 

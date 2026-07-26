@@ -168,6 +168,10 @@ export default function AboutDialog({
                 </dd>
               </div>
               <div>
+                <dt>{t('about.switzerlandMobilityHiking')}</dt>
+                <dd>© ASTRA, SchweizMobil, Schweizer Wanderwege, Kantone</dd>
+              </div>
+              <div>
                 <dt>{t('about.closures')}</dt>
                 <dd>© ASTRA, Kantone, Schweizer Wanderwege, SchweizMobil</dd>
               </div>

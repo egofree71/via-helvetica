@@ -24,10 +24,13 @@ import {
   createBaseMapSource,
   createGrayDetailMapSource,
   createHikingTrailsSource,
+  createSwitzerlandMobilityHikingSource,
   DEFAULT_BASE_MAP_STYLE,
   DEFAULT_MAP_CENTER,
   GRAY_DETAIL_MIN_ZOOM,
   HIKING_TRAILS_MIN_ZOOM,
+  SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM,
+  SWITZERLAND_MOBILITY_HIKING_OPACITY,
   MAP_EXTENT,
   MAP_ZOOM,
   type BaseMapStyle,
@@ -59,9 +62,11 @@ import {
 
 /** Layer order slot for the detailed grey supplement above the base map. */
 const GRAY_DETAIL_Z_INDEX = 1;
-/** Layer order slot for rendered hiking trails below operational overlays. */
+/** Layer order slot for rendered hiking trails below named route overlays. */
 const HIKING_TRAILS_Z_INDEX = 10;
-/** Layer order slot for closures above hiking portrayal and transport stops. */
+/** Layer order slot for green SwitzerlandMobility routes above hiking trails. */
+const SWITZERLAND_MOBILITY_HIKING_Z_INDEX = 11;
+/** Layer order slot for closures above hiking portrayals and transport stops. */
 const TRAIL_CLOSURES_Z_INDEX = 13;
 /** Layer order slot for military danger zones above other information layers. */
 const SHOOTING_DANGER_ZONES_Z_INDEX = 16;
@@ -85,6 +90,8 @@ export type MapLoadStatus = 'loading' | 'ready' | 'error';
 export interface MapRuntimeVisibility {
   /** Whether the rendered official hiking-trail overlay starts visible. */
   hikingTrails: boolean;
+  /** Whether official SwitzerlandMobility hiking routes start visible. */
+  switzerlandMobilityHiking: boolean;
   /** Whether official hiking closures and detours start visible. */
   trailClosures: boolean;
   /** Whether military shooting notices and danger zones start visible. */
@@ -129,6 +136,8 @@ export interface MapRuntime {
   setBaseMapStyle: (style: BaseMapStyle) => void;
   /** Shows or hides the rendered official hiking-trail overlay. */
   setHikingTrailsVisible: (visible: boolean) => void;
+  /** Shows or hides official SwitzerlandMobility hiking routes. */
+  setSwitzerlandMobilityHikingVisible: (visible: boolean) => void;
   /** Shows or hides official hiking closures and detours. */
   setTrailClosuresVisible: (visible: boolean) => void;
   /** Shows or hides military danger zones and their selection highlight. */
@@ -152,6 +161,8 @@ export function createMapRuntime(
   const rasterSource = createBaseMapSource(DEFAULT_BASE_MAP_STYLE);
   const grayDetailSource = createGrayDetailMapSource();
   const hikingTrailsSource = createHikingTrailsSource();
+  const switzerlandMobilityHikingSource =
+    createSwitzerlandMobilityHikingSource();
   const trailClosuresSource = createTrailClosuresSource();
   const shootingDangerZonesSource = createShootingDangerZonesSource();
   const shootingDangerZoneSelectionDisplay =
@@ -177,6 +188,15 @@ export function createMapRuntime(
     minZoom: HIKING_TRAILS_MIN_ZOOM,
     visible: options.visibility.hikingTrails,
     zIndex: HIKING_TRAILS_Z_INDEX,
+  });
+  const switzerlandMobilityHikingLayer = new TileLayer<WMTS>({
+    source: switzerlandMobilityHikingSource,
+    minZoom: SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM,
+    visible: options.visibility.switzerlandMobilityHiking,
+    // The official routes are much thicker than the ordinary hiking portrayal.
+    // Partial opacity keeps labels, roads, and terrain readable underneath.
+    opacity: SWITZERLAND_MOBILITY_HIKING_OPACITY,
+    zIndex: SWITZERLAND_MOBILITY_HIKING_Z_INDEX,
   });
   const trailClosuresLayer = new TileLayer<TileWMS>({
     source: trailClosuresSource,
@@ -239,6 +259,7 @@ export function createMapRuntime(
       baseMapLayer,
       grayDetailLayer,
       hikingTrailsLayer,
+      switzerlandMobilityHikingLayer,
       trailClosuresLayer,
       publicTransportStopsDisplay.selectionLayer,
       publicTransportStopsDisplay.layer,
@@ -300,6 +321,10 @@ export function createMapRuntime(
     hikingTrailsLayer.setVisible(visible);
   };
 
+  const setSwitzerlandMobilityHikingVisible = (visible: boolean) => {
+    switzerlandMobilityHikingLayer.setVisible(visible);
+  };
+
   const setTrailClosuresVisible = (visible: boolean) => {
     trailClosuresLayer.setVisible(visible);
   };
@@ -331,6 +356,7 @@ export function createMapRuntime(
     routeProfileMarker,
     setBaseMapStyle,
     setHikingTrailsVisible,
+    setSwitzerlandMobilityHikingVisible,
     setTrailClosuresVisible,
     setShootingDangerZonesVisible,
     setPublicTransportStopsVisible,

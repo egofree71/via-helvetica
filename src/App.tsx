@@ -31,6 +31,7 @@ import {
 import { useMapRuntime } from './map/useMapRuntime';
 import {
   resolveInitialHikingTrailsVisibility,
+  resolveInitialSwitzerlandMobilityHikingVisibility,
   useMapViewControls,
 } from './map/useMapViewControls';
 import {
@@ -69,6 +70,10 @@ export default function App() {
     resolveInitialHikingTrailsVisibility,
     [],
   );
+  const initialSwitzerlandMobilityHikingVisibility = useMemo(
+    resolveInitialSwitzerlandMobilityHikingVisibility,
+    [],
+  );
   const initialMapInformationVisibility = useMemo(
     resolveInitialMapInformationLayerVisibility,
     [],
@@ -82,6 +87,8 @@ export default function App() {
     fullscreenElementRef: appRef,
     initialVisibility: {
       hikingTrails: initialHikingTrailsVisibility,
+      switzerlandMobilityHiking:
+        initialSwitzerlandMobilityHikingVisibility,
       trailClosures: initialMapInformationVisibility.trailClosures,
       shootingDangerZones:
         initialMapInformationVisibility.shootingDangerZones,
@@ -94,6 +101,8 @@ export default function App() {
     setBaseMapStyle,
     areHikingTrailsVisible,
     setAreHikingTrailsVisible,
+    isSwitzerlandMobilityHikingVisible,
+    setIsSwitzerlandMobilityHikingVisible,
     locationStatus,
     locationMessage,
     locationButtonLabel,
@@ -105,6 +114,7 @@ export default function App() {
     mapRuntimeRef,
     fullscreenElementRef: appRef,
     initialHikingTrailsVisibility,
+    initialSwitzerlandMobilityHikingVisibility,
     isFullscreen,
     t,
   });
@@ -389,6 +399,12 @@ export default function App() {
           onBaseMapChange={setBaseMapStyle}
           areHikingTrailsVisible={areHikingTrailsVisible}
           onHikingTrailsChange={setAreHikingTrailsVisible}
+          isSwitzerlandMobilityHikingVisible={
+            isSwitzerlandMobilityHikingVisible
+          }
+          onSwitzerlandMobilityHikingChange={
+            setIsSwitzerlandMobilityHikingVisible
+          }
           areTrailClosuresVisible={areTrailClosuresVisible}
           onTrailClosuresChange={setAreTrailClosuresVisible}
           areShootingDangerZonesVisible={areShootingDangerZonesVisible}

@@ -39,6 +39,9 @@ const SWISSTOPO_GRAY_DETAIL_LAYER_ID =
 const SWISSTOPO_HIKING_TRAILS_LAYER_ID =
   'ch.swisstopo.swisstlm3d-wanderwege';
 
+/** Official SwitzerlandMobility hiking-route portrayal shown as green routes. */
+const SWITZERLAND_MOBILITY_HIKING_LAYER_ID = 'ch.astra.wanderland';
+
 /** HTML attribution required by the official swisstopo tile service. */
 const SWISSTOPO_ATTRIBUTION =
   '<a href="https://www.swisstopo.admin.ch/" target="_blank" rel="noopener noreferrer">© swisstopo</a>';
@@ -79,6 +82,21 @@ export const MAP_ZOOM = {
  * visibility threshold closely without reprojecting the portrayal.
  */
 export const HIKING_TRAILS_MIN_ZOOM = 18;
+
+/**
+ * Minimum OpenLayers zoom index for SwitzerlandMobility hiking routes.
+ * It deliberately matches the ordinary hiking portrayal so the dense green
+ * network does not cover national-map labels at overview scales.
+ */
+export const SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM =
+  HIKING_TRAILS_MIN_ZOOM;
+
+/**
+ * Layer opacity ratio (0 = transparent, 1 = opaque) for the thick green routes.
+ * A value of 0.6 keeps route continuity clear while allowing place names,
+ * roads, and terrain symbols to remain readable below the portrayal.
+ */
+export const SWITZERLAND_MOBILITY_HIKING_OPACITY = 0.6;
 
 /*
  * The 1:10,000 grey map supplements the national grey background from native
@@ -181,6 +199,14 @@ export function createGrayDetailMapSource(): WMTS {
 export function createHikingTrailsSource(): WMTS {
   return createSwissTopoWmtsSource(
     SWISSTOPO_HIKING_TRAILS_LAYER_ID,
+    'png',
+  );
+}
+
+/** Creates the official SwitzerlandMobility hiking-route overlay in native LV95. */
+export function createSwitzerlandMobilityHikingSource(): WMTS {
+  return createSwissTopoWmtsSource(
+    SWITZERLAND_MOBILITY_HIKING_LAYER_ID,
     'png',
   );
 }

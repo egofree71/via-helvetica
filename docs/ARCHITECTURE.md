@@ -126,7 +126,7 @@ flowchart LR
 
 | Provider or API | Purpose | Failure impact |
 |---|---|---|
-| swisstopo WMTS | Color, grey, aerial, and hiking-trail portrayals | Initial base-map failure is blocking; later isolated tile failures are not |
+| Federal WMTS (`geo.admin.ch`) | Color, grey, aerial, hiking-trail, and SwitzerlandMobility hiking portrayals | Initial base-map failure is blocking; optional or later isolated tile failures are not |
 | GeoAdmin SearchServer | Official place search | Localized, retryable search failure |
 | GeoAdmin identify | swissTLM3D routing data and map-feature inspection | Routing requests may fail; information overlays remain non-blocking |
 | GeoAdmin HTML popup | Localized closure and military metadata | Popup reports a local error without changing route state |
@@ -189,7 +189,7 @@ flowchart TB
 |---|---|---|
 | Application composition | `src/App.tsx` | Connects focused hooks, resolves which temporary workflow owns the current itinerary, and owns modal state |
 | Map lifetime | `src/map/mapRuntime.ts`, `src/map/useMapRuntime.ts` | Creates and disposes the single OpenLayers runtime; synchronizes startup and fullscreen state |
-| Map controls | `src/map/useMapViewControls.ts` | Background choice, hiking-overlay visibility, zoom, fullscreen, and explicit geolocation |
+| Map controls | `src/map/useMapViewControls.ts` | Background choice, hiking-trail and SwitzerlandMobility overlay visibility, zoom, fullscreen, and explicit geolocation |
 | Information overlays | `src/map/useMapInformationLayers.ts` | Visibility, loading, inspection priority, popup state, selection, caching, and cancellation |
 | Editable-route domain | `src/map/routeState.ts`, `src/map/useEditableRoute.ts` | Immutable route state, history, snap mode, serialized mutations, and route actions |
 | Pointer interaction | `src/map/useRouteInteractions.ts`, `src/map/routePointerInteraction.ts` | Waypoint and section hit detection, drag previews, click/drag lifecycle, and semantic edit requests |
@@ -473,20 +473,26 @@ Selectable backgrounds include:
 - official grey national map, including its detailed source at close zoom;
 - SWISSIMAGE aerial imagery.
 
-The rendered hiking layer is a transparent official portrayal. It is independent
-from the optional vector hiking geometry used to influence route costs.
+The rendered hiking-trail layer is a transparent official portrayal. The
+optional `ch.astra.wanderland` WMTS layer adds the green national, regional, and
+local SwitzerlandMobility hiking routes. It starts disabled, persists an explicit
+browser choice, appears from the same close-scale zoom threshold as the ordinary
+hiking portrayal, and uses partial layer opacity so its thick lines do not hide
+map labels and terrain. It remains independent from the vector hiking geometry
+used to influence route costs.
 
 ### 6.2 Ordered layers
 
 The runtime creates one explicit layer order. In broad terms:
 
 1. selected raster background;
-2. rendered hiking portrayal;
-3. closure and military WMS overlays;
-4. selection and public-transport vectors;
-5. imported read-only itinerary;
-6. editable route;
-7. temporary search and user-location markers.
+2. rendered hiking-trail portrayal;
+3. optional green SwitzerlandMobility hiking routes;
+4. closure and military WMS overlays;
+5. selection and public-transport vectors;
+6. imported read-only itinerary;
+7. editable route;
+8. temporary search and user-location markers.
 
 Route and endpoint readability takes priority over informational overlays.
 Layer construction remains centralized so later features do not depend on
@@ -681,6 +687,7 @@ appearance. They cover:
 - GPX parsing, projection, metrics, and export;
 - directional-arrow placement;
 - location-search caching and normalization;
+- rendered-layer provider identifiers and persisted product defaults;
 - public-transport filtering, viewport reuse, and API scale separation;
 - routing-grid footprints;
 - Worker request correlation, typed errors, cancellation, and disposal;
@@ -696,7 +703,8 @@ validated where a browser-level test would cost more than it protects. Important
 manual checks include:
 
 - mouse, pen, and touch route editing;
-- responsive control collisions;
+- responsive control collisions and translated layer-label wrapping;
+- official hiking and SwitzerlandMobility portrayals across useful zooms;
 - GPX fitting on narrow viewports;
 - map/profile pointer synchronisation;
 - provider portrayals and official popup content;
@@ -817,7 +825,7 @@ Provider usage and attribution remain subject to the respective official terms.
 | LV95 | Current Swiss national coordinate reference system |
 | EPSG:2056 | EPSG identifier for LV95 |
 | WGS 84 / EPSG:4326 | Longitude/latitude exchange coordinate system |
-| WMTS | Tiled map service used for official raster backgrounds and hiking portrayal |
+| WMTS | Tiled map service used for official raster backgrounds, hiking trails, and SwitzerlandMobility route portrayals |
 | WMS | Map-image service used for closure and military overlays |
 | swissTLM3D | Official topographic landscape model supplying roads, paths, and optional hiking geometry |
 | Worker | Browser execution context that isolates routing loading and computation from the map UI |
