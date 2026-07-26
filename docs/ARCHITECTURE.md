@@ -189,7 +189,7 @@ flowchart TB
 |---|---|---|
 | Application composition | `src/App.tsx` | Connects focused hooks, resolves which temporary workflow owns the current itinerary, and owns modal state |
 | Map lifetime | `src/map/mapRuntime.ts`, `src/map/useMapRuntime.ts` | Creates and disposes the single OpenLayers runtime; synchronizes startup and fullscreen state |
-| Map controls | `src/map/useMapViewControls.ts` | Background choice, hiking-trail and SwitzerlandMobility overlay visibility, zoom, fullscreen, and explicit geolocation |
+| Map controls | `src/map/useMapViewControls.ts`, `src/map/useMapLayerOpacities.ts`, `src/components/MapLayersSelector.tsx` | Background choice, persisted overlay visibility and opacity, zoom, fullscreen, and explicit geolocation |
 | Information overlays | `src/map/useMapInformationLayers.ts`, `src/map/useSwitzerlandMobilityHikingSelection.ts`, `src/switzerlandMobility/hikingRoutes.ts` | Visibility, loading, inspection priority, public-route selection and fitting, popup state, caching, and cancellation |
 | Editable-route domain | `src/map/routeState.ts`, `src/map/useEditableRoute.ts` | Immutable route state, history, snap mode, serialized mutations, and route actions |
 | Pointer interaction | `src/map/useRouteInteractions.ts`, `src/map/routePointerInteraction.ts` | Waypoint and section hit detection, drag previews, click/drag lifecycle, and semantic edit requests |
@@ -328,8 +328,8 @@ The same profile samples support:
    mounted.
 4. `mapRuntime.ts` creates the LV95 view, explicit layer order, displays, and
    transient markers.
-5. Focused hooks apply persisted background and overlay choices without
-   recreating the map.
+5. Focused hooks apply persisted background, overlay visibility, and opacity
+   choices without recreating the map.
 6. Optional providers begin work only when their layer, zoom, or user action
    requires it.
 
@@ -488,13 +488,23 @@ Selectable backgrounds include:
 - official grey national map, including its detailed source at close zoom;
 - SWISSIMAGE aerial imagery.
 
-The rendered hiking-trail layer is a transparent official portrayal. The
-optional `ch.astra.wanderland` WMTS layer adds the green national, regional, and
-local SwitzerlandMobility hiking routes. It starts disabled, persists an explicit
-browser choice, appears from the same close-scale zoom threshold as the ordinary
-hiking portrayal, and uses partial layer opacity so its thick lines do not hide
-map labels and terrain. It remains independent from the vector hiking geometry
-used to influence route costs.
+The rendered hiking-trail layer and optional `ch.astra.wanderland` WMTS layer
+add the ordinary official hiking portrayal and the green national, regional, and
+local SwitzerlandMobility routes. The green layer starts disabled. Ordinary
+hiking trails and trail closures start at 80% opacity for strong readability,
+while the thicker green routes start at 60%; these defaults preserve some
+visibility of labels, roads, and terrain underneath. The shared layer menu
+exposes an expandable opacity slider for every information layer—hiking trails,
+SwitzerlandMobility routes, closures, military danger zones, and public-
+transport stops. A layer's settings button is disabled while that layer is
+hidden, because opacity changes would have no visible feedback. Visibility and
+opacity choices are persisted independently in browser storage and applied to
+the existing OpenLayers runtime without recreating the map. The selected
+SwitzerlandMobility route remains an opaque current itinerary rather than
+inheriting the overview layer opacity.
+
+The rendered portrayals remain independent from the vector hiking geometry used
+to influence route costs.
 
 ### 6.2 Ordered layers
 
@@ -735,7 +745,10 @@ appearance. They cover:
 - GPX parsing, projection, metrics, editable export, and segmented read-only export;
 - directional-arrow placement;
 - location-search caching and normalization;
-- rendered-layer provider identifiers and persisted product defaults;
+- rendered-layer provider identifiers, semitransparent hiking defaults, and
+  persisted opacity restoration;
+- the expandable opacity control for every visible optional information layer,
+  including disabled settings buttons for hidden layers;
 - SwitzerlandMobility metadata normalization, full-geometry selection,
   responsive route fitting, single-itinerary replacement, export, and profile-panel behavior;
 - public-transport filtering, viewport reuse, and API scale separation;
@@ -753,8 +766,10 @@ validated where a browser-level test would cost more than it protects. Important
 manual checks include:
 
 - mouse, pen, and touch route editing;
-- responsive control collisions and translated layer-label wrapping;
-- official hiking and SwitzerlandMobility portrayals across useful zooms;
+- responsive control collisions, translated layer-label wrapping, and the
+  expandable opacity sliders on narrow and short viewports;
+- official hiking and SwitzerlandMobility portrayals across useful zooms and
+  restored opacity preferences after a reload;
 - selection, overlap choice, highlighting, full-route fitting, and profile
   synchronization for named SwitzerlandMobility routes;
 - GPX fitting on narrow viewports;

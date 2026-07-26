@@ -6,22 +6,22 @@
 import { describe, expect, it } from 'vitest';
 import {
   createSwitzerlandMobilityHikingSource,
+  DEFAULT_HIKING_TRAILS_OPACITY,
+  DEFAULT_SWITZERLAND_MOBILITY_HIKING_OPACITY,
   HIKING_TRAILS_MIN_ZOOM,
   SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM,
-  SWITZERLAND_MOBILITY_HIKING_OPACITY,
 } from './config';
 
-describe('SwitzerlandMobility hiking WMTS source', () => {
+describe('rendered hiking overlays', () => {
   it('uses the same close-scale threshold as ordinary hiking trails', () => {
     expect(SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM).toBe(
       HIKING_TRAILS_MIN_ZOOM,
     );
   });
 
-  it('keeps the thick green portrayal partially transparent', () => {
-    expect(SWITZERLAND_MOBILITY_HIKING_OPACITY).toBeGreaterThan(0);
-    expect(SWITZERLAND_MOBILITY_HIKING_OPACITY).toBeLessThan(1);
-    expect(SWITZERLAND_MOBILITY_HIKING_OPACITY).toBe(0.6);
+  it('uses distinct readable defaults for the two hiking portrayals', () => {
+    expect(DEFAULT_HIKING_TRAILS_OPACITY).toBe(0.8);
+    expect(DEFAULT_SWITZERLAND_MOBILITY_HIKING_OPACITY).toBe(0.6);
   });
 
   it('uses the official Wanderland PNG layer in native LV95', () => {

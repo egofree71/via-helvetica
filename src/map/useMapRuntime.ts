@@ -11,6 +11,7 @@ import {
   type MapRuntime,
   type MapRuntimeVisibility,
 } from './mapRuntime';
+import type { MapLayerOpacities } from './useMapLayerOpacities';
 
 /** React-facing options needed to own the single OpenLayers runtime. */
 export interface UseMapRuntimeOptions {
@@ -20,6 +21,8 @@ export interface UseMapRuntimeOptions {
   fullscreenElementRef: RefObject<HTMLElement | null>;
   /** Persisted overlay choices captured when the runtime is first created. */
   initialVisibility: MapRuntimeVisibility;
+  /** Persisted opacity ratios captured when the runtime is first created. */
+  initialOpacity: MapLayerOpacities;
 }
 
 /** Runtime resources and browser state exposed to the application shell. */
@@ -35,7 +38,7 @@ export interface MapRuntimeController {
 /**
  * Owns the OpenLayers runtime for the lifetime of one mounted application.
  *
- * @param options - DOM refs and persisted initial layer visibility.
+ * @param options - DOM refs plus persisted initial layer visibility and opacity.
  * @returns Runtime resources plus startup and fullscreen render state.
  */
 export function useMapRuntime(
@@ -59,6 +62,7 @@ export function useMapRuntime(
     const runtime = createMapRuntime({
       target,
       visibility: initialOptions.initialVisibility,
+      opacity: initialOptions.initialOpacity,
       onLoadStatusChange: setStatus,
     });
     runtimeRef.current = runtime;

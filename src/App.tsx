@@ -34,6 +34,10 @@ import {
 } from './map/useMapInformationLayers';
 import { useMapRuntime } from './map/useMapRuntime';
 import {
+  resolveInitialMapLayerOpacities,
+  useMapLayerOpacities,
+} from './map/useMapLayerOpacities';
+import {
   resolveInitialHikingTrailsVisibility,
   resolveInitialSwitzerlandMobilityHikingVisibility,
   useMapViewControls,
@@ -87,6 +91,10 @@ export default function App() {
     resolveInitialMapInformationLayerVisibility,
     [],
   );
+  const initialMapLayerOpacities = useMemo(
+    resolveInitialMapLayerOpacities,
+    [],
+  );
   const {
     runtimeRef: mapRuntimeRef,
     status,
@@ -104,6 +112,11 @@ export default function App() {
       publicTransportStops:
         initialMapInformationVisibility.publicTransportStops,
     },
+    initialOpacity: initialMapLayerOpacities,
+  });
+  const { layerOpacities, setLayerOpacity } = useMapLayerOpacities({
+    mapRuntimeRef,
+    initialOpacities: initialMapLayerOpacities,
   });
   const {
     baseMapStyle,
@@ -488,6 +501,8 @@ export default function App() {
           onShootingDangerZonesChange={setAreShootingDangerZonesVisible}
           arePublicTransportStopsVisible={arePublicTransportStopsVisible}
           onPublicTransportStopsChange={setArePublicTransportStopsVisible}
+          layerOpacities={layerOpacities}
+          onLayerOpacityChange={setLayerOpacity}
         />
 
         <div className="zoom-controls">

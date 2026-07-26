@@ -30,7 +30,7 @@ application can remain usable without an account or a project-owned backend.
 
 | Area | Highlights |
 |---|---|
-| Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, search, geolocation, scale, and fullscreen mode |
+| Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, persistent visibility and opacity controls for information layers, search, geolocation, scale, and fullscreen mode |
 | Route planning | Editable ordered waypoints, start and finish markers, sparse direction arrows, optional swissTLM3D snapping in a dedicated routing Worker, undo, redo, reversal, loop closure, route deletion, and straight fallback segments when no routable path is found |
 | Route information | Distance, ascent, descent, Swiss hiking-time estimate, and a collapsible elevation profile with pointer synchronisation between the chart and the map |
 | Import and export | Read-only GPX loading with route statistics and elevation profile, plus named GPX export for editable and selected SwitzerlandMobility routes with simplified geometry and smoothed elevations when available |
@@ -76,7 +76,8 @@ http://localhost:5173/
   information overlays.
 - The application uses official portrayals for map backgrounds, hiking trails,
   and the optional **Hiking SwitzerlandMobility** routes. The latter is disabled
-  by default, and explicit layer choices are remembered in the browser.
+  by default. Information layers can be shown, hidden, or made more or less
+  opaque from the same menu, and explicit choices are remembered in the browser.
 
 ### Create and edit a route
 
@@ -172,8 +173,9 @@ are documented in [Browser routing](docs/ROUTING.md).
 
 The focused Vitest suite covers immutable route transformations, route editing,
 GPX parsing and export, route metrics, directional-arrow placement,
-location-search provider normalization, rendered-layer provider contracts and
-defaults, passenger-stop filtering and viewport loading, worker-client
+location-search provider normalization, rendered-layer provider contracts,
+default opacity and persistence, passenger-stop filtering and viewport loading,
+worker-client
 messaging, and the dynamic routing engine's corridor,
 cache, cancellation cleanup, retry, hiking-enrichment fallback, and
 straight-fallback behaviour.

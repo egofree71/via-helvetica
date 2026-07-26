@@ -318,7 +318,8 @@ select {
   position: absolute;
   top: 0;
   right: calc(100% + 0.5rem);
-  width: 14.5rem;
+  width: 18rem;
+  max-width: calc(100vw - 5.5rem);
   max-height: calc(100vh - 2rem);
   overflow-x: hidden;
   overflow-y: auto;
@@ -368,14 +369,92 @@ select {
 }
 
 .map-layer-option:hover,
-.map-layer-option--selected {
+.map-layer-option--selected,
+.map-layer-control:hover,
+.map-layer-control--selected {
   background: rgb(23 105 224 / 10%);
+}
+
+.map-layer-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.35rem;
+  border-radius: 7px;
+}
+
+.map-layer-control .map-layer-option:hover {
+  background: transparent;
 }
 
 .map-layer-option--overlay {
   min-height: 3rem;
   grid-template-columns: minmax(0, 1fr) 1.75rem;
   padding-left: 0.65rem;
+  border-radius: 7px 0 0 7px;
+}
+
+.map-layer-opacity-button {
+  display: grid;
+  width: 2.35rem;
+  min-height: 3rem;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 0 7px 7px 0;
+  color: #53606b;
+  background: transparent;
+  cursor: pointer;
+}
+
+.map-layer-opacity-button:hover,
+.map-layer-opacity-button--open {
+  color: #1769e0;
+  background: rgb(23 105 224 / 10%);
+}
+
+.map-layer-opacity-button:disabled,
+.map-layer-opacity-button:disabled:hover {
+  color: #a7afb6;
+  background: transparent;
+  cursor: default;
+  opacity: 1;
+}
+
+.map-layer-opacity-button:focus-visible {
+  outline: 3px solid rgb(23 105 224 / 40%);
+  outline-offset: -3px;
+}
+
+.map-layer-opacity-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: currentcolor;
+  stroke: none;
+}
+
+.map-layer-opacity-settings {
+  display: grid;
+  min-height: 2.55rem;
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(4.5rem, 1fr) 3rem;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.35rem 0.65rem 0.55rem;
+  border-top: 1px solid rgb(32 47 60 / 10%);
+  color: #53606b;
+  font-size: 0.78rem;
+}
+
+.map-layer-opacity-settings input[type='range'] {
+  width: 100%;
+  margin: 0;
+  accent-color: #1769e0;
+  cursor: pointer;
+}
+
+.map-layer-opacity-settings output {
+  justify-self: end;
+  color: #17212b;
+  font-variant-numeric: tabular-nums;
 }
 
 .map-layer-option:focus-visible {

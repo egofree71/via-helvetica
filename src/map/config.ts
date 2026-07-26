@@ -92,11 +92,36 @@ export const SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM =
   HIKING_TRAILS_MIN_ZOOM;
 
 /**
- * Layer opacity ratio (0 = transparent, 1 = opaque) for the thick green routes.
- * A value of 0.6 keeps route continuity clear while allowing place names,
- * roads, and terrain symbols to remain readable below the portrayal.
+ * Default opacity ratio (0 = transparent, 1 = opaque) for ordinary hiking
+ * trails. A value of 0.8 keeps the yellow network clearly readable while still
+ * revealing labels and terrain details beneath the official portrayal.
  */
-export const SWITZERLAND_MOBILITY_HIKING_OPACITY = 0.6;
+export const DEFAULT_HIKING_TRAILS_OPACITY = 0.8;
+
+/**
+ * Default opacity ratio for the thick green SwitzerlandMobility routes. A value
+ * of 0.6 keeps route continuity clear while allowing place names, roads, and
+ * terrain symbols to remain readable below the portrayal.
+ */
+export const DEFAULT_SWITZERLAND_MOBILITY_HIKING_OPACITY = 0.6;
+
+/**
+ * Default opacity ratio for closures and detours. A value of 0.8 keeps safety
+ * information prominent while allowing labels and map details to remain visible.
+ */
+export const DEFAULT_TRAIL_CLOSURES_OPACITY = 0.8;
+
+/**
+ * Default opacity ratio for large military polygons. Partial opacity preserves
+ * the perimeter while keeping map detail readable underneath.
+ */
+export const DEFAULT_SHOOTING_DANGER_ZONES_OPACITY = 0.6;
+
+/**
+ * Default opacity ratio for public-transport symbols. Full opacity keeps small
+ * mode icons legible; visitors may reduce it when the map becomes crowded.
+ */
+export const DEFAULT_PUBLIC_TRANSPORT_STOPS_OPACITY = 1;
 
 /*
  * The 1:10,000 grey map supplements the national grey background from native
