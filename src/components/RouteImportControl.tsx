@@ -60,7 +60,7 @@ export default function RouteImportControl({
         ref={inputRef}
         className="visually-hidden"
         type="file"
-        accept=".gpx,application/gpx+xml,application/xml,text/xml"
+        accept=".gpx"
         tabIndex={-1}
         aria-hidden="true"
         onChange={(event) => {

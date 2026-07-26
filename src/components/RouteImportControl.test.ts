@@ -33,6 +33,24 @@ describe('RouteImportControl', () => {
     vi.restoreAllMocks();
   });
 
+  it('limits the native file picker to GPX files', async () => {
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(RouteImportControl, {
+            onSelectFile: vi.fn(),
+          }),
+        ),
+      );
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+
+    expect(input?.accept).toBe('.gpx');
+  });
+
   it('clears temporary map information before opening the file picker', async () => {
     const callOrder: string[] = [];
     const inputClick = vi
