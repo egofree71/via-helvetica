@@ -168,8 +168,8 @@ function readFeatureId(value: unknown): string | number | null {
 }
 
 /**
- * Splits the public title's final parenthesized suffix without assuming a
- * language-specific separator between the two endpoint names.
+ * Splits the public title's final balanced parenthesized suffix without
+ * assuming a language-specific separator between the two endpoint names.
  *
  * @param title - Localized `chmobil_title` value.
  * @returns Route name and optional section text.
@@ -181,14 +181,44 @@ export function splitSwitzerlandMobilityHikingTitle(
     return { routeName: null, sectionName: null };
   }
 
-  const match = title.match(/^(.+?)\s*\(([^()]*)\)\s*$/);
+  const titleWithoutTrailingSpace = title.trimEnd();
+  const closingParenthesisIndex = titleWithoutTrailingSpace.length - 1;
 
-  if (!match) {
+  if (titleWithoutTrailingSpace[closingParenthesisIndex] !== ')') {
     return { routeName: title, sectionName: null };
   }
 
-  const routeName = match[1].trim();
-  const sectionName = match[2].trim();
+  let nestingDepth = 0;
+  let openingParenthesisIndex = -1;
+
+  // Endpoint names can themselves contain parentheses, as in "Vevey
+  // (Corseaux)". Scanning backwards finds the opening parenthesis paired with
+  // the title's final closing parenthesis instead of splitting at the inner one.
+  for (let index = closingParenthesisIndex; index >= 0; index -= 1) {
+    const character = titleWithoutTrailingSpace[index];
+
+    if (character === ')') {
+      nestingDepth += 1;
+    } else if (character === '(') {
+      nestingDepth -= 1;
+
+      if (nestingDepth === 0) {
+        openingParenthesisIndex = index;
+        break;
+      }
+    }
+  }
+
+  if (openingParenthesisIndex <= 0) {
+    return { routeName: title, sectionName: null };
+  }
+
+  const routeName = titleWithoutTrailingSpace
+    .slice(0, openingParenthesisIndex)
+    .trim();
+  const sectionName = titleWithoutTrailingSpace
+    .slice(openingParenthesisIndex + 1, closingParenthesisIndex)
+    .trim();
 
   return {
     routeName: routeName || null,

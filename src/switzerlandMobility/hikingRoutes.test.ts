@@ -36,6 +36,28 @@ describe('splitSwitzerlandMobilityHikingTitle', () => {
     });
   });
 
+  it('preserves nested parentheses inside a stage endpoint', () => {
+    expect(
+      splitSwitzerlandMobilityHikingTitle(
+        'Alpenpanorama-Weg (Vevey (Corseaux) - Lausanne)',
+      ),
+    ).toEqual({
+      routeName: 'Alpenpanorama-Weg',
+      sectionName: 'Vevey (Corseaux) - Lausanne',
+    });
+  });
+
+  it('uses only the final balanced suffix when the route name has parentheses', () => {
+    expect(
+      splitSwitzerlandMobilityHikingTitle(
+        'Route panoramique (variante) (Départ - Arrivée)',
+      ),
+    ).toEqual({
+      routeName: 'Route panoramique (variante)',
+      sectionName: 'Départ - Arrivée',
+    });
+  });
+
   it('preserves a title that has no final parenthesized section', () => {
     expect(splitSwitzerlandMobilityHikingTitle('ViaJacobi')).toEqual({
       routeName: 'ViaJacobi',
