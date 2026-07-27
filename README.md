@@ -30,7 +30,7 @@ application can remain usable without an account or a project-owned backend.
 
 | Area | Highlights |
 |---|---|
-| Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, persistent visibility and opacity controls for information layers, search, geolocation, scale, and fullscreen mode |
+| Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, persistent visibility and opacity controls for information layers, place and WGS 84/LV95 coordinate search, geolocation, scale, and fullscreen mode |
 | Route planning | Editable ordered waypoints, start and finish markers, sparse direction arrows, optional swissTLM3D snapping in a dedicated routing Worker, undo, redo, reversal, loop closure, route deletion, and straight fallback segments when no routable path is found |
 | Route information | Distance, ascent, descent, Swiss hiking-time estimate, and a collapsible elevation profile with pointer synchronisation between the chart and the map |
 | Import and export | Read-only GPX loading with route statistics and elevation profile, plus named GPX export for editable and selected SwitzerlandMobility routes with simplified geometry and smoothed elevations when available |
@@ -74,6 +74,9 @@ http://localhost:5173/
 
 - Use the **Layers** button to choose the background map and enable or disable
   information overlays.
+- Use the search field to find an official place or paste decimal WGS 84 or
+  Swiss LV95 coordinates. Recognized coordinates are handled locally without a
+  search-provider request.
 - The application uses official portrayals for map backgrounds, hiking trails,
   and the optional **Hiking SwitzerlandMobility** routes. The latter is disabled
   by default. Information layers can be shown, hidden, or made more or less
@@ -173,11 +176,11 @@ are documented in [Browser routing](docs/ROUTING.md).
 
 The focused Vitest suite covers immutable route transformations, route editing,
 GPX parsing and export, route metrics, directional-arrow placement,
-location-search provider normalization, rendered-layer provider contracts,
-default opacity and persistence, passenger-stop filtering and viewport loading,
-worker-client
-messaging, and the dynamic routing engine's corridor,
-cache, cancellation cleanup, retry, hiking-enrichment fallback, and
+location-search provider normalization, local WGS 84/LV95 coordinate parsing,
+rendered-layer provider contracts, default opacity and persistence,
+passenger-stop filtering and viewport loading, worker-client messaging, and the
+dynamic routing engine's corridor, cache, cancellation cleanup, retry,
+hiking-enrichment fallback, and
 straight-fallback behaviour.
 
 Run the test suite with:

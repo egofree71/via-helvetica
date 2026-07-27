@@ -146,10 +146,13 @@ system and avoids reprojecting the official WMTS map in the browser.
 WGS 84 (`EPSG:4326`) is used only at exchange boundaries:
 
 - browser geolocation input;
-- SearchServer results;
+- SearchServer results and decimal WGS 84 coordinate input;
 - GPX import;
 - GPX export;
 - geodesic calculations where required.
+
+The search control also accepts LV95 directly and validates it against the
+navigable map extent before publishing the selected point.
 
 `src/map/projection.ts` registers LV95 through `proj4`, exposes the official
 WMTS extent and resolution pyramid, and centralizes WGS 84/LV95 conversion.
@@ -197,7 +200,7 @@ flowchart TB
 | Imported GPX | `src/import/gpx.ts`, `src/map/useImportedRoute.ts`, `src/map/importedRoute.ts` | Local parsing, projection, read-only display, elevation reuse, and responsive view fitting |
 | Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts`, `src/map/useRouteProfileSynchronization.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and exclusive map/profile synchronisation for the active itinerary or selected public route |
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
-| Search | `src/search/locationSearch.ts`, `src/components/LocationSearch.tsx` | Provider contract, session cache, result UI, keyboard navigation, and request cancellation |
+| Search | `src/search/locationSearch.ts`, `src/search/coordinateSearch.ts`, `src/components/LocationSearch.tsx` | Local WGS 84/LV95 parsing, provider contract, session cache, result UI, keyboard navigation, and request cancellation |
 | Localization | `src/i18n/` | Typed dictionaries, language persistence, Swiss locales, and document metadata |
 | Static deployment | `.github/workflows/deploy.yml`, `vite.config.ts` | Test, build, Pages deployment, and root-relative production assets |
 
@@ -465,10 +468,14 @@ costs.
 
 ### 5.7 Search, geolocation, fullscreen, and About
 
-Location search uses a bounded language-aware session cache and aborts
-superseded uncached requests. Results are converted to plain text before React
-renders them. Selecting a result creates a temporary marker that is cleared when
-a higher-priority workflow takes ownership.
+Location search first applies a strict local parser to the complete input. It
+accepts decimal WGS 84 and Swiss LV95 coordinate pairs, detects safely reversible
+axis order inside the Swiss map extent, and reports valid coordinates outside
+that extent without contacting GeoAdmin. Text searches then use a bounded
+language-aware session cache and abort superseded uncached requests. Provider
+labels are converted to plain text before React renders them. Selecting any place
+or coordinate result creates a temporary marker that is cleared when a
+higher-priority workflow takes ownership.
 
 Geolocation is requested only after explicit user action. A valid WGS 84
 position is converted to LV95, checked against the configured extent, displayed,
@@ -754,7 +761,8 @@ appearance. They cover:
 - route-pointer interaction primitives;
 - GPX parsing, projection, metrics, editable export, and segmented read-only export;
 - directional-arrow placement;
-- location-search caching and normalization;
+- location-search caching and normalization, plus local WGS 84/LV95 parsing
+  and provider bypass;
 - rendered-layer provider identifiers, semitransparent hiking defaults, and
   persisted opacity restoration;
 - the expandable opacity control for every visible optional information layer,

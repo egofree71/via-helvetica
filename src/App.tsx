@@ -225,16 +225,42 @@ export default function App() {
     replaceWithReadOnlyItinerary,
   ]);
 
+  const previousRouteStepCountRef = useRef(routeHistory.steps.length);
+
+  useEffect(() => {
+    const routeStepCount = routeHistory.steps.length;
+    const hasAddedRoutePoint =
+      isRouteCreationActive &&
+      routeStepCount > previousRouteStepCountRef.current;
+
+    previousRouteStepCountRef.current = routeStepCount;
+
+    if (!hasAddedRoutePoint) {
+      return;
+    }
+
+    const marker = mapRuntimeRef.current?.searchResultMarker;
+
+    // Keep the searched position available as a target while route mode is
+    // merely armed. The first committed route point then owns the map context.
+    if (marker?.feature.getGeometry()) {
+      clearSelectedSearchResult();
+    }
+  }, [
+    clearSelectedSearchResult,
+    isRouteCreationActive,
+    mapRuntimeRef,
+    routeHistory.steps.length,
+  ]);
+
   const handleToggleRouteCreation = useCallback(() => {
     if (!isRouteCreationActive) {
-      clearSelectedSearchResult();
       clearImportedRoute();
     }
 
     toggleRouteCreation();
   }, [
     clearImportedRoute,
-    clearSelectedSearchResult,
     isRouteCreationActive,
     toggleRouteCreation,
   ]);
@@ -294,7 +320,7 @@ export default function App() {
     setIsAboutDialogOpen(true);
   }, [closeMapInformationPopup]);
 
-  /** Places a temporary marker and frames one official search result. */
+  /** Places a temporary marker and frames one place or coordinate result. */
   const selectSearchResult = (result: LocationSearchResult) => {
     const map = mapRuntimeRef.current?.map;
     const marker = mapRuntimeRef.current?.searchResultMarker;

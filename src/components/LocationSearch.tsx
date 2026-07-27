@@ -1,6 +1,7 @@
 /**
  * Business context: provides a compact, keyboard-accessible search field for
- * official Swiss places while keeping the map visible beneath temporary results.
+ * official Swiss places or pasted coordinates while keeping the map visible
+ * beneath temporary results.
  */
 import {
   useEffect,
@@ -10,6 +11,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useI18n } from '../i18n/I18nContext';
+import { parseCoordinateSearch } from '../search/coordinateSearch';
 import {
   getCachedLocationSearch,
   searchLocations,
@@ -20,12 +22,17 @@ import {
 interface LocationSearchProps {
   /** Closes map information when the search field becomes active. */
   onSearchFocus: () => void;
-  /** Moves the map to the selected official search result. */
+  /** Moves the map to the selected place or coordinate result. */
   onSelect: (result: LocationSearchResult) => void;
 }
 
 /** Request lifecycle used to render loading, results, and retryable errors. */
-type SearchStatus = 'idle' | 'loading' | 'ready' | 'error';
+type SearchStatus =
+  | 'idle'
+  | 'loading'
+  | 'ready'
+  | 'error'
+  | 'coordinate-outside';
 
 /** Minimum characters required before GeoAdmin is queried. */
 const MINIMUM_QUERY_LENGTH = 2;
@@ -33,7 +40,8 @@ const MINIMUM_QUERY_LENGTH = 2;
 const SEARCH_DELAY_MS = 300;
 
 /**
- * Renders the debounced, keyboard-accessible GeoAdmin location search control.
+ * Renders the keyboard-accessible place and coordinate search control. Text
+ * searches stay debounced, while coordinate parsing remains immediate and local.
  * Network cancellation and stale-result protection remain local to the control,
  * while map movement is delegated through the supplied callbacks.
  */
@@ -91,8 +99,26 @@ export default function LocationSearch({
     }
 
     const searchText = query.trim();
+    const coordinateSearch = parseCoordinateSearch(searchText);
 
     setActiveIndex(-1);
+
+    if (coordinateSearch.kind === 'result') {
+      // Coordinate parsing is deliberately synchronous and local: a pasted
+      // coordinate should never wait for the debounce or contact GeoAdmin.
+      setResults([coordinateSearch.result]);
+      setStatus('ready');
+      setIsOpen(true);
+      setActiveIndex(0);
+      return;
+    }
+
+    if (coordinateSearch.kind === 'outside-map') {
+      setResults([]);
+      setStatus('coordinate-outside');
+      setIsOpen(true);
+      return;
+    }
 
     if (searchText.length < MINIMUM_QUERY_LENGTH) {
       setResults([]);
@@ -198,9 +224,14 @@ export default function LocationSearch({
       return;
     }
 
-    if (event.key === 'Enter' && activeIndex >= 0) {
-      event.preventDefault();
-      selectResult(results[activeIndex]);
+    if (event.key === 'Enter') {
+      const selectedIndex =
+        activeIndex >= 0 ? activeIndex : results.length === 1 ? 0 : -1;
+
+      if (selectedIndex >= 0) {
+        event.preventDefault();
+        selectResult(results[selectedIndex]);
+      }
     }
   };
 
@@ -287,6 +318,12 @@ export default function LocationSearch({
               role="alert"
             >
               {t('search.unavailable')}
+            </div>
+          )}
+
+          {status === 'coordinate-outside' && (
+            <div className="location-search-status" role="alert">
+              {t('search.coordinatesOutside')}
             </div>
           )}
 
