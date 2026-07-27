@@ -311,31 +311,61 @@ function candidateKey(
     : `feature:${candidate.featureId}`;
 }
 
+/** Returns one finite numeric coordinate component from provider JSON. */
+function readCoordinateNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsedValue = Number(value);
+    return Number.isFinite(parsedValue) ? parsedValue : null;
+  }
+
+  return null;
+}
+
 /** Tests and copies one finite 2D coordinate from untrusted GeoJSON. */
 function readCoordinate(value: unknown): Coordinate | null {
   if (!Array.isArray(value) || value.length < 2) {
     return null;
   }
 
-  const easting = Number(value[0]);
-  const northing = Number(value[1]);
+  const easting = readCoordinateNumber(value[0]);
+  const northing = readCoordinateNumber(value[1]);
 
-  return Number.isFinite(easting) && Number.isFinite(northing)
-    ? [easting, northing]
-    : null;
+  return easting !== null && northing !== null ? [easting, northing] : null;
 }
 
-/** Converts one untrusted coordinate array into a usable line segment. */
-function readLineString(value: unknown): Coordinate[] | null {
-  if (!Array.isArray(value)) {
-    return null;
+/**
+ * Validates one declared GeoJSON line without inventing links across corrupt
+ * coordinates. Rejecting the complete part is safer than silently removing one
+ * bad vertex and joining its neighbours with a straight segment.
+ *
+ * @param value - Untrusted GeoJSON LineString coordinate array.
+ * @returns A copied EPSG:2056 line containing at least two finite coordinates.
+ * @throws {Error} When the declared line is malformed or contains an invalid point.
+ */
+function readLineString(value: unknown): Coordinate[] {
+  if (!Array.isArray(value) || value.length < 2) {
+    throw new Error('SwitzerlandMobility route contains a malformed line part.');
   }
 
-  const coordinates = value
-    .map(readCoordinate)
-    .filter((coordinate): coordinate is Coordinate => coordinate !== null);
+  const coordinates: Coordinate[] = [];
 
-  return coordinates.length >= 2 ? coordinates : null;
+  for (const entry of value) {
+    const coordinate = readCoordinate(entry);
+
+    if (!coordinate) {
+      throw new Error(
+        'SwitzerlandMobility route contains an invalid line coordinate.',
+      );
+    }
+
+    coordinates.push(coordinate);
+  }
+
+  return coordinates;
 }
 
 /**
@@ -344,7 +374,8 @@ function readLineString(value: unknown): Coordinate[] | null {
  * without changing the conceptual hiking-route contract.
  *
  * @param value - Untrusted GeoJSON geometry or feature value.
- * @returns Usable line parts in their provider order; malformed parts are omitted.
+ * @returns Usable line parts in their provider order.
+ * @throws {Error} When a declared line or geometry collection is malformed.
  */
 function readGeometrySegments(value: unknown): Coordinate[][] {
   if (!value || typeof value !== 'object') {
@@ -363,23 +394,26 @@ function readGeometrySegments(value: unknown): Coordinate[][] {
   }
 
   if (geometry.type === 'LineString') {
-    const segment = readLineString(geometry.coordinates);
-    return segment ? [segment] : [];
+    return [readLineString(geometry.coordinates)];
   }
 
-  if (
-    geometry.type === 'MultiLineString' &&
-    Array.isArray(geometry.coordinates)
-  ) {
-    return geometry.coordinates
-      .map(readLineString)
-      .filter((segment): segment is Coordinate[] => segment !== null);
+  if (geometry.type === 'MultiLineString') {
+    if (!Array.isArray(geometry.coordinates)) {
+      throw new Error(
+        'SwitzerlandMobility route contains a malformed multiline geometry.',
+      );
+    }
+
+    return geometry.coordinates.map(readLineString);
   }
 
-  if (
-    geometry.type === 'GeometryCollection' &&
-    Array.isArray(geometry.geometries)
-  ) {
+  if (geometry.type === 'GeometryCollection') {
+    if (!Array.isArray(geometry.geometries)) {
+      throw new Error(
+        'SwitzerlandMobility route contains a malformed geometry collection.',
+      );
+    }
+
     return geometry.geometries.flatMap(readGeometrySegments);
   }
 

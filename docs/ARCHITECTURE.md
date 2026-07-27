@@ -308,6 +308,10 @@ segments. It calculates distance immediately and then resolves altitude-
 dependent values from embedded GPX elevations or the GeoAdmin elevation-profile
 service.
 
+Independent segments sent to the GeoAdmin profile service share one global
+sampling budget. This keeps profile size bounded when provider geometry contains
+genuine gaps instead of multiplying the normal limit by the number of parts.
+
 Every asynchronous result is tied to the exact immutable segment-array identity
 that requested it. Superseded requests are aborted, and stale responses cannot
 update a newer itinerary.
@@ -768,10 +772,14 @@ appearance. They cover:
 - the expandable opacity control for every visible optional information layer,
   including disabled settings buttons for hidden layers;
 - SwitzerlandMobility metadata normalization, full-geometry selection,
-  responsive route fitting, single-itinerary replacement, export, and profile-panel behavior;
+  strict malformed-line rejection, responsive route fitting, single-itinerary
+  replacement, export, and profile-panel behavior;
 - public-transport filtering, viewport reuse, and API scale separation;
 - screen-space adjustment that keeps an information click visible beside its
   measured popup without fitting the selected feature;
+- information-click lifecycle when an existing public-route panel is replaced,
+  including preservation of the new identify request;
+- one global elevation-profile sampling budget across independent segments;
 - routing-grid footprints;
 - Worker request correlation, typed errors, cancellation, and disposal;
 - dynamic routing engine caching, retry, fallback, and provider errors.

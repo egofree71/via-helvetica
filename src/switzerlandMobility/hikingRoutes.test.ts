@@ -443,4 +443,133 @@ describe('fetchSwitzerlandMobilityHikingRoute', () => {
       ),
     ).rejects.toThrow('no usable line geometry');
   });
+
+  it('rejects a line instead of joining across an invalid coordinate', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          feature: {
+            featureId: 4016,
+            layerBodId: 'ch.astra.wanderland',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [2_553_000, 1_171_000],
+                [null, 1_170_500],
+                [2_555_000, 1_170_000],
+              ],
+            },
+            properties: { id: '4.16' },
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      fetchSwitzerlandMobilityHikingRoute(
+        {
+          featureId: 4016,
+          routeNumber: '4',
+          routeId: '4.16',
+          routeName: 'ViaJacobi',
+          sectionName: 'Moudon - Lausanne',
+          stageNumber: '16',
+          hasStages: true,
+        },
+        'fr',
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('invalid line coordinate');
+  });
+
+  it('rejects a multiline response when one declared part is malformed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          feature: {
+            featureId: 4016,
+            layerBodId: 'ch.astra.wanderland',
+            geometry: {
+              type: 'MultiLineString',
+              coordinates: [
+                [
+                  [2_553_000, 1_171_000],
+                  [2_554_000, 1_170_500],
+                ],
+                [[2_560_000, 1_165_000]],
+              ],
+            },
+            properties: { id: '4.16' },
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      fetchSwitzerlandMobilityHikingRoute(
+        {
+          featureId: 4016,
+          routeNumber: '4',
+          routeId: '4.16',
+          routeName: 'ViaJacobi',
+          sectionName: 'Moudon - Lausanne',
+          stageNumber: '16',
+          hasStages: true,
+        },
+        'fr',
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('malformed line part');
+  });
+
+  it('keeps valid line members from a geometry collection', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          feature: {
+            featureId: 4016,
+            layerBodId: 'ch.astra.wanderland',
+            geometry: {
+              type: 'GeometryCollection',
+              geometries: [
+                { type: 'Point', coordinates: [2_553_000, 1_171_000] },
+                {
+                  type: 'LineString',
+                  coordinates: [
+                    [2_553_000, 1_171_000],
+                    [2_554_000, 1_170_500],
+                  ],
+                },
+              ],
+            },
+            properties: { id: '4.16' },
+          },
+        }),
+      ),
+    );
+
+    const route = await fetchSwitzerlandMobilityHikingRoute(
+      {
+        featureId: 4016,
+        routeNumber: '4',
+        routeId: '4.16',
+        routeName: 'ViaJacobi',
+        sectionName: 'Moudon - Lausanne',
+        stageNumber: '16',
+        hasStages: true,
+      },
+      'fr',
+      new AbortController().signal,
+    );
+
+    expect(route.segments).toEqual([
+      [
+        [2_553_000, 1_171_000],
+        [2_554_000, 1_170_500],
+      ],
+    ]);
+  });
 });

@@ -246,6 +246,13 @@ export function useMapInformationLayers(
     onInformationSelected,
     onRouteAccepted: onSwitzerlandMobilityHikingRouteAccepted,
   });
+  // Panel transitions must not recreate the map click listener: its cleanup
+  // would otherwise abort the identify request started by that same click.
+  const switzerlandMobilityHikingPanelRef = useRef(
+    switzerlandMobilityHikingPanel,
+  );
+  switzerlandMobilityHikingPanelRef.current =
+    switzerlandMobilityHikingPanel;
 
   /** Cancels obsolete work and clears non-route structured and vector selections. */
   const clearInformationContext = useCallback(() => {
@@ -704,7 +711,7 @@ export function useMapInformationLayers(
       ) {
         // A full-route fit may move below the raster overview's inspection
         // threshold. A later map click must still dismiss that temporary route.
-        if (switzerlandMobilityHikingPanel) {
+        if (switzerlandMobilityHikingPanelRef.current) {
           closeMapInformationPopup();
         }
         return;
@@ -858,7 +865,7 @@ export function useMapInformationLayers(
       // A selected named route stays useful after its one-time full-geometry fit,
       // even when that fit zooms below the overview portrayal's minimum scale.
       const isAnyLayerVisibleAtZoom =
-        switzerlandMobilityHikingPanel !== null ||
+        switzerlandMobilityHikingPanelRef.current !== null ||
         (arePublicTransportStopsVisible &&
           zoom > PUBLIC_TRANSPORT_STOPS_MIN_ZOOM) ||
         (isSwitzerlandMobilityHikingVisible &&
@@ -892,7 +899,6 @@ export function useMapInformationLayers(
     isRouteCreationActive,
     isSwitzerlandMobilityHikingVisible,
     language,
-    switzerlandMobilityHikingPanel,
     mapRuntimeRef,
     onInformationSelected,
   ]);

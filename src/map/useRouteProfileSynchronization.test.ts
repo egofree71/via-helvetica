@@ -65,10 +65,12 @@ describe('useRouteProfileSynchronization', () => {
         routeProfileMarker: marker,
       } as unknown as MapRuntime,
     };
-    let controller: RouteProfileSynchronizationController | null = null;
+    const controllerRef: {
+      current: RouteProfileSynchronizationController | null;
+    } = { current: null };
 
     function Harness({ isEnabled }: { isEnabled: boolean }) {
-      controller = useRouteProfileSynchronization({
+      controllerRef.current = useRouteProfileSynchronization({
         mapRuntimeRef,
         routeSegments: ROUTE_SEGMENTS,
         isEnabled,
@@ -90,14 +92,14 @@ describe('useRouteProfileSynchronization', () => {
       } as unknown as MapBrowserEvent);
     });
 
-    expect(controller?.mapHoverDistanceMeters).not.toBeNull();
+    expect(controllerRef.current?.mapHoverDistanceMeters).not.toBeNull();
     expect(marker.feature.getGeometry()?.getCoordinates()).toEqual([
       2_600_500,
       1_200_000,
     ]);
 
     await act(async () => {
-      controller?.handleProfileHoverDistanceChange(0);
+      controllerRef.current?.handleProfileHoverDistanceChange(0);
     });
 
     expect(marker.feature.getGeometry()?.getCoordinates()).toEqual([
@@ -109,7 +111,7 @@ describe('useRouteProfileSynchronization', () => {
       root?.render(createElement(Harness, { isEnabled: false }));
     });
 
-    expect(controller?.mapHoverDistanceMeters).toBeNull();
+    expect(controllerRef.current?.mapHoverDistanceMeters).toBeNull();
     expect(marker.feature.getGeometry()).toBeUndefined();
     expect(map.un).toHaveBeenCalledWith(
       'pointermove',

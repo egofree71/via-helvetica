@@ -99,5 +99,9 @@ export function updateSwitzerlandMobilityHikingSelection(
   display.source.addFeatures(features);
   const extent = display.source.getExtent();
 
-  return features.length > 0 && !isEmpty(extent) ? [...extent] : null;
+  if (features.length === 0 || extent === null || isEmpty(extent)) {
+    return null;
+  }
+
+  return [...extent];
 }
