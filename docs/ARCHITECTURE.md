@@ -190,7 +190,7 @@ flowchart TB
 | Application composition | `src/App.tsx` | Connects focused hooks, resolves which temporary workflow owns the current itinerary, and owns modal state |
 | Map lifetime | `src/map/mapRuntime.ts`, `src/map/useMapRuntime.ts` | Creates and disposes the single OpenLayers runtime; synchronizes startup and fullscreen state |
 | Map controls | `src/map/useMapViewControls.ts`, `src/map/useMapLayerOpacities.ts`, `src/components/MapLayersSelector.tsx` | Background choice, persisted overlay visibility and opacity, zoom, fullscreen, and explicit geolocation |
-| Information overlays | `src/map/useMapInformationLayers.ts`, `src/map/useSwitzerlandMobilityHikingSelection.ts`, `src/switzerlandMobility/hikingRoutes.ts` | Visibility, loading, inspection priority, public-route selection and fitting, popup state, caching, and cancellation |
+| Information overlays | `src/map/useMapInformationLayers.ts`, `src/map/mapInformationViewport.ts`, `src/map/useSwitzerlandMobilityHikingSelection.ts`, `src/switzerlandMobility/hikingRoutes.ts` | Visibility, loading, inspection priority, click-anchor visibility beside temporary panels, public-route selection and fitting, popup state, caching, and cancellation |
 | Editable-route domain | `src/map/routeState.ts`, `src/map/useEditableRoute.ts` | Immutable route state, history, snap mode, serialized mutations, and route actions |
 | Pointer interaction | `src/map/useRouteInteractions.ts`, `src/map/routePointerInteraction.ts` | Waypoint and section hit detection, drag previews, click/drag lifecycle, and semantic edit requests |
 | Route presentation | `src/map/routeDisplay.ts`, `src/map/itineraryDirection.ts`, `src/map/itineraryEndpoints.ts` | Committed geometry, previews, direction arrows, and A/B markers |
@@ -442,12 +442,22 @@ route mode:
 
 1. already loaded public-transport stop vectors;
 2. visible hiking closures;
-3. visible military danger zones.
+3. visible SwitzerlandMobility hiking routes;
+4. visible military danger zones.
 
 The stop layer uses validated structured data and a project-owned popup. Closure
 and military details arrive as official HTML fragments, pass through a strict
 sanitizer, and are rendered inside project-owned popup wrappers. Selected
 military geometry is highlighted in a separate vector layer.
+
+For stop, closure, and danger-zone panels, the exact click coordinate remains
+the visual anchor and the zoom remains unchanged. Stops use the smallest pan
+needed to keep their point visible. A closure or danger-zone click that would be
+hidden or leave too little surrounding context is placed near the centre of the
+largest useful map region outside the measured panel. Panel size changes are
+observed because timetable and provider content can arrive after the initial
+render. This click-based rule avoids trying to fit a potentially long closure
+line or a broad, irregular danger-zone polygon.
 
 Visibility, zoom, language, and workflow changes abort obsolete requests and
 clear stale selections. These overlays never mutate route geometry or routing
@@ -752,6 +762,8 @@ appearance. They cover:
 - SwitzerlandMobility metadata normalization, full-geometry selection,
   responsive route fitting, single-itinerary replacement, export, and profile-panel behavior;
 - public-transport filtering, viewport reuse, and API scale separation;
+- screen-space adjustment that keeps an information click visible beside its
+  measured popup without fitting the selected feature;
 - routing-grid footprints;
 - Worker request correlation, typed errors, cancellation, and disposal;
 - dynamic routing engine caching, retry, fallback, and provider errors.
@@ -775,6 +787,8 @@ manual checks include:
 - GPX fitting on narrow viewports;
 - map/profile pointer synchronisation;
 - provider portrayals and official popup content;
+- stop, closure, and danger-zone clicks near panel and viewport edges on desktop
+  and mobile layouts;
 - routing behaviour in contrasting geographic regions.
 
 The routing subsystem remains experimental until topology and provider behaviour
