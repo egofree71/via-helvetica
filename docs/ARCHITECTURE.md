@@ -475,11 +475,14 @@ costs.
 Location search first applies a strict local parser to the complete input. It
 accepts decimal WGS 84 and Swiss LV95 coordinate pairs, detects safely reversible
 axis order inside the Swiss map extent, and reports valid coordinates outside
-that extent without contacting GeoAdmin. Text searches then use a bounded
-language-aware session cache and abort superseded uncached requests. Provider
-labels are converted to plain text before React renders them. Selecting any place
-or coordinate result creates a temporary marker that is cleared when a
-higher-priority workflow takes ownership.
+that extent without contacting GeoAdmin. Unfinished input with strong coordinate
+markers remains local and keeps the result panel closed, while ordinary numeric
+place searches such as postal codes still reach SearchServer. Text searches then
+use a bounded language-aware session cache and abort superseded uncached requests.
+Provider labels are converted to plain text before React renders them. Selecting
+a place frames the broader planning context; selecting an exact coordinate uses
+the closer geolocation scale. Either result creates a temporary marker that is
+cleared when a higher-priority workflow takes ownership.
 
 Geolocation is requested only after explicit user action. A valid WGS 84
 position is converted to LV95, checked against the configured extent, displayed,
@@ -765,8 +768,9 @@ appearance. They cover:
 - route-pointer interaction primitives;
 - GPX parsing, projection, metrics, editable export, and segmented read-only export;
 - directional-arrow placement;
-- location-search caching and normalization, plus local WGS 84/LV95 parsing
-  and provider bypass;
+- location-search caching and normalization, local WGS 84/LV95 parsing,
+  coordinate-draft provider bypass, compact combobox accessibility, and distinct
+  place-versus-coordinate zoom policy;
 - rendered-layer provider identifiers, semitransparent hiking defaults, and
   persisted opacity restoration;
 - the expandable opacity control for every visible optional information layer,

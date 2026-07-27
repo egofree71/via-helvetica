@@ -2,6 +2,8 @@
  * Business context: recognizes coordinates pasted into the compact map search
  * without contacting GeoAdmin. Via Helvetica accepts the two coordinate forms
  * commonly exchanged by Swiss hiking tools: decimal WGS 84 and Swiss LV95.
+ * It also recognizes strong markers in unfinished coordinate input so the UI
+ * can avoid futile place-provider requests while the user is still typing.
  * Valid results are normalized to the existing WGS 84 search-result contract,
  * while map-extent validation happens locally before the result reaches React.
  */
@@ -44,6 +46,20 @@ const LV95_NORTHING_RANGE = [900_000, 1_500_000] as const;
 const WGS84_DISPLAY_DECIMALS = 6;
 /** Maximum sub-metre decimal places retained when displaying LV95 input. */
 const LV95_DISPLAY_DECIMALS = 3;
+
+/**
+ * Characters accepted while a supported coordinate pair is still being typed.
+ * Letters deliberately fall through to GeoAdmin so postal addresses and place
+ * names containing numbers keep their normal search behaviour.
+ */
+const COORDINATE_DRAFT_CHARACTERS =
+  /^[0-9+\-.,; '\u2019\u02bc\u00a0\u202f]*$/;
+/**
+ * Largest unsigned integer that can still plausibly be a Swiss postal code.
+ * Larger standalone values are treated as unfinished projected coordinates and
+ * kept away from the place provider until a complete pair can be parsed.
+ */
+const MAXIMUM_POSTAL_CODE_VALUE = 9_999;
 
 /** Result returned when the complete input is or is not a coordinate pair. */
 export type CoordinateSearchParseResult =
@@ -398,3 +414,80 @@ export function parseCoordinateSearch(
     ),
   };
 }
+
+/**
+ * Detects an unfinished coordinate-like value before it becomes a complete
+ * supported pair. Strong numeric markers suppress futile GeoAdmin requests,
+ * while ordinary four-digit postal codes and text remain provider searches.
+ *
+ * @param searchText - Current, possibly incomplete value from the search field.
+ * @returns True when the input should remain local until coordinate parsing can
+ * either produce a complete result or the user changes it into a place query.
+ */
+export function isCoordinateSearchDraft(searchText: string): boolean {
+  const normalizedText = searchText
+    .trim()
+    .replace(/[\u00a0\u202f]/g, ' ');
+
+  if (
+    !normalizedText ||
+    !COORDINATE_DRAFT_CHARACTERS.test(normalizedText)
+  ) {
+    return false;
+  }
+
+  if (parseCoordinateSearch(normalizedText).kind !== 'not-coordinate') {
+    return false;
+  }
+
+  // Swiss grouping apostrophes and semicolons are coordinate-specific enough
+  // to avoid sending every intermediate mobile keystroke to SearchServer.
+  if (/[;'\u2019\u02bc]/.test(normalizedText)) {
+    return true;
+  }
+
+  // A decimal point or explicit sign strongly indicates a geographic number;
+  // plain unsigned four-digit input must remain available for postal codes.
+  if (/[.+-]/.test(normalizedText)) {
+    return true;
+  }
+
+  const tokens = normalizedText
+    .split(/[,\s]+/)
+    .filter(Boolean);
+
+  if (normalizedText.includes(',')) {
+    return true;
+  }
+
+  const numericValues = tokens.map((token) => Number(token));
+
+  if (
+    numericValues.some((value) => !Number.isFinite(value))
+  ) {
+    return false;
+  }
+
+  if (
+    numericValues.some(
+      (value) => Math.abs(value) > MAXIMUM_POSTAL_CODE_VALUE,
+    )
+  ) {
+    return true;
+  }
+
+  // Space-grouped Swiss coordinates often pass through partial states such as
+  // "2 671 804 1 20". Repeated three-digit groups are distinctive, whereas
+  // two independent four-digit values may still be ordinary place searches.
+  const whitespaceTokens = normalizedText.split(/\s+/);
+
+  return (
+    whitespaceTokens.length >= 2 &&
+    /^\d{1,3}$/.test(whitespaceTokens[0]) &&
+    whitespaceTokens
+      .slice(1)
+      .every((token) => /^\d{1,3}$/.test(token)) &&
+    whitespaceTokens.some((token) => token.length === 3)
+  );
+}
+

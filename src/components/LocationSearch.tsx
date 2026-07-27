@@ -11,7 +11,10 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useI18n } from '../i18n/I18nContext';
-import { parseCoordinateSearch } from '../search/coordinateSearch';
+import {
+  isCoordinateSearchDraft,
+  parseCoordinateSearch,
+} from '../search/coordinateSearch';
 import {
   getCachedLocationSearch,
   searchLocations,
@@ -122,6 +125,16 @@ export default function LocationSearch({
       setResults([]);
       setStatus('coordinate-outside');
       setIsOpen(true);
+      return;
+    }
+
+    if (isCoordinateSearchDraft(searchText)) {
+      // An unfinished numeric coordinate should remain a quiet local workflow.
+      // This avoids pointless SearchServer traffic and no-result flicker while
+      // preserving ordinary postal-code and place-name searches.
+      setResults([]);
+      setStatus('idle');
+      setIsOpen(false);
       return;
     }
 
@@ -262,6 +275,7 @@ export default function LocationSearch({
 
   const showPanel =
     isOpen && query.trim().length >= MINIMUM_QUERY_LENGTH;
+  const showResults = showPanel && results.length > 0;
 
   return (
     <div className="location-search" ref={containerRef}>
@@ -284,7 +298,7 @@ export default function LocationSearch({
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={showPanel}
-          aria-controls={listboxId}
+          aria-controls={showResults ? listboxId : undefined}
           aria-activedescendant={
             activeIndex >= 0
               ? `${listboxId}-${activeIndex}`
@@ -350,7 +364,7 @@ export default function LocationSearch({
             </div>
           )}
 
-          {results.length > 0 && (
+          {showResults && (
             <ul
               id={listboxId}
               className="location-search-results"
@@ -371,6 +385,7 @@ export default function LocationSearch({
                       .filter(Boolean)
                       .join(' ')}
                     role="option"
+                    tabIndex={-1}
                     aria-selected={index === activeIndex}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => selectResult(result)}

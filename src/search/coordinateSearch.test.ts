@@ -5,7 +5,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import { fromWgs84 } from '../map/projection';
-import { parseCoordinateSearch } from './coordinateSearch';
+import {
+  isCoordinateSearchDraft,
+  parseCoordinateSearch,
+} from './coordinateSearch';
 
 describe('WGS 84 coordinate search', () => {
   it.each([
@@ -100,3 +103,25 @@ describe('coordinate-search strictness', () => {
     });
   });
 });
+
+describe('coordinate-search drafts', () => {
+  it.each([
+    "2'671'804, 1'20",
+    '2 671 804 1 20',
+    '2671804 1',
+    '46.987,',
+  ])('keeps unfinished coordinate-like input local: %s', (searchText) => {
+    expect(isCoordinateSearchDraft(searchText)).toBe(true);
+  });
+
+  it.each([
+    '1204',
+    '1204 2026',
+    '1204 Genève',
+    'Lausanne 46.5',
+    '46.987, 8.383',
+  ])('preserves place searches and complete coordinates: %s', (searchText) => {
+    expect(isCoordinateSearchDraft(searchText)).toBe(false);
+  });
+});
+

@@ -25,6 +25,7 @@ import {
 } from './export/gpx';
 import { useI18n } from './i18n/I18nContext';
 import {
+  COORDINATE_SEARCH_ZOOM,
   isWgs84CoordinateInsideMapBounds,
   LOCATION_SEARCH_ZOOM,
   MAP_EXTENT,
@@ -356,9 +357,16 @@ export default function App() {
 
     updateSearchResultMarker(marker, coordinate);
 
+    const isCoordinateResult =
+      result.origin === 'wgs84' || result.origin === 'lv95';
+
+    // A coordinate denotes an exact point, unlike a locality or postal-code
+    // result, so it uses the same close planning scale as explicit geolocation.
     map.getView().animate({
       center: coordinate,
-      zoom: LOCATION_SEARCH_ZOOM,
+      zoom: isCoordinateResult
+        ? COORDINATE_SEARCH_ZOOM
+        : LOCATION_SEARCH_ZOOM,
       duration: 600,
     });
   };

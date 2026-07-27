@@ -5,12 +5,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  COORDINATE_SEARCH_ZOOM,
   createSwitzerlandMobilityHikingSource,
   DEFAULT_HIKING_TRAILS_OPACITY,
   DEFAULT_SWITZERLAND_MOBILITY_HIKING_OPACITY,
   HIKING_TRAILS_MIN_ZOOM,
   isWgs84CoordinateInsideMapBounds,
+  LOCATION_SEARCH_ZOOM,
   SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM,
+  USER_LOCATION_ZOOM,
 } from './config';
 
 describe('rendered hiking overlays', () => {
@@ -43,3 +46,11 @@ describe('WGS 84 map bounds', () => {
     expect(isWgs84CoordinateInsideMapBounds([-174, -48])).toBe(false);
   });
 });
+
+describe('search zoom policy', () => {
+  it('frames exact coordinates closer than place results', () => {
+    expect(COORDINATE_SEARCH_ZOOM).toBe(USER_LOCATION_ZOOM);
+    expect(COORDINATE_SEARCH_ZOOM).toBeGreaterThan(LOCATION_SEARCH_ZOOM);
+  });
+});
+

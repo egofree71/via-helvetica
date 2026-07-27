@@ -157,8 +157,10 @@ export const GRAY_DETAIL_MIN_ZOOM = 24;
 /** Browser geolocation reveals nearby streets and trails at 5 m/px or closer. */
 export const USER_LOCATION_ZOOM = 21;
 
-/** Location search opens at the native 20 m/px planning level. */
+/** Place search opens at the native 20 m/px planning level. */
 export const LOCATION_SEARCH_ZOOM = 19;
+/** Exact coordinate search opens at 5 m/px, matching explicit geolocation. */
+export const COORDINATE_SEARCH_ZOOM = USER_LOCATION_ZOOM;
 
 /** GPX framing may use the finest native national-map level for very short itineraries. */
 export const IMPORTED_ROUTE_MAX_ZOOM = 26;

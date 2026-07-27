@@ -183,6 +183,7 @@ describe('LocationSearch coordinate entry', () => {
     }
     container.remove();
     clearLocationSearchCache();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -210,6 +211,7 @@ describe('LocationSearch coordinate entry', () => {
     const input = container.querySelector<HTMLInputElement>('input');
     expect(input).not.toBeNull();
     expect(input?.placeholder).toBe('Place or coordinates…');
+    expect(input?.hasAttribute('aria-controls')).toBe(false);
 
     await act(async () => {
       setInputValue(input!, "2'671'804, 1'204'459");
@@ -218,6 +220,10 @@ describe('LocationSearch coordinate entry', () => {
     const option = container.querySelector<HTMLElement>('[role="option"]');
     expect(option?.textContent).toContain("2'671'804, 1'204'459");
     expect(option?.textContent).toContain('LV95 coordinates');
+    expect(option?.tabIndex).toBe(-1);
+    expect(input?.getAttribute('aria-controls')).toBe(
+      option?.closest('[role="listbox"]')?.id,
+    );
     expect(fetchMock).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -234,9 +240,53 @@ describe('LocationSearch coordinate entry', () => {
       origin: 'lv95',
       label: "2'671'804, 1'204'459",
     });
+    expect(input?.hasAttribute('aria-controls')).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('keeps unfinished coordinates local while preserving postal-code search', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ results: [] }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(LocationSearch, {
+            onSearchFocus: vi.fn(),
+            onSelect: vi.fn(),
+            onClear: vi.fn(),
+          }),
+        ),
+      );
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input');
+
+    await act(async () => {
+      setInputValue(input!, "2'671'804, 1'20");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(input?.getAttribute('aria-expanded')).toBe('false');
+
+    await act(async () => {
+      setInputValue(input!, '1204');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 
   it('searches again after editing a selected coordinate with an unchanged label', async () => {
     const fetchMock = vi.fn();
