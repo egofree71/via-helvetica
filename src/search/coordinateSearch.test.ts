@@ -41,6 +41,16 @@ describe('WGS 84 coordinate search', () => {
       kind: 'outside-map',
     });
   });
+
+
+  it.each([
+    '-48, -174',
+    '-47, -170',
+  ])('rejects antipodal coordinates folded by the Swiss projection: %s', (searchText) => {
+    expect(parseCoordinateSearch(searchText)).toEqual({
+      kind: 'outside-map',
+    });
+  });
 });
 
 describe('LV95 coordinate search', () => {

@@ -4,6 +4,7 @@
  * Keeping these provider and scale decisions together prevents individual
  * components from inventing incompatible projections or visibility thresholds.
  */
+import type { Coordinate } from 'ol/coordinate.js';
 import { transformExtent } from 'ol/proj.js';
 import WMTS from 'ol/source/WMTS.js';
 import WMTSTileGrid from 'ol/tilegrid/WMTS.js';
@@ -46,14 +47,37 @@ const SWITZERLAND_MOBILITY_HIKING_LAYER_ID = 'ch.astra.wanderland';
 const SWISSTOPO_ATTRIBUTION =
   '<a href="https://www.swisstopo.admin.ch/" target="_blank" rel="noopener noreferrer">© swisstopo</a>';
 
-/*
+/**
  * This extent is not the exact administrative boundary. It keeps a small
  * margin around Switzerland so nearby cross-border access remains visible,
  * while preventing navigation to areas that are irrelevant to the project.
  *
  * Coordinate order: west, south, east, north (WGS 84 / EPSG:4326).
  */
-const MAP_BOUNDS_WGS84 = [5.7, 45.65, 10.75, 47.95];
+export const MAP_BOUNDS_WGS84 = [5.7, 45.65, 10.75, 47.95];
+
+/**
+ * Checks the unprojected coordinate against the product's documented map
+ * bounds before Swiss projection. This avoids accepting distant antipodal
+ * coordinates that the Swiss Oblique Mercator projection can fold back into the LV95 extent.
+ * @param coordinate - Longitude and latitude in decimal WGS 84 degrees.
+ * @returns True when the coordinate belongs to the supported Swiss map area.
+ */
+export function isWgs84CoordinateInsideMapBounds(
+  coordinate: Coordinate,
+): boolean {
+  const [longitude, latitude] = coordinate;
+  const [west, south, east, north] = MAP_BOUNDS_WGS84;
+
+  return (
+    Number.isFinite(longitude) &&
+    Number.isFinite(latitude) &&
+    longitude >= west &&
+    longitude <= east &&
+    latitude >= south &&
+    latitude <= north
+  );
+}
 
 /** Initial map centre near the geographic middle of Switzerland, in LV95. */
 export const DEFAULT_MAP_CENTER = fromWgs84([8.2275, 46.8182]);

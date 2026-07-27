@@ -113,6 +113,7 @@ describe('LocationSearch keyboard navigation', () => {
           createElement(LocationSearch, {
             onSearchFocus: vi.fn(),
             onSelect: vi.fn(),
+            onClear: vi.fn(),
           }),
         ),
       );
@@ -200,6 +201,7 @@ describe('LocationSearch coordinate entry', () => {
           createElement(LocationSearch, {
             onSearchFocus: vi.fn(),
             onSelect,
+            onClear: vi.fn(),
           }),
         ),
       );
@@ -235,6 +237,99 @@ describe('LocationSearch coordinate entry', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+
+  it('searches again after editing a selected coordinate with an unchanged label', async () => {
+    const fetchMock = vi.fn();
+    const onClear = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(LocationSearch, {
+            onSearchFocus: vi.fn(),
+            onSelect: vi.fn(),
+            onClear,
+          }),
+        ),
+      );
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input');
+
+    await act(async () => {
+      setInputValue(input!, '46.987, 8.383');
+    });
+
+    await act(async () => {
+      input!.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+        }),
+      );
+    });
+
+    await act(async () => {
+      setInputValue(input!, '46.987, 8.384');
+    });
+
+    const option = container.querySelector<HTMLElement>('[role="option"]');
+
+    expect(option?.textContent).toContain('46.987, 8.384');
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('notifies the map when the selected search context is cleared', async () => {
+    const onClear = vi.fn();
+
+    vi.stubGlobal('fetch', vi.fn());
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(LocationSearch, {
+            onSearchFocus: vi.fn(),
+            onSelect: vi.fn(),
+            onClear,
+          }),
+        ),
+      );
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input');
+
+    await act(async () => {
+      setInputValue(input!, '46.987, 8.383');
+    });
+
+    await act(async () => {
+      input!.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+        }),
+      );
+    });
+
+    const clearButton = container.querySelector<HTMLButtonElement>(
+      '.location-search-clear',
+    );
+
+    await act(async () => {
+      clearButton?.click();
+    });
+
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(input?.value).toBe('');
+  });
+
   it('explains when a valid coordinate is outside the map', async () => {
     vi.stubGlobal('fetch', vi.fn());
 
@@ -246,6 +341,7 @@ describe('LocationSearch coordinate entry', () => {
           createElement(LocationSearch, {
             onSearchFocus: vi.fn(),
             onSelect: vi.fn(),
+            onClear: vi.fn(),
           }),
         ),
       );

@@ -16,6 +16,7 @@ import { containsCoordinate } from 'ol/extent.js';
 import type { TranslationKey } from '../i18n/translations';
 import {
   DEFAULT_BASE_MAP_STYLE,
+  isWgs84CoordinateInsideMapBounds,
   MAP_EXTENT,
   USER_LOCATION_ZOOM,
   type BaseMapStyle,
@@ -207,10 +208,15 @@ export function useMapViewControls(
 
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
-        const coordinate = fromWgs84([
-          coords.longitude,
-          coords.latitude,
-        ]);
+        const wgs84Coordinate = [coords.longitude, coords.latitude];
+
+        if (!isWgs84CoordinateInsideMapBounds(wgs84Coordinate)) {
+          setLocationStatus('error');
+          showTemporaryLocationMessage(options.t('geolocation.outside'));
+          return;
+        }
+
+        const coordinate = fromWgs84(wgs84Coordinate);
 
         if (!containsCoordinate(MAP_EXTENT, coordinate)) {
           setLocationStatus('error');

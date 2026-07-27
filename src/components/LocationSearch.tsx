@@ -24,6 +24,8 @@ interface LocationSearchProps {
   onSearchFocus: () => void;
   /** Moves the map to the selected place or coordinate result. */
   onSelect: (result: LocationSearchResult) => void;
+  /** Removes the temporary map marker when its search context is edited. */
+  onClear: () => void;
 }
 
 /** Request lifecycle used to render loading, results, and retryable errors. */
@@ -48,10 +50,11 @@ const SEARCH_DELAY_MS = 300;
 export default function LocationSearch({
   onSearchFocus,
   onSelect,
+  onClear,
 }: LocationSearchProps) {
   const { language, t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
-  const skipNextSearchRef = useRef(false);
+  const selectedLabelRef = useRef<string | null>(null);
   const listboxId = useId();
 
   const [query, setQuery] = useState('');
@@ -93,11 +96,13 @@ export default function LocationSearch({
   }, [activeIndex, isOpen, listboxId]);
 
   useEffect(() => {
-    if (skipNextSearchRef.current) {
-      skipNextSearchRef.current = false;
+    if (selectedLabelRef.current === query) {
+      // The selected label is already the complete search context. Reopening
+      // suggestions here would obscure the map immediately after selection.
       return;
     }
 
+    selectedLabelRef.current = null;
     const searchText = query.trim();
     const coordinateSearch = parseCoordinateSearch(searchText);
 
@@ -174,11 +179,21 @@ export default function LocationSearch({
   }, [language, query]);
 
   const handleQueryChange = (nextQuery: string) => {
+    if (
+      selectedLabelRef.current !== null &&
+      nextQuery !== selectedLabelRef.current
+    ) {
+      // The marker and selected label form one temporary context. Editing the
+      // label invalidates the old marker before a replacement is selected.
+      selectedLabelRef.current = null;
+      onClear();
+    }
+
     setQuery(nextQuery);
   };
 
   const selectResult = (result: LocationSearchResult) => {
-    skipNextSearchRef.current = true;
+    selectedLabelRef.current = result.label;
     setQuery(result.label);
     setResults([]);
     setStatus('idle');
@@ -236,6 +251,8 @@ export default function LocationSearch({
   };
 
   const clearSearch = () => {
+    selectedLabelRef.current = null;
+    onClear();
     setQuery('');
     setResults([]);
     setStatus('idle');

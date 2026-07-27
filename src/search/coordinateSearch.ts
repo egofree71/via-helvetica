@@ -6,8 +6,11 @@
  * while map-extent validation happens locally before the result reaches React.
  */
 import { containsCoordinate } from 'ol/extent.js';
-import { MAP_EXTENT } from '../map/config';
-import { fromWgs84, toWgs84 } from '../map/projection';
+import {
+  isWgs84CoordinateInsideMapBounds,
+  MAP_EXTENT,
+} from '../map/config';
+import { toWgs84 } from '../map/projection';
 import type {
   CoordinateSearchOrigin,
   LocationSearchResult,
@@ -205,12 +208,10 @@ function extractNumericPair(searchText: string): NumericPair | null {
 }
 
 function isWgs84InsideMap(coordinate: Wgs84Coordinate): boolean {
-  const mapCoordinate = fromWgs84([
+  return isWgs84CoordinateInsideMapBounds([
     coordinate.longitude,
     coordinate.latitude,
   ]);
-
-  return containsCoordinate(MAP_EXTENT, mapCoordinate);
 }
 
 /**

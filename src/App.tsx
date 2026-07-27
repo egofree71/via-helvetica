@@ -24,7 +24,11 @@ import {
   downloadRouteSegmentsGpx,
 } from './export/gpx';
 import { useI18n } from './i18n/I18nContext';
-import { LOCATION_SEARCH_ZOOM, MAP_EXTENT } from './map/config';
+import {
+  isWgs84CoordinateInsideMapBounds,
+  LOCATION_SEARCH_ZOOM,
+  MAP_EXTENT,
+} from './map/config';
 import { fromWgs84 } from './map/projection';
 import { useEditableRoute } from './map/useEditableRoute';
 import { useImportedRoute } from './map/useImportedRoute';
@@ -153,6 +157,15 @@ export default function App() {
     }
 
     setLocationSearchResetVersion((version) => version + 1);
+  }, [mapRuntimeRef]);
+
+  /** Removes only the temporary marker while preserving focus and typed text. */
+  const clearSearchResultMarkerOnly = useCallback(() => {
+    const marker = mapRuntimeRef.current?.searchResultMarker;
+
+    if (marker) {
+      clearSearchResultMarker(marker);
+    }
   }, [mapRuntimeRef]);
 
   useEffect(() => {
@@ -329,10 +342,13 @@ export default function App() {
       return;
     }
 
-    const coordinate = fromWgs84([
-      result.longitude,
-      result.latitude,
-    ]);
+    const wgs84Coordinate = [result.longitude, result.latitude];
+
+    if (!isWgs84CoordinateInsideMapBounds(wgs84Coordinate)) {
+      return;
+    }
+
+    const coordinate = fromWgs84(wgs84Coordinate);
 
     if (!containsCoordinate(MAP_EXTENT, coordinate)) {
       return;
@@ -469,6 +485,7 @@ export default function App() {
         key={`${language}:${locationSearchResetVersion}`}
         onSearchFocus={closeMapInformationPopup}
         onSelect={selectSearchResult}
+        onClear={clearSearchResultMarkerOnly}
       />
 
       <nav className="map-controls" aria-label={t('map.controls')}>
