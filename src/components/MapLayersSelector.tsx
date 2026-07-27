@@ -5,7 +5,10 @@
  */
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
-import type { BaseMapStyle } from '../map/config';
+import {
+  MINIMUM_MAP_LAYER_OPACITY,
+  type BaseMapStyle,
+} from '../map/config';
 import type {
   MapLayerOpacities,
   MapLayerOpacityKey,
@@ -78,11 +81,11 @@ interface OverlayLayerControlProps {
   option: OverlayLayerOption;
   /** Localized user-facing layer name. */
   label: string;
-  /** Current OpenLayers opacity ratio from 0 (transparent) to 1 (opaque). */
+  /** Current OpenLayers opacity ratio from the product minimum to 1. */
   opacity: number;
   /** Localized label shown beside the slider. */
   opacityLabel: string;
-  /** Accessible label and tooltip for the settings button and slider. */
+  /** Accessible label and tooltip for the opacity settings button. */
   opacitySettingsLabel: string;
   /** Whether this layer currently owns the expanded opacity panel. */
   isOpacityOpen: boolean;
@@ -116,6 +119,8 @@ function OverlayLayerControl({
 }: OverlayLayerControlProps) {
   const sliderId = `map-layer-opacity-${option.layer}`;
   const settingsId = `${sliderId}-settings`;
+  const rowLabelId = `${sliderId}-layer-label`;
+  const opacityLabelId = `${sliderId}-label`;
   const percentage = opacityPercent(opacity);
   const opacityIconMaskId = `settings-${useId().replace(/:/g, '')}`;
 
@@ -135,7 +140,7 @@ function OverlayLayerControl({
         aria-checked={option.isVisible}
         onClick={() => option.onVisibilityChange(!option.isVisible)}
       >
-        <span>{label}</span>
+        <span id={rowLabelId}>{label}</span>
         <span
           className={[
             'map-layer-option-toggle',
@@ -160,7 +165,9 @@ function OverlayLayerControl({
         aria-label={opacitySettingsLabel}
         title={opacitySettingsLabel}
         aria-expanded={option.isVisible && isOpacityOpen}
-        aria-controls={settingsId}
+        aria-controls={
+          option.isVisible && isOpacityOpen ? settingsId : undefined
+        }
         disabled={!option.isVisible}
         onClick={onToggleOpacity}
       >
@@ -193,21 +200,25 @@ function OverlayLayerControl({
           id={settingsId}
           className="map-layer-opacity-settings"
         >
-          <label htmlFor={sliderId}>{opacityLabel}</label>
+          <label id={opacityLabelId} htmlFor={sliderId}>
+            {opacityLabel}
+          </label>
           <input
             id={sliderId}
             type="range"
-            min="0"
+            min={opacityPercent(MINIMUM_MAP_LAYER_OPACITY)}
             max="100"
             step="5"
             value={percentage}
-            aria-label={opacitySettingsLabel}
+            aria-labelledby={`${rowLabelId} ${opacityLabelId}`}
             aria-valuetext={`${percentage} %`}
             onChange={(event) =>
               onOpacityChange(Number(event.currentTarget.value) / 100)
             }
           />
-          <output htmlFor={sliderId}>{percentage} %</output>
+          <span className="map-layer-opacity-value" aria-hidden="true">
+            {percentage} %
+          </span>
         </div>
       )}
     </div>
@@ -301,6 +312,29 @@ export default function MapLayersSelector({
       onVisibilityChange: onPublicTransportStopsChange,
     },
   ];
+
+  useEffect(() => {
+    if (!expandedOpacityLayer) {
+      return;
+    }
+
+    const expandedLayerIsVisible = overlayOptions.find(
+      (option) => option.layer === expandedOpacityLayer,
+    )?.isVisible;
+
+    // A hidden layer has no visible opacity feedback. Closing its transient
+    // panel also prevents it from reopening unexpectedly when visibility returns.
+    if (expandedLayerIsVisible === false) {
+      setExpandedOpacityLayer(null);
+    }
+  }, [
+    areHikingTrailsVisible,
+    arePublicTransportStopsVisible,
+    areShootingDangerZonesVisible,
+    areTrailClosuresVisible,
+    expandedOpacityLayer,
+    isSwitzerlandMobilityHikingVisible,
+  ]);
 
   return (
     <div className="map-layers-selector" ref={rootRef}>

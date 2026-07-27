@@ -242,9 +242,8 @@ export function createMapRuntime(
   shootingDangerZoneSelectionDisplay.layer.setVisible(
     options.visibility.shootingDangerZones,
   );
-  shootingDangerZoneSelectionDisplay.layer.setOpacity(
-    options.opacity.shootingDangerZones,
-  );
+  // Selection overlays follow visibility but remain opaque after an explicit
+  // click, so reduced overview opacity cannot hide the user's current focus.
   shootingDangerZoneSelectionDisplay.layer.setZIndex(
     SHOOTING_DANGER_SELECTION_Z_INDEX,
   );
@@ -256,9 +255,6 @@ export function createMapRuntime(
   );
   publicTransportStopsDisplay.selectionLayer.setVisible(
     options.visibility.publicTransportStops,
-  );
-  publicTransportStopsDisplay.selectionLayer.setOpacity(
-    options.opacity.publicTransportStops,
   );
 
   let firstTileLoaded = false;
@@ -379,8 +375,9 @@ export function createMapRuntime(
   };
 
   const setShootingDangerZonesOpacity = (opacity: number) => {
+    // The selected polygon remains fully legible after the explicit click that
+    // created it; only the overview portrayal follows the visitor's preference.
     shootingDangerZonesLayer.setOpacity(opacity);
-    shootingDangerZoneSelectionDisplay.layer.setOpacity(opacity);
   };
 
   const setPublicTransportStopsVisible = (visible: boolean) => {
@@ -389,8 +386,9 @@ export function createMapRuntime(
   };
 
   const setPublicTransportStopsOpacity = (opacity: number) => {
+    // The selected-stop halo is feedback for an explicit click and therefore
+    // stays opaque while ordinary stop symbols follow the overview preference.
     publicTransportStopsDisplay.layer.setOpacity(opacity);
-    publicTransportStopsDisplay.selectionLayer.setOpacity(opacity);
   };
 
   const dispose = () => {

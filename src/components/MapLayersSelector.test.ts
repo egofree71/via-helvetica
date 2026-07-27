@@ -2,7 +2,7 @@
  * Business context: protects the shared layer menu that lets hikers tune each
  * optional information overlay without losing the existing visibility controls.
  */
-import { act, createElement } from 'react';
+import { act, createElement, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../i18n/I18nContext';
@@ -16,6 +16,37 @@ const layerOpacities: MapLayerOpacities = {
   shootingDangerZones: 0.6,
   publicTransportStops: 1,
 };
+
+const defaultProps: ComponentProps<typeof MapLayersSelector> = {
+  baseMapStyle: 'color',
+  onBaseMapChange: vi.fn(),
+  areHikingTrailsVisible: true,
+  onHikingTrailsChange: vi.fn(),
+  isSwitzerlandMobilityHikingVisible: false,
+  onSwitzerlandMobilityHikingChange: vi.fn(),
+  areTrailClosuresVisible: true,
+  onTrailClosuresChange: vi.fn(),
+  areShootingDangerZonesVisible: true,
+  onShootingDangerZonesChange: vi.fn(),
+  arePublicTransportStopsVisible: false,
+  onPublicTransportStopsChange: vi.fn(),
+  layerOpacities,
+  onLayerOpacityChange: vi.fn(),
+};
+
+/** Builds the translated selector while preserving component state on rerender. */
+function createSelectorElement(
+  overrides: Partial<ComponentProps<typeof MapLayersSelector>> = {},
+) {
+  return createElement(
+    I18nProvider,
+    null,
+    createElement(MapLayersSelector, {
+      ...defaultProps,
+      ...overrides,
+    }),
+  );
+}
 
 describe('MapLayersSelector', () => {
   let container: HTMLDivElement;
@@ -41,32 +72,11 @@ describe('MapLayersSelector', () => {
     vi.restoreAllMocks();
   });
 
-  it('offers one expandable opacity control for every information layer', async () => {
+  it('offers one bounded opacity control for every information layer', async () => {
     const onLayerOpacityChange = vi.fn();
 
     await act(async () => {
-      root?.render(
-        createElement(
-          I18nProvider,
-          null,
-          createElement(MapLayersSelector, {
-            baseMapStyle: 'color',
-            onBaseMapChange: vi.fn(),
-            areHikingTrailsVisible: true,
-            onHikingTrailsChange: vi.fn(),
-            isSwitzerlandMobilityHikingVisible: false,
-            onSwitzerlandMobilityHikingChange: vi.fn(),
-            areTrailClosuresVisible: true,
-            onTrailClosuresChange: vi.fn(),
-            areShootingDangerZonesVisible: true,
-            onShootingDangerZonesChange: vi.fn(),
-            arePublicTransportStopsVisible: false,
-            onPublicTransportStopsChange: vi.fn(),
-            layerOpacities,
-            onLayerOpacityChange,
-          }),
-        ),
-      );
+      root?.render(createSelectorElement({ onLayerOpacityChange }));
     });
 
     await act(async () => {
@@ -85,6 +95,7 @@ describe('MapLayersSelector', () => {
     expect(opacityButtons[0]?.getAttribute('aria-label')).toBe(
       'Régler l’opacité de la couche « Chemins de randonnée »',
     );
+    expect(opacityButtons[0]?.hasAttribute('aria-controls')).toBe(false);
     expect(Array.from(opacityButtons, (button) => button.disabled)).toEqual([
       false,
       true,
@@ -108,8 +119,21 @@ describe('MapLayersSelector', () => {
     const slider = container.querySelector<HTMLInputElement>(
       '#map-layer-opacity-hikingTrails',
     );
+    const visibleValue = container.querySelector<HTMLElement>(
+      '.map-layer-opacity-value',
+    );
 
+    expect(opacityButtons[0]?.getAttribute('aria-controls')).toBe(
+      'map-layer-opacity-hikingTrails-settings',
+    );
+    expect(slider?.min).toBe('20');
     expect(slider?.value).toBe('80');
+    expect(slider?.hasAttribute('aria-label')).toBe(false);
+    expect(slider?.getAttribute('aria-labelledby')).toBe(
+      'map-layer-opacity-hikingTrails-layer-label map-layer-opacity-hikingTrails-label',
+    );
+    expect(visibleValue?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelector('output')).toBeNull();
     expect(container.textContent).toContain('Opacité');
     expect(container.textContent).toContain('80 %');
 
@@ -129,5 +153,51 @@ describe('MapLayersSelector', () => {
       'hikingTrails',
       0.35,
     );
+  });
+
+  it('does not reopen opacity settings after their layer is hidden', async () => {
+    await act(async () => {
+      root?.render(createSelectorElement());
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '.map-control-button--map-layers',
+        )
+        ?.click();
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '.map-layer-opacity-button',
+        )
+        ?.click();
+    });
+
+    expect(
+      container.querySelector('#map-layer-opacity-hikingTrails-settings'),
+    ).not.toBeNull();
+
+    await act(async () => {
+      root?.render(
+        createSelectorElement({ areHikingTrailsVisible: false }),
+      );
+    });
+
+    expect(
+      container.querySelector('#map-layer-opacity-hikingTrails-settings'),
+    ).toBeNull();
+
+    await act(async () => {
+      root?.render(
+        createSelectorElement({ areHikingTrailsVisible: true }),
+      );
+    });
+
+    expect(
+      container.querySelector('#map-layer-opacity-hikingTrails-settings'),
+    ).toBeNull();
   });
 });

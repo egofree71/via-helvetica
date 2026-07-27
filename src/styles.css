@@ -451,7 +451,7 @@ select {
   cursor: pointer;
 }
 
-.map-layer-opacity-settings output {
+.map-layer-opacity-value {
   justify-self: end;
   color: #17212b;
   font-variant-numeric: tabular-nums;

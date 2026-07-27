@@ -116,6 +116,14 @@ export const SWITZERLAND_MOBILITY_HIKING_MIN_ZOOM =
   HIKING_TRAILS_MIN_ZOOM;
 
 /**
+ * Minimum user-adjustable information-layer opacity ratio. A visible layer
+ * below 20% can look broken while its visibility toggle remains enabled;
+ * lowering this value increases that ambiguity, while raising it reduces the
+ * useful adjustment range.
+ */
+export const MINIMUM_MAP_LAYER_OPACITY = 0.2;
+
+/**
  * Default opacity ratio (0 = transparent, 1 = opaque) for ordinary hiking
  * trails. A value of 0.8 keeps the yellow network clearly readable while still
  * revealing labels and terrain details beneath the official portrayal.

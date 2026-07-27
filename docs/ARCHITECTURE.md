@@ -515,17 +515,23 @@ Selectable backgrounds include:
 The rendered hiking-trail layer and optional `ch.astra.wanderland` WMTS layer
 add the ordinary official hiking portrayal and the green national, regional, and
 local SwitzerlandMobility routes. The green layer starts disabled. Ordinary
-hiking trails and trail closures start at 80% opacity for strong readability,
-while the thicker green routes start at 60%; these defaults preserve some
-visibility of labels, roads, and terrain underneath. The shared layer menu
-exposes an expandable opacity slider for every information layer—hiking trails,
-SwitzerlandMobility routes, closures, military danger zones, and public-
-transport stops. A layer's settings button is disabled while that layer is
-hidden, because opacity changes would have no visible feedback. Visibility and
-opacity choices are persisted independently in browser storage and applied to
-the existing OpenLayers runtime without recreating the map. The selected
-SwitzerlandMobility route remains an opaque current itinerary rather than
-inheriting the overview layer opacity.
+hiking trails and trail closures start at 80% opacity, SwitzerlandMobility routes
+and military danger zones at 60%, and public-transport stops at 100%; these
+defaults balance readability with visibility of labels, roads, and terrain
+underneath. The shared layer menu exposes an expandable opacity slider for every
+information layer, bounded from 20% to 100%. Complete hiding remains the role of
+the visibility toggle, avoiding an apparently enabled but invisible layer. A
+layer's settings button is disabled while that layer is hidden, and its temporary
+slider closes when visibility is removed because opacity changes would have no
+visible feedback.
+
+Only explicit slider changes are persisted in browser storage. Product defaults
+therefore remain free to evolve for visitors who never adjusted a layer, and one
+slider gesture updates only the corresponding OpenLayers portrayal. Visibility
+and opacity preferences remain independent and do not recreate the map. Any
+selection overlay created by an explicit click—selected SwitzerlandMobility
+route, military danger zone, or public-transport stop—remains opaque while the
+overview portrayal follows the visitor's chosen opacity.
 
 The rendered portrayals remain independent from the vector hiking geometry used
 to influence route costs.
@@ -771,10 +777,11 @@ appearance. They cover:
 - location-search caching and normalization, local WGS 84/LV95 parsing,
   coordinate-draft provider bypass, compact combobox accessibility, and distinct
   place-versus-coordinate zoom policy;
-- rendered-layer provider identifiers, semitransparent hiking defaults, and
-  persisted opacity restoration;
-- the expandable opacity control for every visible optional information layer,
-  including disabled settings buttons for hidden layers;
+- rendered-layer provider identifiers, semitransparent defaults, explicit-only
+  opacity persistence, minimum-opacity migration, and focused runtime updates;
+- the bounded expandable opacity control for every visible optional information
+  layer, including disabled settings buttons, automatic closure when a layer is
+  hidden, and compact slider accessibility contracts;
 - SwitzerlandMobility metadata normalization, full-geometry selection,
   strict malformed-line rejection, responsive route fitting, single-itinerary
   replacement, export, and profile-panel behavior;
