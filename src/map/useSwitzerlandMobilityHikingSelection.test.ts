@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateSwitzerlandMobilityHikingFitPadding,
+  isSameSwitzerlandMobilityHikingFeature,
 } from './useSwitzerlandMobilityHikingSelection';
 
 describe('calculateSwitzerlandMobilityHikingFitPadding', () => {
@@ -28,5 +29,34 @@ describe('calculateSwitzerlandMobilityHikingFitPadding', () => {
 
     expect(200 - padding[1] - padding[3]).toBeGreaterThanOrEqual(160);
     expect(200 - padding[0] - padding[2]).toBeGreaterThanOrEqual(160);
+  });
+});
+
+describe('isSameSwitzerlandMobilityHikingFeature', () => {
+  it('treats string and numeric GeoAdmin identifiers as the same feature', () => {
+    expect(
+      isSameSwitzerlandMobilityHikingFeature(
+        { featureId: '4.17' },
+        { featureId: '4.17' },
+      ),
+    ).toBe(true);
+    expect(
+      isSameSwitzerlandMobilityHikingFeature(
+        { featureId: 571 },
+        { featureId: '571' },
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps distinct overlapping routes separate', () => {
+    expect(
+      isSameSwitzerlandMobilityHikingFeature(
+        { featureId: '2.18' },
+        { featureId: '4.7' },
+      ),
+    ).toBe(false);
+    expect(
+      isSameSwitzerlandMobilityHikingFeature(null, { featureId: '4.7' }),
+    ).toBe(false);
   });
 });

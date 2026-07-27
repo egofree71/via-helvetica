@@ -141,6 +141,25 @@ const SELECTION_MIN_FIT_AREA_PX = 160;
 const EMPTY_ROUTE_SEGMENTS: SwitzerlandMobilityHikingRoute['segments'] = [];
 
 /**
+ * Compares provider feature identifiers without depending on whether GeoAdmin
+ * serialized the numeric identifier as a string or a number.
+ *
+ * @param left - First public-route candidate or selected route.
+ * @param right - Second public-route candidate or selected route.
+ * @returns `true` when both values refer to the same GeoAdmin feature.
+ */
+export function isSameSwitzerlandMobilityHikingFeature(
+  left: Pick<SwitzerlandMobilityHikingRouteCandidate, 'featureId'> | null,
+  right: Pick<SwitzerlandMobilityHikingRouteCandidate, 'featureId'> | null,
+): boolean {
+  return Boolean(
+    left &&
+      right &&
+      String(left.featureId) === String(right.featureId),
+  );
+}
+
+/**
  * Adapts public-route framing margins to small and landscape mobile viewports.
  *
  * @param size - Current OpenLayers viewport size in CSS pixels.
@@ -167,6 +186,10 @@ export function useSwitzerlandMobilityHikingSelection(
 ): SwitzerlandMobilityHikingSelectionController {
   const selectionSessionRef = useRef(0);
   const routeRequestRef = useRef<AbortController | null>(null);
+  // The ready route is retained while an overlap chooser is open so choosing
+  // the same route again does not redownload geometry and elevations.
+  const readySelectionRef =
+    useRef<SwitzerlandMobilityHikingReadyStatus | null>(null);
   const [panelStatus, setPanelStatus] =
     useState<SwitzerlandMobilityHikingPanelStatus | null>(null);
   const selectedRouteSegments =
@@ -188,6 +211,7 @@ export function useSwitzerlandMobilityHikingSelection(
     selectionSessionRef.current += 1;
     routeRequestRef.current?.abort();
     routeRequestRef.current = null;
+    readySelectionRef.current = null;
     clearProfileHover();
     setPanelStatus(null);
 
@@ -222,6 +246,25 @@ export function useSwitzerlandMobilityHikingSelection(
       const runtime = options.mapRuntimeRef.current;
 
       if (!runtime) {
+        return;
+      }
+
+      const readySelection = readySelectionRef.current;
+
+      if (
+        readySelection &&
+        isSameSwitzerlandMobilityHikingFeature(
+          readySelection.route,
+          candidate,
+        )
+      ) {
+        // Identification still runs to discover overlapping routes at the new
+        // click position, but an unchanged final choice can reuse the complete
+        // geometry, metrics, and profile already held in memory.
+        selectionSessionRef.current += 1;
+        routeRequestRef.current?.abort();
+        routeRequestRef.current = null;
+        setPanelStatus(readySelection);
         return;
       }
 
@@ -265,14 +308,18 @@ export function useSwitzerlandMobilityHikingSelection(
           // therefore leave the user's previous GPX or editable route untouched.
           options.onRouteAccepted();
 
-          setPanelStatus({
+          const loadingElevationStatus: SwitzerlandMobilityHikingReadyStatus = {
             state: 'ready',
             route,
             distanceMeters,
             elevationStatus: 'loading',
             elevation: null,
             durationMinutes: null,
-          });
+          };
+          // Cache only a stable profile outcome. Re-selecting while elevation
+          // is still loading may legitimately restart the complete request.
+          readySelectionRef.current = null;
+          setPanelStatus(loadingElevationStatus);
 
           runtime.map.updateSize();
           const size = runtime.map.getSize();
@@ -299,14 +346,16 @@ export function useSwitzerlandMobilityHikingSelection(
               return;
             }
 
-            setPanelStatus({
+            const readyStatus: SwitzerlandMobilityHikingReadyStatus = {
               state: 'ready',
               route,
               distanceMeters,
               elevationStatus: 'ready',
               elevation,
               durationMinutes: estimateHikingDuration(elevation.points),
-            });
+            };
+            readySelectionRef.current = readyStatus;
+            setPanelStatus(readyStatus);
           } catch (error: unknown) {
             if (
               isAbortedRequest(error, request.signal) ||
@@ -321,14 +370,16 @@ export function useSwitzerlandMobilityHikingSelection(
               'Unable to load SwitzerlandMobility route elevations.',
               error,
             );
-            setPanelStatus({
+            const elevationErrorStatus: SwitzerlandMobilityHikingReadyStatus = {
               state: 'ready',
               route,
               distanceMeters,
               elevationStatus: 'error',
               elevation: null,
               durationMinutes: null,
-            });
+            };
+            readySelectionRef.current = elevationErrorStatus;
+            setPanelStatus(elevationErrorStatus);
           }
         } catch (error: unknown) {
           if (
@@ -342,11 +393,23 @@ export function useSwitzerlandMobilityHikingSelection(
             'Unable to load the selected SwitzerlandMobility hiking route.',
             error,
           );
-          updateSwitzerlandMobilityHikingSelection(
-            runtime.switzerlandMobilityHikingSelectionDisplay,
-            null,
-          );
-          setPanelStatus({ state: 'error', candidate });
+          const previousSelection = readySelectionRef.current;
+
+          if (previousSelection) {
+            // A failed alternate choice must not destroy the route that was
+            // already validated and displayed before the new request.
+            updateSwitzerlandMobilityHikingSelection(
+              runtime.switzerlandMobilityHikingSelectionDisplay,
+              previousSelection.route,
+            );
+            setPanelStatus(previousSelection);
+          } else {
+            updateSwitzerlandMobilityHikingSelection(
+              runtime.switzerlandMobilityHikingSelectionDisplay,
+              null,
+            );
+            setPanelStatus({ state: 'error', candidate });
+          }
         } finally {
           if (routeRequestRef.current === request) {
             routeRequestRef.current = null;
@@ -393,14 +456,9 @@ export function useSwitzerlandMobilityHikingSelection(
           selectionSessionRef.current += 1;
           routeRequestRef.current?.abort();
           routeRequestRef.current = null;
-          const display =
-            options.mapRuntimeRef.current
-              ?.switzerlandMobilityHikingSelectionDisplay;
-
-          if (display) {
-            updateSwitzerlandMobilityHikingSelection(display, null);
-          }
-
+          // Keep the current highlight visible while the user chooses another
+          // route sharing the clicked path. The full selection is replaced only
+          // after a different candidate has been loaded successfully.
           setPanelStatus({ state: 'choices', candidates });
         }
 
@@ -415,8 +473,16 @@ export function useSwitzerlandMobilityHikingSelection(
           error,
         );
         options.onInformationSelected();
-        clearProfileHover();
-        setPanelStatus({ state: 'error', candidate: null });
+        const readySelection = readySelectionRef.current;
+
+        if (readySelection) {
+          // A transient identify failure must not discard a complete route that
+          // is already selected and usable on the map.
+          setPanelStatus(readySelection);
+        } else {
+          clearProfileHover();
+          setPanelStatus({ state: 'error', candidate: null });
+        }
         return true;
       }
     },

@@ -187,6 +187,89 @@ describe('identifySwitzerlandMobilityHikingRoutes', () => {
     ]);
   });
 
+  it('keeps an unrelated unsegmented route when staged routes share the same path', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          results: [
+            {
+              layerBodId: 'ch.astra.wanderland',
+              featureId: '2.18',
+              id: '2.18',
+              properties: {
+                chmobil_title: 'Trans Swiss Trail (Flüeli-Ranft - Stans)',
+                chmobil_route_number: 2,
+                chmobil_has_segment: true,
+              },
+            },
+            {
+              layerBodId: 'ch.astra.wanderland',
+              featureId: '4.7',
+              id: '4.7',
+              properties: {
+                chmobil_title: 'ViaJacobi (Stans - Flüeli-Ranft)',
+                chmobil_route_number: 4,
+                chmobil_has_segment: true,
+              },
+            },
+            {
+              layerBodId: 'ch.astra.wanderland',
+              featureId: 'route-4',
+              id: '4',
+              properties: {
+                chmobil_title: 'ViaJacobi',
+                chmobil_route_number: 4,
+                chmobil_has_segment: true,
+              },
+            },
+            {
+              layerBodId: 'ch.astra.wanderland',
+              featureId: '571',
+              id: '571',
+              properties: {
+                chmobil_title: 'Bruderklauseweg (Stans - Sachseln)',
+                chmobil_route_number: 571,
+                chmobil_has_segment: false,
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const routes = await identifySwitzerlandMobilityHikingRoutes(
+      {
+        coordinate: [2_668_000, 1_203_000],
+        mapExtent: [2_660_000, 1_195_000, 2_676_000, 1_211_000],
+        imageSize: [900, 700],
+        language: 'fr',
+      },
+      new AbortController().signal,
+    );
+
+    expect(routes).toMatchObject([
+      {
+        routeNumber: '2',
+        routeId: '2.18',
+        routeName: 'Trans Swiss Trail',
+        stageNumber: '18',
+      },
+      {
+        routeNumber: '4',
+        routeId: '4.7',
+        routeName: 'ViaJacobi',
+        stageNumber: '7',
+      },
+      {
+        routeNumber: '571',
+        routeId: '571',
+        routeName: 'Bruderklauseweg',
+        stageNumber: null,
+      },
+    ]);
+  });
+
   it('returns the whole route when no stage-specific feature is available', async () => {
     vi.stubGlobal(
       'fetch',

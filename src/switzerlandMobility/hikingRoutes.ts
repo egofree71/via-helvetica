@@ -445,9 +445,9 @@ function readFeatureEnvelope(payload: unknown): unknown {
 /**
  * Finds the public hiking routes intersecting one map click.
  *
- * Routes that publish stages are preferred over a simultaneous whole-route hit,
- * because the clicked map portrayal and the intended compact panel are normally
- * stage-specific. Distinct routes sharing the same path remain separate choices.
+ * A whole-route record is hidden only when a stage of that same numbered route
+ * is also returned. This avoids duplicate choices such as ViaJacobi plus one of
+ * its stages without discarding an unrelated local route that has no stages.
  *
  * @param context - Click coordinate, map extent, canvas size, and language.
  * @param signal - Abort signal for superseded clicks or panel closure.
@@ -505,11 +505,22 @@ export async function identifySwitzerlandMobilityHikingRoutes(
   }
 
   const candidates = Array.from(uniqueCandidates.values());
-  const stagedCandidates = candidates.filter(
-    (candidate) => candidate.stageNumber !== null,
+  const stagedRouteNumbers = new Set(
+    candidates
+      .filter((candidate) => candidate.stageNumber !== null)
+      .map((candidate) => candidate.routeNumber)
+      .filter((routeNumber): routeNumber is string => routeNumber !== null),
   );
 
-  return stagedCandidates.length > 0 ? stagedCandidates : candidates;
+  // GeoAdmin can return both a whole-route record and the clicked stage. Only
+  // suppress that duplicate for the same route number; other unsegmented local
+  // routes sharing the path remain valid choices for the user.
+  return candidates.filter(
+    (candidate) =>
+      candidate.stageNumber !== null ||
+      candidate.routeNumber === null ||
+      !stagedRouteNumbers.has(candidate.routeNumber),
+  );
 }
 
 /**
