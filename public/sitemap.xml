@@ -4,12 +4,6 @@
   xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
 >
   <url>
-    <loc>https://viahelvetica.ch/</loc>
-    <image:image>
-      <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
-    </image:image>
-  </url>
-  <url>
     <loc>https://viahelvetica.ch/fr/</loc>
     <image:image>
       <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>

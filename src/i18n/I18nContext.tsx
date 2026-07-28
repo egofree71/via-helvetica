@@ -23,7 +23,7 @@ import {
 
 /** Local-storage key used to preserve the explicit language selection. */
 const LANGUAGE_STORAGE_KEY = 'via-helvetica-language';
-/** History-state key used to restore the language of the unlocalized root URL. */
+/** History-state key used to preserve language across browser-history entries. */
 const LANGUAGE_HISTORY_STATE_KEY = 'viaHelveticaLanguage';
 /** Production origin used by canonical, Open Graph, and structured-data URLs. */
 const SITE_ORIGIN = 'https://viahelvetica.ch';
@@ -164,9 +164,7 @@ function synchronizeStructuredData(
 /** Keeps the already loaded document head coherent after History API changes. */
 function synchronizeDocumentMetadata(language: Language): void {
   const metadata = SEO_METADATA[language];
-  const hasLocalizedPath = languageFromPathname(window.location.pathname);
-  const canonicalPath = hasLocalizedPath ? metadata.path : '/';
-  const canonicalUrl = `${SITE_ORIGIN}${canonicalPath}`;
+  const canonicalUrl = `${SITE_ORIGIN}${metadata.path}`;
 
   document.documentElement.lang = language;
   document.title = metadata.title;
@@ -269,8 +267,20 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       [LANGUAGE_HISTORY_STATE_KEY]: language,
     };
 
-    // Root has no language segment, so its language must survive browser history.
-    window.history.replaceState(currentState, '');
+    const hasLocalizedPath = languageFromPathname(window.location.pathname);
+
+    if (hasLocalizedPath) {
+      window.history.replaceState(currentState, '');
+    } else {
+      // The x-default root negotiates a language once, then exposes a stable,
+      // shareable localized URL without recreating the map or route state.
+      window.history.replaceState(
+        currentState,
+        '',
+        localizedBrowserUrl(language),
+      );
+    }
+
     synchronizeDocumentMetadata(language);
 
     try {

@@ -116,25 +116,23 @@ describe('localized language URLs', () => {
     expect(document.documentElement.lang).toBe('de');
   });
 
-  it('restores the language stored in a root history entry', async () => {
-    window.localStorage.setItem('via-helvetica-language', 'en');
+  it('normalizes the x-default root to the resolved localized path', async () => {
+    window.localStorage.setItem('via-helvetica-language', 'fr');
+    const replaceState = vi.spyOn(window.history, 'replaceState');
 
     await act(async () => {
       root?.render(createElement(I18nProvider, null, createElement(LanguageProbe)));
     });
 
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button')?.click();
-    });
-
-    const rootState = { viaHelveticaLanguage: 'en' };
-    window.history.replaceState(rootState, '', '/');
-
-    await act(async () => {
-      window.dispatchEvent(new PopStateEvent('popstate', { state: rootState }));
-    });
-
-    expect(window.location.pathname).toBe('/');
-    expect(container.querySelector('output')?.textContent).toBe('en');
+    expect(window.location.pathname).toBe('/fr/');
+    expect(container.querySelector('output')?.textContent).toBe('fr');
+    expect(replaceState).toHaveBeenCalledWith(
+      expect.objectContaining({ viaHelveticaLanguage: 'fr' }),
+      '',
+      '/fr/',
+    );
+    expect(
+      document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href,
+    ).toBe('https://viahelvetica.ch/fr/');
   });
 });

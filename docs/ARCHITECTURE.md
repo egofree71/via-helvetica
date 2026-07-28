@@ -783,11 +783,14 @@ supported language provides it. Search and social metadata shared by the build
 generator and runtime live in `src/i18n/seoMetadata.json`. Provider identifiers
 and domain enums remain language-neutral.
 
-The root URL remains the `x-default` entry. The four localized paths are static
-Vite HTML inputs with self-referencing canonicals and reciprocal `hreflang`
-links. Selecting another language calls `history.pushState()` rather than
-navigating, so OpenLayers, route history, and imported GPX state are not
-recreated. A `popstate` listener restores the corresponding interface language.
+The root URL remains the `x-default` negotiation entry and consolidates on
+`/en/` for static discovery. On first application startup it is replaced, without
+a reload, by the localized path resolved from persisted or browser preferences.
+The four localized paths are static Vite HTML inputs with self-referencing
+canonicals and reciprocal `hreflang` links. Selecting another language calls
+`history.pushState()` rather than navigating, so OpenLayers, route history, and
+imported GPX state are not recreated. A `popstate` listener restores the
+corresponding interface language.
 
 ## 11. Testing and validation
 
@@ -893,13 +896,14 @@ multi-page inputs and preserves their directories in `dist/`, which lets GitHub
 Pages serve every localized URL directly after a reload. The generated source
 directories are ignored by Git because they are deterministic build inputs.
 
-Every entry contains a self-referencing canonical, reciprocal `hreflang` links,
-localized Open Graph, Twitter, Schema.org, `noscript`, and document metadata. The
-root remains the `x-default` entry for existing links and browser-language
-fallback, while the sitemap lists the root and all localized URLs. A dedicated
-hiking photograph is used consistently by Open Graph, Twitter metadata,
-structured data, and the image sitemap. It is a search and social-discovery asset
-rather than an application screenshot.
+Each localized entry contains a self-referencing canonical, reciprocal
+`hreflang` links, localized Open Graph, Twitter, Schema.org, `noscript`, and
+document metadata. The root remains the `x-default` negotiation entry for
+existing links and browser-language fallback, but its canonical discovery signal
+points to `/en/`; only the four canonical localized URLs are listed in the
+sitemap. A dedicated hiking photograph is used consistently by Open Graph,
+Twitter metadata, structured data, and the image sitemap. It is a search and
+social-discovery asset rather than an application screenshot.
 
 The rendered application exposes one localized, visually hidden `h1` so
 assistive technologies and rendered-page analysis receive a stable page heading
