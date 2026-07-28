@@ -395,6 +395,8 @@ Pointer interaction stays separate from route calculation:
 - pointer movement renders temporary straight previews only;
 - dragging near a viewport edge auto-pans the OpenLayers view and keeps the
   preview attached to the coordinate under the stationary pointer;
+- window-level pointer release, focus-loss, and page-visibility guards cancel an
+  abandoned drag and stop its animation before restoring committed geometry;
 - no routing request is performed during drag;
 - release emits one semantic move, insertion, or deletion request;
 - `routeEditing.ts` rebuilds only affected sections using the snap mode selected
@@ -818,7 +820,7 @@ validated where a browser-level test would cost more than it protects. Important
 manual checks include:
 
 - mouse, pen, and touch route editing, including edge auto-pan while moving or
-  inserting a waypoint;
+  inserting a waypoint and cancellation after focus or pointer loss;
 - responsive control collisions, translated layer-label wrapping, and the
   expandable opacity sliders on narrow and short viewports;
 - official hiking and SwitzerlandMobility portrayals across useful zooms and

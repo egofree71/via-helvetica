@@ -122,10 +122,11 @@ const ROUTE_DRAG_AUTO_PAN_EDGE_ZONE_PX = 56;
  */
 const ROUTE_DRAG_AUTO_PAN_MAX_AXIS_SPEED_PX_PER_SECOND = 360;
 /**
- * Maximum elapsed seconds consumed by one animation frame. Capping background-tab
- * delays prevents a large map jump when rendering resumes.
+ * Maximum elapsed seconds consumed by one animation frame. The 100 ms ceiling
+ * preserves intended speed on a low-frame-rate device while still preventing a
+ * large jump after an exceptional main-thread stall.
  */
-const ROUTE_DRAG_AUTO_PAN_MAX_FRAME_SECONDS = 0.05;
+const ROUTE_DRAG_AUTO_PAN_MAX_FRAME_SECONDS = 0.1;
 
 /** Returns squared horizontal distance in map units to avoid a square root during deduplication. */
 function coordinateDistanceSquared(
@@ -413,9 +414,12 @@ export function createRouteDragInteraction(
   let hasStartedEdit = false;
   let latestDragPixel: Pixel | null = null;
   let latestDragCoordinate: Coordinate | null = null;
+  let activePointerId: number | null = null;
+  let activeDragMap: Map | null = null;
   let autoPanMap: Map | null = null;
   let autoPanFrameId: number | null = null;
   let autoPanPreviousTimestamp: number | null = null;
+  let isMonitoringPointerLiveness = false;
 
   const stopAutoPan = () => {
     if (autoPanFrameId !== null) {
@@ -427,8 +431,29 @@ export function createRouteDragInteraction(
     autoPanPreviousTimestamp = null;
   };
 
+  /** Removes window-level guards installed for the current pointer gesture. */
+  function stopPointerLivenessMonitoring(): void {
+    if (!isMonitoringPointerLiveness) {
+      activePointerId = null;
+      activeDragMap = null;
+      return;
+    }
+
+    window.removeEventListener('pointerup', handleGlobalPointerEnd);
+    window.removeEventListener('pointercancel', handleGlobalPointerEnd);
+    window.removeEventListener('blur', handleWindowBlur);
+    document.removeEventListener(
+      'visibilitychange',
+      handleDocumentVisibilityChange,
+    );
+    isMonitoringPointerLiveness = false;
+    activePointerId = null;
+    activeDragMap = null;
+  }
+
   const resetDragState = () => {
     stopAutoPan();
+    stopPointerLivenessMonitoring();
     dragTarget = null;
     startPixel = null;
     maximumPixelDistanceSquared = 0;
@@ -438,6 +463,88 @@ export function createRouteDragInteraction(
     latestDragPixel = null;
     latestDragCoordinate = null;
   };
+
+  /**
+   * Cancels an edit when the browser can no longer guarantee a matching release
+   * coordinate. Losing the pointer, window focus, or page visibility must restore
+   * committed geometry rather than letting edge auto-pan continue unattended.
+   */
+  function cancelActiveDrag(): void {
+    if (!dragTarget) {
+      resetDragState();
+      return;
+    }
+
+    const cancelledTarget = dragTarget;
+    const map = activeDragMap ?? autoPanMap;
+    const shouldRestorePreview = hasStartedEdit;
+
+    resetDragState();
+
+    if (shouldRestorePreview) {
+      callbacks.onCancel(cancelledTarget);
+    }
+
+    callbacks.onHover(null, null);
+
+    if (map) {
+      updateRouteEditCursor(map, null, false);
+    }
+  }
+
+  /** Cancels only when the global release belongs to the pointer that began the edit. */
+  function handleGlobalPointerEnd(event: PointerEvent): void {
+    if (
+      !dragTarget ||
+      activePointerId === null ||
+      event.pointerId !== activePointerId
+    ) {
+      return;
+    }
+
+    cancelActiveDrag();
+  }
+
+  /** Window focus loss can swallow the release event needed to finish the edit. */
+  function handleWindowBlur(): void {
+    if (dragTarget) {
+      cancelActiveDrag();
+    }
+  }
+
+  /** A hidden page must not retain an animation loop for an unobservable drag. */
+  function handleDocumentVisibilityChange(): void {
+    if (document.visibilityState === 'hidden' && dragTarget) {
+      cancelActiveDrag();
+    }
+  }
+
+  /**
+   * Installs temporary global guards after OpenLayers accepts a route edit.
+   * Pointer events normally finish through the interaction itself; these listeners
+   * only cover releases outside the map and browser lifecycle interruptions.
+   *
+   * @param map - Map whose cursor and preview belong to the active gesture.
+   * @param pointerEvent - Browser pointer event that began the gesture.
+   */
+  function startPointerLivenessMonitoring(
+    map: Map,
+    pointerEvent: PointerEvent,
+  ): void {
+    stopPointerLivenessMonitoring();
+    activeDragMap = map;
+    activePointerId = Number.isFinite(pointerEvent.pointerId)
+      ? pointerEvent.pointerId
+      : null;
+    window.addEventListener('pointerup', handleGlobalPointerEnd);
+    window.addEventListener('pointercancel', handleGlobalPointerEnd);
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener(
+      'visibilitychange',
+      handleDocumentVisibilityChange,
+    );
+    isMonitoringPointerLiveness = true;
+  }
 
   /**
    * Resolves a release coordinate from the latest drag sample. Auto-pan updates
@@ -677,6 +784,10 @@ export function createRouteDragInteraction(
       maximumPixelDistanceSquared = 0;
       isDragging = false;
       hasStartedEdit = !isTouchInteraction;
+      startPointerLivenessMonitoring(
+        event.map,
+        event.originalEvent as PointerEvent,
+      );
       callbacks.onHover(null, null);
       updateRouteEditCursor(event.map, dragTarget.type, false);
 
@@ -694,17 +805,9 @@ export function createRouteDragInteraction(
       }
 
       if (isTouchInteraction && interaction.getPointerCount() > 1) {
-        const cancelledTarget = dragTarget;
-
         // A second finger changes the gesture into map navigation. Restore any
         // preview already shown and let OpenLayers PinchZoom continue normally.
-        if (hasStartedEdit) {
-          callbacks.onCancel(cancelledTarget);
-        }
-
-        resetDragState();
-        callbacks.onHover(null, null);
-        updateRouteEditCursor(event.map, null, false);
+        cancelActiveDrag();
         return;
       }
 
@@ -789,17 +892,9 @@ export function createRouteDragInteraction(
       }
 
       if (isTouchInteraction && interaction.getPointerCount() > 0) {
-        const cancelledTarget = dragTarget;
-
         // A remaining pointer means this release belongs to a multi-touch
         // gesture, even when no pinch movement occurred before the first lift.
-        if (hasStartedEdit) {
-          callbacks.onCancel(cancelledTarget);
-        }
-
-        resetDragState();
-        callbacks.onHover(null, null);
-        updateRouteEditCursor(event.map, null, false);
+        cancelActiveDrag();
         return false;
       }
 
