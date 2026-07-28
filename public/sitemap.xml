@@ -9,4 +9,28 @@
       <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
     </image:image>
   </url>
+  <url>
+    <loc>https://viahelvetica.ch/fr/</loc>
+    <image:image>
+      <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/de/</loc>
+    <image:image>
+      <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/it/</loc>
+    <image:image>
+      <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/en/</loc>
+    <image:image>
+      <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
+    </image:image>
+  </url>
 </urlset>

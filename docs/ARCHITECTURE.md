@@ -7,7 +7,9 @@ hiking route at a time in Switzerland. React owns the user-interface state,
 OpenLayers owns the imperative map runtime, and a dedicated Web Worker owns the
 CPU- and network-intensive routing engine. The application is deployed as static
 files on GitHub Pages and has no project-owned backend, user database, account
-system, or remote route storage.
+system, or remote route storage. Localized static entries at `/fr/`, `/de/`,
+`/it/`, and `/en/` expose language-specific discovery metadata while loading
+the same React/OpenLayers application.
 
 The map and internal geometry use the Swiss LV95 projection (`EPSG:2056`).
 Official swisstopo backgrounds and geodata are loaded directly from federal
@@ -201,7 +203,7 @@ flowchart TB
 | Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts`, `src/map/useRouteProfileSynchronization.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and exclusive map/profile synchronisation for the active itinerary or selected public route |
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
 | Search | `src/search/locationSearch.ts`, `src/search/coordinateSearch.ts`, `src/components/LocationSearch.tsx` | Local WGS 84/LV95 parsing, provider contract, session cache, result UI, keyboard navigation, and request cancellation |
-| Localization | `src/i18n/` | Typed dictionaries, language persistence, Swiss locales, and document metadata |
+| Localization | `src/i18n/`, `scripts/generate-localized-pages.mjs` | Typed dictionaries, language persistence, locale paths, runtime document metadata, and generated localized HTML entries |
 | Static deployment | `.github/workflows/deploy.yml`, `vite.config.ts` | Test, build, Pages deployment, and root-relative production assets |
 
 ### 3.3 Application composition
@@ -216,7 +218,9 @@ capabilities. Examples of cross-workflow coordination include:
 - selecting a SwitzerlandMobility route keeps the previous itinerary until complete
   public geometry has been validated, then clears editable history or an imported
   GPX and makes the selected public route the single current read-only itinerary;
-- changing language clears temporary search state and provider selections;
+- changing language updates the shareable locale path through the History API,
+  clears temporary search state and provider selections, and preserves the
+  loaded map and current itinerary;
 - a valid import or route change becomes the single current itinerary for
   metrics.
 
@@ -328,9 +332,11 @@ The same profile samples support:
 
 ### 5.1 Application startup
 
-1. `main.tsx` mounts React and the language provider.
-2. The language provider resolves the stored or browser language and updates
-   ordinary document metadata.
+1. `main.tsx` mounts React and the language provider from either the root or a
+   localized static HTML entry.
+2. The language provider gives an explicit `/fr/`, `/de/`, `/it/`, or `/en/`
+   path priority over stored and browser preferences, then keeps the path and
+   document metadata synchronized without reloading the application.
 3. `useMapRuntime` creates the single OpenLayers runtime after the map target is
    mounted.
 4. `mapRuntime.ts` creates the LV95 view, explicit layer order, displays, and
@@ -773,8 +779,15 @@ stay small and should not become new orchestration layers.
 
 All user-facing strings belong to typed French, German, Italian, and English
 dictionaries. Adding a translation key must fail compilation until every
-supported language provides it. Provider identifiers and domain enums remain
-language-neutral.
+supported language provides it. Search and social metadata shared by the build
+generator and runtime live in `src/i18n/seoMetadata.json`. Provider identifiers
+and domain enums remain language-neutral.
+
+The root URL remains the `x-default` entry. The four localized paths are static
+Vite HTML inputs with self-referencing canonicals and reciprocal `hreflang`
+links. Selecting another language calls `history.pushState()` rather than
+navigating, so OpenLayers, route history, and imported GPX state are not
+recreated. A `popstate` listener restores the corresponding interface language.
 
 ## 11. Testing and validation
 
@@ -791,6 +804,8 @@ appearance. They cover:
 - location-search caching and normalization, local WGS 84/LV95 parsing,
   coordinate-draft provider bypass, compact combobox accessibility, and distinct
   place-versus-coordinate zoom policy;
+- locale-path priority, History API language changes, browser back/forward
+  restoration, and localized runtime metadata;
 - rendered-layer provider identifiers, semitransparent defaults, explicit-only
   opacity persistence, minimum-opacity migration, and focused runtime updates;
 - the bounded expandable opacity control for every visible optional information
@@ -871,17 +886,27 @@ base: '/'
 GitHub Pages provides HTTPS, which is required for browser geolocation outside
 `localhost`.
 
-Static discovery assets include canonical, Open Graph, social-card, and
-Schema.org metadata in `index.html`, plus `robots.txt` and `sitemap.xml` under
-`public/`. A dedicated hiking photograph is used consistently by Open Graph,
-Twitter metadata, structured data, and the image sitemap. It is a search and
-social-discovery asset rather than an application screenshot. The rendered
-application exposes one localized, visually hidden `h1` so assistive technologies
-and rendered-page analysis receive a stable page heading without reducing the map
-area. The React root remains marked `data-nosnippet` so transient interface text,
-including startup messages, is not selected as a search-result excerpt or
-text-fragment deep link. These are deployment concerns rather than runtime
-application services.
+Before development and production builds, `scripts/generate-localized-pages.mjs`
+creates `/fr/`, `/de/`, `/it/`, and `/en/` HTML entries from the root template
+and `src/i18n/seoMetadata.json`. Vite treats the root and those four pages as
+multi-page inputs and preserves their directories in `dist/`, which lets GitHub
+Pages serve every localized URL directly after a reload. The generated source
+directories are ignored by Git because they are deterministic build inputs.
+
+Every entry contains a self-referencing canonical, reciprocal `hreflang` links,
+localized Open Graph, Twitter, Schema.org, `noscript`, and document metadata. The
+root remains the `x-default` entry for existing links and browser-language
+fallback, while the sitemap lists the root and all localized URLs. A dedicated
+hiking photograph is used consistently by Open Graph, Twitter metadata,
+structured data, and the image sitemap. It is a search and social-discovery asset
+rather than an application screenshot.
+
+The rendered application exposes one localized, visually hidden `h1` so
+assistive technologies and rendered-page analysis receive a stable page heading
+without reducing the map area. The React root remains marked `data-nosnippet` so
+transient interface text, including startup messages, is not selected as a
+search-result excerpt or text-fragment deep link. These are deployment concerns
+rather than runtime application services.
 
 ## 13. Code and documentation conventions
 
@@ -889,7 +914,8 @@ application services.
 - Centralize provider identifiers, projections, and geographic constants.
 - Keep internal geometry in EPSG:2056 and transform only at exchange boundaries.
 - Keep network contracts outside React components.
-- Keep every user-facing string in all four typed dictionaries.
+- Keep every user-facing string in all four typed dictionaries and keep shared
+  search/social metadata complete in `seoMetadata.json`.
 - Sanitize provider HTML before rendering its limited semantic markup.
 - Abort superseded asynchronous work and guard against stale completion.
 - Preserve explicit OpenLayers layer ordering.

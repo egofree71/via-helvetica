@@ -2,6 +2,7 @@
  * Business context: centralizes every user-facing label so the interface can
  * switch languages without scattering translation logic across map modules.
  */
+import seoMetadata from './seoMetadata.json';
 
 /** Languages supported by the application interface and GeoAdmin search. */
 export const SUPPORTED_LANGUAGES = ['fr', 'de', 'it', 'en'] as const;
@@ -21,10 +22,8 @@ export const LANGUAGE_METADATA: Record<
 };
 
 const frenchTranslations = {
-  'app.title':
-    'Via Helvetica – Planificateur d’itinéraires de randonnée en Suisse',
-  'app.description':
-    'Planifiez des itinéraires de randonnée en Suisse sur les cartes officielles, consultez le dénivelé et les informations sur les sentiers, puis importez ou exportez des fichiers GPX.',
+  'app.title': seoMetadata.fr.title,
+  'app.description': seoMetadata.fr.description,
   'about.open': 'À propos de Via Helvetica',
   'about.title': 'Via Helvetica',
   'about.tagline':
@@ -224,10 +223,8 @@ const frenchTranslations = {
 export type TranslationKey = keyof typeof frenchTranslations;
 
 const germanTranslations: Record<TranslationKey, string> = {
-  'app.title':
-    'Via Helvetica – Routenplaner für Wanderungen in der Schweiz',
-  'app.description':
-    'Planen Sie Wanderungen in der Schweiz auf offiziellen Karten, prüfen Sie Höhenprofil und Weginformationen und importieren oder exportieren Sie GPX-Dateien.',
+  'app.title': seoMetadata.de.title,
+  'app.description': seoMetadata.de.description,
   'about.open': 'Über Via Helvetica',
   'about.title': 'Via Helvetica',
   'about.tagline':
@@ -426,10 +423,8 @@ const germanTranslations: Record<TranslationKey, string> = {
 };
 
 const italianTranslations: Record<TranslationKey, string> = {
-  'app.title':
-    'Via Helvetica – Pianificatore di itinerari escursionistici in Svizzera',
-  'app.description':
-    'Pianifica itinerari escursionistici in Svizzera sulle carte ufficiali, consulta dislivello e informazioni sui sentieri e importa o esporta file GPX.',
+  'app.title': seoMetadata.it.title,
+  'app.description': seoMetadata.it.description,
   'about.open': 'Informazioni su Via Helvetica',
   'about.title': 'Via Helvetica',
   'about.tagline':
@@ -629,9 +624,8 @@ const italianTranslations: Record<TranslationKey, string> = {
 };
 
 const englishTranslations: Record<TranslationKey, string> = {
-  'app.title': 'Via Helvetica – Swiss Hiking Route Planner',
-  'app.description':
-    'Plan hiking routes in Switzerland on official maps, inspect elevation and trail information, and import or export GPX files. Free and open source.',
+  'app.title': seoMetadata.en.title,
+  'app.description': seoMetadata.en.description,
   'about.open': 'About Via Helvetica',
   'about.title': 'Via Helvetica',
   'about.tagline':

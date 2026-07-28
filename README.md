@@ -36,7 +36,7 @@ application can remain usable without an account or a project-owned backend.
 | Import and export | Read-only GPX loading with route statistics and elevation profile, plus named GPX export for editable and selected SwitzerlandMobility routes with simplified geometry and smoothed elevations when available |
 | Safety | Official hiking-trail closures and detours, plus military shooting notices and danger zones with localized details |
 | Public transport | Passenger-relevant stops, mode-specific symbols, next departures grouped by date, and links to the official SBB/CFF/FFS timetable |
-| Interface | Compact floating controls, no permanent toolbar, French, German, Italian, and English translations, and a localized About dialog with project, support, professional profile, safety, and data-credit information |
+| Interface | Compact floating controls, no permanent toolbar, French, German, Italian, and English translations with shareable localized URLs, and a localized About dialog with project, support, professional profile, safety, and data-credit information |
 
 ## Project principles
 
@@ -77,6 +77,8 @@ http://localhost:5173/
 - Use the search field to find an official place or paste decimal WGS 84 or
   Swiss LV95 coordinates. Recognized coordinates are handled locally without a
   search-provider request.
+- Changing the interface language updates the shareable `/fr/`, `/de/`, `/it/`,
+  or `/en/` URL without reloading the map or the current itinerary.
 - The application uses official portrayals for map backgrounds, hiking trails,
   and the optional **Hiking SwitzerlandMobility** routes. The latter is disabled
   by default. Information layers can be shown, hidden, or made more or less
@@ -203,6 +205,10 @@ Build the production bundle with:
 ```bash
 npm run build
 ```
+
+The build first generates localized HTML entries for `/fr/`, `/de/`, `/it/`,
+and `/en/` from the shared metadata source, then bundles them as a Vite
+multi-page application.
 
 Preview it locally with:
 
