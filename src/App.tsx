@@ -464,6 +464,8 @@ export default function App() {
         .join(' ')}
       ref={appRef}
     >
+      <h1 className="visually-hidden">{t('app.title')}</h1>
+
       <div
         ref={mapTargetRef}
         className="map"
