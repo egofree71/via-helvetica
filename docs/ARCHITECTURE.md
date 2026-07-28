@@ -393,6 +393,8 @@ Pointer interaction stays separate from route calculation:
 
 - waypoint or route-section hit detection begins a possible gesture;
 - pointer movement renders temporary straight previews only;
+- dragging near a viewport edge auto-pans the OpenLayers view and keeps the
+  preview attached to the coordinate under the stationary pointer;
 - no routing request is performed during drag;
 - release emits one semantic move, insertion, or deletion request;
 - `routeEditing.ts` rebuilds only affected sections using the snap mode selected
@@ -815,7 +817,8 @@ OpenLayers canvas rendering and complete pointer workflows remain manually
 validated where a browser-level test would cost more than it protects. Important
 manual checks include:
 
-- mouse, pen, and touch route editing;
+- mouse, pen, and touch route editing, including edge auto-pan while moving or
+  inserting a waypoint;
 - responsive control collisions, translated layer-label wrapping, and the
   expandable opacity sliders on narrow and short viewports;
 - official hiking and SwitzerlandMobility portrayals across useful zooms and

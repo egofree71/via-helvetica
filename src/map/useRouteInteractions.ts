@@ -422,6 +422,9 @@ export function useRouteInteractions(
 
     return () => {
       mapTarget.removeEventListener('pointerleave', hideRouteContextHint);
+      // Deactivation stops any edge auto-pan frame before the interaction loses
+      // its map, while the committed display is restored below.
+      interaction.setActive(false);
       map.removeInteraction(interaction);
       clearRouteDragCursor(map);
       routeDragStateRef.current = null;

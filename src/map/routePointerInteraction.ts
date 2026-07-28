@@ -1,8 +1,9 @@
 /**
  * Business context: provides the low-level OpenLayers pointer behaviour used to
  * reshape an editable route. It identifies stored waypoints and incoming route
- * sections under the pointer, prevents map panning during an edit, and reports
- * semantic drag events without owning immutable history or network routing.
+ * sections under the pointer, reserves normal map panning while an edit owns the
+ * pointer, auto-pans near viewport edges, and reports semantic drag events
+ * without owning immutable history or network routing.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import Feature from 'ol/Feature.js';
@@ -10,6 +11,7 @@ import PointerInteraction from 'ol/interaction/Pointer.js';
 import type Map from 'ol/Map.js';
 import type MapBrowserEvent from 'ol/MapBrowserEvent.js';
 import type { Pixel } from 'ol/pixel.js';
+import type { Size } from 'ol/size.js';
 import {
   getRouteWaypointIndex,
   type RouteDisplay,
@@ -108,6 +110,22 @@ const ROUTE_EDIT_DRAG_DISTANCE_PX = 3;
  * A larger threshold absorbs normal finger tremor without making the drag feel delayed.
  */
 const ROUTE_TOUCH_EDIT_DRAG_DISTANCE_PX = 8;
+/**
+ * Edge zone in screen pixels that activates route-drag auto-pan. Enlarging the
+ * zone starts map movement earlier; reducing it leaves less time before the
+ * pointer reaches the viewport boundary.
+ */
+const ROUTE_DRAG_AUTO_PAN_EDGE_ZONE_PX = 56;
+/**
+ * Maximum per-axis route-drag auto-pan speed in screen pixels per second. A higher value
+ * reaches off-screen destinations faster but makes precise edge placement harder.
+ */
+const ROUTE_DRAG_AUTO_PAN_MAX_AXIS_SPEED_PX_PER_SECOND = 360;
+/**
+ * Maximum elapsed seconds consumed by one animation frame. Capping background-tab
+ * delays prevents a large map jump when rendering resumes.
+ */
+const ROUTE_DRAG_AUTO_PAN_MAX_FRAME_SECONDS = 0.05;
 
 /** Returns squared horizontal distance in map units to avoid a square root during deduplication. */
 function coordinateDistanceSquared(
@@ -153,6 +171,87 @@ function getClosestPointOnSegment(
       closestCoordinate,
     ),
   };
+}
+
+/**
+ * Calculates one axis of edge-driven auto-pan velocity. The quadratic response
+ * keeps movement gentle when entering the edge zone while still reaching the
+ * configured maximum at the viewport boundary.
+ *
+ * @param position - Pointer position in screen pixels on the inspected axis.
+ * @param viewportLength - Current viewport length in screen pixels.
+ * @returns Signed velocity in screen pixels per second.
+ */
+function getRouteDragAutoPanAxisVelocity(
+  position: number,
+  viewportLength: number,
+): number {
+  if (viewportLength <= 0) {
+    return 0;
+  }
+
+  const edgeZone = Math.min(
+    ROUTE_DRAG_AUTO_PAN_EDGE_ZONE_PX,
+    viewportLength / 2,
+  );
+
+  if (position < edgeZone) {
+    const proximity = Math.min(1, (edgeZone - position) / edgeZone);
+    return -ROUTE_DRAG_AUTO_PAN_MAX_AXIS_SPEED_PX_PER_SECOND * proximity ** 2;
+  }
+
+  const farEdgeStart = viewportLength - edgeZone;
+
+  if (position > farEdgeStart) {
+    const proximity = Math.min(
+      1,
+      (position - farEdgeStart) / edgeZone,
+    );
+    return ROUTE_DRAG_AUTO_PAN_MAX_AXIS_SPEED_PX_PER_SECOND * proximity ** 2;
+  }
+
+  return 0;
+}
+
+/**
+ * Resolves edge-driven horizontal and vertical velocities for one pointer.
+ *
+ * @param pixel - Pointer position relative to the map viewport.
+ * @param size - Current map viewport size in screen pixels.
+ * @returns Signed horizontal and vertical velocities in screen pixels per second.
+ */
+function getRouteDragAutoPanVelocity(
+  pixel: Pixel,
+  size: Size,
+): Pixel {
+  return [
+    getRouteDragAutoPanAxisVelocity(pixel[0], size[0]),
+    getRouteDragAutoPanAxisVelocity(pixel[1], size[1]),
+  ];
+}
+
+/**
+ * Converts a screen-space movement into the equivalent map-coordinate delta.
+ * The rotation-aware conversion keeps auto-pan direction correct on a rotated
+ * map without depending on a render frame that may lag behind `View.setCenter`.
+ *
+ * @param pixelDelta - Horizontal and vertical movement in screen pixels.
+ * @param resolution - Current map units represented by one screen pixel.
+ * @param rotation - Current map rotation in radians.
+ * @returns Equivalent delta in map coordinates.
+ */
+function screenPixelDeltaToMapDelta(
+  pixelDelta: Pixel,
+  resolution: number,
+  rotation: number,
+): Coordinate {
+  const cosine = Math.cos(rotation);
+  const sine = Math.sin(rotation);
+
+  return [
+    resolution * (pixelDelta[0] * cosine + pixelDelta[1] * sine),
+    resolution * (pixelDelta[0] * sine - pixelDelta[1] * cosine),
+  ];
 }
 
 /** Updates contextual route cursor classes without overriding the busy cursor. */
@@ -292,7 +391,9 @@ export function getRouteSegmentHitAtPixel(
  *
  * The interaction owns no route data. During dragging it reports coordinates
  * to the application, which draws a temporary straight preview and performs
- * network recalculation only after release. Mouse and pen presses may select
+ * network recalculation only after release. A genuine drag held near a viewport
+ * edge moves the view through a frame-rate-independent auto-pan loop while the
+ * preview remains attached to the pointer. Mouse and pen presses may select
  * waypoints or sections. A finger may also select a section when the gesture
  * starts very close to the displayed itinerary; gestures starting elsewhere
  * remain available to OpenLayers map navigation. A touch tap on a waypoint is
@@ -310,17 +411,212 @@ export function createRouteDragInteraction(
   let isDragging = false;
   let isTouchInteraction = false;
   let hasStartedEdit = false;
+  let latestDragPixel: Pixel | null = null;
+  let latestDragCoordinate: Coordinate | null = null;
+  let autoPanMap: Map | null = null;
+  let autoPanFrameId: number | null = null;
+  let autoPanPreviousTimestamp: number | null = null;
+
+  const stopAutoPan = () => {
+    if (autoPanFrameId !== null) {
+      window.cancelAnimationFrame(autoPanFrameId);
+    }
+
+    autoPanMap = null;
+    autoPanFrameId = null;
+    autoPanPreviousTimestamp = null;
+  };
 
   const resetDragState = () => {
+    stopAutoPan();
     dragTarget = null;
     startPixel = null;
     maximumPixelDistanceSquared = 0;
     isDragging = false;
     isTouchInteraction = false;
     hasStartedEdit = false;
+    latestDragPixel = null;
+    latestDragCoordinate = null;
+  };
+
+  /**
+   * Resolves a release coordinate from the latest drag sample. Auto-pan updates
+   * that sample even while the physical pointer is stationary, so relying only
+   * on the final browser event could commit the pre-pan map position.
+   *
+   * @param map - Map whose current resolution and rotation convert pixel movement.
+   * @param pixel - Final pointer pixel reported by OpenLayers.
+   * @param fallbackCoordinate - Browser-event coordinate used before any drag sample.
+   * @returns Map coordinate that includes every applied auto-pan displacement.
+   */
+  const resolveReleaseCoordinate = (
+    map: Map,
+    pixel: Pixel,
+    fallbackCoordinate: Coordinate,
+  ): Coordinate => {
+    if (!latestDragPixel || !latestDragCoordinate) {
+      return [...fallbackCoordinate];
+    }
+
+    const view = map.getView();
+    const resolution = view.getResolution();
+
+    if (resolution === undefined || resolution <= 0) {
+      return [...latestDragCoordinate];
+    }
+
+    const pixelDelta: Pixel = [
+      pixel[0] - latestDragPixel[0],
+      pixel[1] - latestDragPixel[1],
+    ];
+    const mapDelta = screenPixelDeltaToMapDelta(
+      pixelDelta,
+      resolution,
+      view.getRotation(),
+    );
+
+    return [
+      latestDragCoordinate[0] + mapDelta[0],
+      latestDragCoordinate[1] + mapDelta[1],
+    ];
   };
 
   let interaction: PointerInteraction;
+
+  /**
+   * Advances edge auto-pan by one animation frame and updates the straight
+   * preview with the centre delta actually accepted by the constrained view.
+   *
+   * @param timestamp - High-resolution animation timestamp in milliseconds.
+   */
+  const runAutoPanFrame = (timestamp: number) => {
+    autoPanFrameId = null;
+
+    if (
+      !interaction.getActive() ||
+      !autoPanMap ||
+      !dragTarget ||
+      !isDragging ||
+      !hasStartedEdit ||
+      !latestDragPixel ||
+      !latestDragCoordinate
+    ) {
+      stopAutoPan();
+      return;
+    }
+
+    const size = autoPanMap.getSize();
+
+    if (!size) {
+      stopAutoPan();
+      return;
+    }
+
+    const velocity = getRouteDragAutoPanVelocity(latestDragPixel, size);
+
+    if (velocity[0] === 0 && velocity[1] === 0) {
+      stopAutoPan();
+      return;
+    }
+
+    if (autoPanPreviousTimestamp !== null) {
+      const elapsedSeconds = Math.min(
+        ROUTE_DRAG_AUTO_PAN_MAX_FRAME_SECONDS,
+        Math.max(0, timestamp - autoPanPreviousTimestamp) / 1_000,
+      );
+      const view = autoPanMap.getView();
+      const resolution = view.getResolution();
+      const center = view.getCenter();
+
+      if (resolution === undefined || resolution <= 0 || !center) {
+        stopAutoPan();
+        return;
+      }
+
+      if (elapsedSeconds > 0) {
+        const requestedDelta = screenPixelDeltaToMapDelta(
+          [velocity[0] * elapsedSeconds, velocity[1] * elapsedSeconds],
+          resolution,
+          view.getRotation(),
+        );
+        const previousCenter: Coordinate = [...center];
+
+        view.setCenter([
+          previousCenter[0] + requestedDelta[0],
+          previousCenter[1] + requestedDelta[1],
+        ]);
+
+        const appliedCenter = view.getCenter();
+
+        if (!appliedCenter) {
+          stopAutoPan();
+          return;
+        }
+
+        const appliedDelta: Coordinate = [
+          appliedCenter[0] - previousCenter[0],
+          appliedCenter[1] - previousCenter[1],
+        ];
+
+        // The preview follows the coordinate under the stationary pointer.
+        // Reusing the center delta avoids waiting for OpenLayers to render a
+        // new pixel-to-coordinate transform before the next animation frame.
+        if (appliedDelta[0] !== 0 || appliedDelta[1] !== 0) {
+          latestDragCoordinate = [
+            latestDragCoordinate[0] + appliedDelta[0],
+            latestDragCoordinate[1] + appliedDelta[1],
+          ];
+          callbacks.onDrag(dragTarget, [...latestDragCoordinate]);
+        } else {
+          // The configured map extent rejected further movement. Keeping an
+          // animation loop alive at the boundary would waste one frame forever.
+          stopAutoPan();
+          return;
+        }
+      }
+    }
+
+    autoPanPreviousTimestamp = timestamp;
+    autoPanFrameId = window.requestAnimationFrame(runAutoPanFrame);
+  };
+
+  /**
+   * Starts, continues, or stops edge auto-pan for the latest drag sample.
+   *
+   * @param map - OpenLayers map currently owning the pointer interaction.
+   */
+  const updateAutoPan = (map: Map) => {
+    if (
+      !isDragging ||
+      !hasStartedEdit ||
+      !latestDragPixel ||
+      !latestDragCoordinate
+    ) {
+      stopAutoPan();
+      return;
+    }
+
+    const size = map.getSize();
+
+    if (!size) {
+      stopAutoPan();
+      return;
+    }
+
+    const velocity = getRouteDragAutoPanVelocity(latestDragPixel, size);
+
+    if (velocity[0] === 0 && velocity[1] === 0) {
+      stopAutoPan();
+      return;
+    }
+
+    autoPanMap = map;
+
+    if (autoPanFrameId === null) {
+      autoPanPreviousTimestamp = null;
+      autoPanFrameId = window.requestAnimationFrame(runAutoPanFrame);
+    }
+  };
 
   interaction = new PointerInteraction({
     handleDownEvent: (event: MapBrowserEvent) => {
@@ -438,7 +734,10 @@ export function createRouteDragInteraction(
       }
 
       if (hasStartedEdit) {
-        callbacks.onDrag(dragTarget, [...event.coordinate]);
+        latestDragPixel = [...event.pixel];
+        latestDragCoordinate = [...event.coordinate];
+        callbacks.onDrag(dragTarget, [...latestDragCoordinate]);
+        updateAutoPan(event.map);
       }
     },
     handleMoveEvent: (event: MapBrowserEvent) => {
@@ -516,6 +815,11 @@ export function createRouteDragInteraction(
         !didDrag &&
         !hasStartedEdit;
       const shouldReportRelease = hasStartedEdit;
+      const releaseCoordinate = resolveReleaseCoordinate(
+        event.map,
+        event.pixel,
+        event.coordinate,
+      );
 
       resetDragState();
       callbacks.onHover(null, null);
@@ -526,7 +830,7 @@ export function createRouteDragInteraction(
       } else if (shouldReportRelease) {
         callbacks.onEnd(
           releasedTarget,
-          [...event.coordinate],
+          releaseCoordinate,
           didDrag,
           [...event.pixel],
         );
@@ -535,6 +839,12 @@ export function createRouteDragInteraction(
       return false;
     },
     stopDown: (handled) => handled,
+  });
+
+  interaction.on('change:active', () => {
+    if (!interaction.getActive()) {
+      resetDragState();
+    }
   });
 
   return interaction;
