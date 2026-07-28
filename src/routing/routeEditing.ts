@@ -6,6 +6,8 @@
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import type { DynamicRoutingNetworkLoader } from './dynamicRoutingNetwork';
+import type { RoutedNetworkPath } from './networkRouter';
+import { assertNetworkRouteSectionDistance } from './routeSectionLimit';
 import {
   coordinateDistanceSquared,
   type RouteClosure,
@@ -72,6 +74,44 @@ export function connectRoutedSegmentEndpoint(
 }
 
 /**
+ * Requests one network path only after the intended section passes the
+ * product-level distance rule. Keeping this guard beside every routing call
+ * prevents future editing workflows from bypassing the same pre-Worker check.
+ *
+ * @param startCoordinate - Intended section start in LV95.
+ * @param endCoordinate - Intended section end in LV95.
+ * @param routingLoader - Bounded dynamic swissTLM3D network loader.
+ * @param signal - Cancellation signal owned by the current edit.
+ * @returns Routed geometry, or `null` when normal coverage is insufficient.
+ * @throws {RouteSectionTooLongError} Before invoking the Worker when the direct
+ * distance exceeds the product limit.
+ */
+export async function requestNetworkRouteSection(
+  startCoordinate: Coordinate,
+  endCoordinate: Coordinate,
+  routingLoader: DynamicRoutingNetworkLoader,
+  signal: AbortSignal,
+): Promise<RoutedNetworkPath | null> {
+  assertNetworkRouteSectionDistance(startCoordinate, endCoordinate);
+  return routingLoader.route(startCoordinate, endCoordinate, signal);
+}
+
+/**
+ * Validates every intended section of one compound edit before its first
+ * Worker-backed operation. This prevents a valid first half from loading data
+ * before a later half reveals that the complete edit is ambiguous.
+ * @param sections - Intended LV95 endpoint pairs in edit order.
+ * @throws {RouteSectionTooLongError} When any pair exceeds the product limit.
+ */
+function assertNetworkRouteSectionsDistance(
+  sections: readonly (readonly [Coordinate, Coordinate])[],
+): void {
+  for (const [startCoordinate, endCoordinate] of sections) {
+    assertNetworkRouteSectionDistance(startCoordinate, endCoordinate);
+  }
+}
+
+/**
  * Creates a direct loop-closing section between the last and first waypoints.
  * @param steps - Ordered route steps.
  * @returns A straight closure, or `null` when fewer than two points exist.
@@ -112,9 +152,10 @@ export async function rebuildFixedRouteSection(
   signal: AbortSignal,
 ): Promise<RouteClosure> {
   if (intendedMode === 'network') {
-    const routedPath = await routingLoader.route(
+    const routedPath = await requestNetworkRouteSection(
       startCoordinate,
       endCoordinate,
+      routingLoader,
       signal,
     );
 
@@ -171,6 +212,36 @@ export async function rebuildRouteAfterWaypointMove(
     return state;
   }
 
+  if (editMode === 'network') {
+    const intendedSections: Array<readonly [Coordinate, Coordinate]> = [];
+    const previousStep = steps[waypointIndex - 1];
+    const nextStep = steps[waypointIndex + 1];
+
+    if (previousStep) {
+      intendedSections.push([previousStep.waypoint, targetCoordinate]);
+    }
+
+    if (nextStep) {
+      intendedSections.push([targetCoordinate, nextStep.waypoint]);
+    }
+
+    if (closure && waypointIndex === 0) {
+      const lastStep = steps[steps.length - 1];
+
+      if (lastStep) {
+        intendedSections.push([lastStep.waypoint, targetCoordinate]);
+      }
+    } else if (closure && waypointIndex === steps.length - 1) {
+      const firstStep = steps[0];
+
+      if (firstStep) {
+        intendedSections.push([targetCoordinate, firstStep.waypoint]);
+      }
+    }
+
+    assertNetworkRouteSectionsDistance(intendedSections);
+  }
+
   let movedWaypoint: Coordinate;
 
   if (waypointIndex === 0) {
@@ -210,9 +281,10 @@ export async function rebuildRouteAfterWaypointMove(
     const previousStep = steps[waypointIndex - 1];
 
     if (editMode === 'network') {
-      const routedPath = await routingLoader.route(
+      const routedPath = await requestNetworkRouteSection(
         previousStep.waypoint,
         targetCoordinate,
+        routingLoader,
         signal,
       );
 
@@ -308,12 +380,21 @@ export async function rebuildRouteAfterWaypointInsertion(
 
   if (stepIndex === steps.length && closure && steps.length >= 2) {
     const previousStep = steps[steps.length - 1];
+
+    if (editMode === 'network') {
+      assertNetworkRouteSectionsDistance([
+        [previousStep.waypoint, targetCoordinate],
+        [targetCoordinate, steps[0].waypoint],
+      ]);
+    }
+
     let insertedStep: RouteStep;
 
     if (editMode === 'network') {
-      const routedPath = await routingLoader.route(
+      const routedPath = await requestNetworkRouteSection(
         previousStep.waypoint,
         targetCoordinate,
+        routingLoader,
         signal,
       );
 
@@ -355,12 +436,20 @@ export async function rebuildRouteAfterWaypointInsertion(
     return state;
   }
 
+  if (editMode === 'network') {
+    assertNetworkRouteSectionsDistance([
+      [previousStep.waypoint, targetCoordinate],
+      [targetCoordinate, destinationStep.waypoint],
+    ]);
+  }
+
   let insertedStep: RouteStep;
 
   if (editMode === 'network') {
-    const routedPath = await routingLoader.route(
+    const routedPath = await requestNetworkRouteSection(
       previousStep.waypoint,
       targetCoordinate,
+      routingLoader,
       signal,
     );
 

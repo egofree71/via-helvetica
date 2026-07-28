@@ -163,6 +163,7 @@ calculations use LV95 (`EPSG:2056`) metres.
 
 | Constant | Value | Purpose |
 |---|---:|---|
+| Maximum direct network section | 15,000 m | Requires intermediate waypoints when one snapped section would leave the intended hiking corridor ambiguous |
 | Cell size | 2,400 m × 2,400 m | Stable unit for loading, caching, and corridor signatures |
 | Maximum snap distance | 260 m | Limits attachment to unrelated roads |
 | Initial route corridor radius | 1 cell | Loads the crossed cells plus one neighbour on every side |
@@ -172,7 +173,33 @@ calculations use LV95 (`EPSG:2056`) metres.
 Cell keys use stable integer column/row addresses. Extents are derived directly
 from those indexes.
 
-### 4.3 First-waypoint footprint
+### 4.3 Main-thread section admissibility
+
+The first waypoint remains a local snap operation and has no incoming section.
+Every later network-routed section is checked on the main thread before Worker
+creation or provider traffic. Its intended LV95 endpoints may be at most 15 km
+apart in direct horizontal distance.
+
+This is a product rule rather than an estimate of exact request volume. Beyond
+that distance, two points do not express a hiker's intended valley, pass, or
+side of a mountain clearly enough for the experimental router to choose a
+meaningful corridor. The user receives the measured distance and is asked to add
+an intermediate waypoint.
+
+The same check applies to:
+
+- endpoint addition;
+- moved-waypoint incoming, outgoing, and loop-closing sections;
+- both halves created by insertion;
+- neighbour reconnection after deletion;
+- loop closure.
+
+Explicit straight mode is not limited because it performs no network loading
+and represents geometry chosen directly by the user. Routing helpers repeat the
+check immediately before the Worker facade as a defensive invariant for future
+callers.
+
+### 4.4 First-waypoint footprint
 
 The first waypoint does not load a complete route corridor. It calculates the
 closed square snapping box around the selected coordinate and loads only cells
@@ -186,7 +213,7 @@ The point is then snapped against the resulting local graph. If no walkable
 network exists or no segment falls within the maximum snap distance, the engine
 returns `null` so the editor may place the point freely.
 
-### 4.4 Route corridor
+### 4.5 Route corridor
 
 For later waypoints, an integer grid line walk identifies the cells crossed by
 the direct segment between endpoints. Each crossed cell is expanded by the
@@ -196,7 +223,7 @@ This corridor model avoids downloading the complete rectangular bounding box
 between distant points. It is still a planning heuristic: a route that must make
 a large detour outside both corridor widths can remain unresolved.
 
-### 4.5 Narrow then wider retry
+### 4.6 Narrow then wider retry
 
 Each route operation:
 
@@ -510,7 +537,9 @@ With snapping disabled, a new section is an exact direct line.
 With snapping enabled:
 
 - the first waypoint is snapped locally when possible;
-- later waypoints request a routed section;
+- later waypoints farther than 15 km in direct LV95 distance are rejected before
+  Worker activity and require an intermediate point;
+- admitted later waypoints request a routed section;
 - a normal no-path result becomes a straight section;
 - the global snap option remains enabled for the next operation.
 
@@ -534,9 +563,11 @@ Unrelated sections retain their exact stored geometry.
 
 ### 13.5 Error versus fallback
 
-A straight fallback is allowed for normal absence of coverage or connectivity.
-It is not used to hide:
+A straight fallback is allowed for normal absence of coverage or connectivity
+only after a section has passed the direct-distance product rule. It is not used
+to hide:
 
+- a network section longer than 15 km;
 - network transport failure;
 - response parsing failure;
 - unresolved required-road truncation;
@@ -567,6 +598,7 @@ request has been cancelled or replaced.
 
 | Outcome | Meaning | Editor behaviour |
 |---|---|---|
+| `RouteSectionTooLongError` | Intended network section exceeds 15 km direct distance | Preserve the route and request an intermediate waypoint before Worker activity |
 | `null` from local snap | Empty graph or no nearby segment | Place first waypoint freely |
 | `null` after both corridors | Normal missing coverage or connectivity | Store that section as straight |
 | Hiking enrichment unavailable | Optional provider capability rejected | Continue roads-only and show one notice |
@@ -578,7 +610,12 @@ request has been cancelled or replaced.
 
 ## 16. Tests
 
-### 16.1 Pure grid tests
+### 16.1 Pure limits and grid tests
+
+`routeSectionLimit` protects the exact 15 km boundary and the actionable typed
+error without creating a Worker. `routeEditing` tests verify that additions and
+reconnections reject long network sections before calling the loader while
+straight mode remains unrestricted.
 
 `routingGrid` behaviour is tested without importing Worker or graph code:
 
@@ -723,6 +760,7 @@ implementations replaceable without coupling React components to graph details.
 Update this document when any of the following changes:
 
 - routing provider or layer identifiers;
+- direct network-section distance policy;
 - cell, corridor, subdivision, timeout, retry, or concurrency policy;
 - Worker protocol;
 - graph-node identity or walkability rules;

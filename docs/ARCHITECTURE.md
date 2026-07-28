@@ -354,6 +354,7 @@ sequenceDiagram
     alt Straight mode
         UI->>UI: Build direct section
     else Snapping enabled
+        UI->>UI: Validate the 15 km direct section limit
         UI->>Worker: Snap or route request
         Worker->>GeoAdmin: Load missing bounded cells
         GeoAdmin-->>Worker: Roads and optional hiking geometry
@@ -367,7 +368,14 @@ sequenceDiagram
 ```
 
 The first snapped waypoint loads only cells intersecting its maximum snapping
-box. Later sections load a corridor between the existing endpoint and the new
+box. Before any later section reaches the Worker, the editable-route controller
+checks that its intended endpoints are no more than 15 km apart in direct LV95
+distance. The same product rule covers additions, waypoint movement, insertion,
+deletion reconnection, and loop closure. A rejected edit keeps the committed
+route unchanged and asks for an intermediate waypoint; explicit straight mode
+remains unrestricted because it does not load swissTLM3D data.
+
+Admitted sections load a corridor between the existing endpoint and the new
 selection. The routing engine first tries a narrow corridor and retries once
 with a wider corridor when coverage or graph connectivity is insufficient.
 
@@ -648,6 +656,7 @@ React/OpenLayers thread. The map remains interactive while routing work runs.
 
 Provider activity is constrained by:
 
+- a 15 km product-level direct-distance limit checked before network work;
 - regular routing cells;
 - corridor-based loading rather than national data loading;
 - a maximum cell count per operation;
@@ -709,6 +718,7 @@ the capability that caused it.
 | Search | Show a temporary localized error and allow immediate retry |
 | Geolocation and fullscreen | Report capability-specific failure without changing route state |
 | Information overlays | Keep map and route usable; abort stale work; show local popup or layer error |
+| Routed section over 15 km direct distance | Preserve the current route and ask for an intermediate waypoint before Worker activity |
 | Routing coverage miss | Free first waypoint or straight section fallback; keep snap mode enabled |
 | Routing provider or parsing error | Preserve current route; report an actionable error |
 | Optional hiking enrichment | Switch to roads-only mode and continue required routing |
@@ -791,6 +801,7 @@ appearance. They cover:
 - information-click lifecycle when an existing public-route panel is replaced,
   including preservation of the new identify request;
 - one global elevation-profile sampling budget across independent segments;
+- the 15 km network-section boundary and pre-Worker rejection across route edits;
 - routing-grid footprints;
 - Worker request correlation, typed errors, cancellation, and disposal;
 - dynamic routing engine caching, retry, fallback, and provider errors.

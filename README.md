@@ -86,8 +86,11 @@ http://localhost:5173/
 
 - Activate route creation, then click or tap the map to place waypoints.
 - Snapping is enabled by default and can be changed before the first waypoint.
-  With snapping enabled, sections follow available swissTLM3D roads and paths.
-  With snapping disabled, sections are created as straight lines.
+  With snapping enabled, sections follow available swissTLM3D roads and paths;
+  consecutive routed waypoints must remain within 15 km direct distance, so a
+  longer crossing needs intermediate points that indicate the intended corridor.
+  With snapping disabled, sections are created as straight lines without that
+  network-routing limit.
 - Drag an existing waypoint to move it, click it to delete it, or drag a route
   section to insert a new waypoint.
 - Use the route controls to undo, redo, reverse, close or reopen a loop,

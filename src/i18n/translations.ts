@@ -100,6 +100,8 @@ const frenchTranslations = {
     'Aucun chemin swissTLM3D n’a été trouvé à proximité de ce point.',
   'route.noConnectedPath':
     'Aucun chemin connecté n’a été trouvé entre ces deux points.',
+  'route.sectionTooLong':
+    'Cette section ferait {distance} km à vol d’oiseau. Ajoutez un point intermédiaire : le suivi des chemins est limité à {maximum} km entre deux points.',
   'route.areaTooLarge':
     'Ce segment est trop long pour le chargement dynamique actuel. Ajoutez un point intermédiaire.',
   'route.networkLoadError':
@@ -301,6 +303,8 @@ const germanTranslations: Record<TranslationKey, string> = {
     'In der Nähe dieses Punkts wurde kein swissTLM3D-Weg gefunden.',
   'route.noConnectedPath':
     'Zwischen diesen beiden Punkten wurde kein verbundener Weg gefunden.',
+  'route.sectionTooLong':
+    'Dieser Abschnitt wäre in Luftlinie {distance} km lang. Fügen Sie einen Zwischenpunkt hinzu: Die Wegführung ist zwischen zwei Punkten auf {maximum} km begrenzt.',
   'route.areaTooLarge':
     'Dieses Segment ist für das aktuelle dynamische Laden zu lang. Fügen Sie einen Zwischenpunkt hinzu.',
   'route.networkLoadError':
@@ -501,6 +505,8 @@ const italianTranslations: Record<TranslationKey, string> = {
     'Nessun percorso swissTLM3D è stato trovato vicino a questo punto.',
   'route.noConnectedPath':
     'Nessun percorso collegato è stato trovato tra questi due punti.',
+  'route.sectionTooLong':
+    'Questo tratto sarebbe lungo {distance} km in linea d’aria. Aggiungi un punto intermedio: il calcolo sui sentieri è limitato a {maximum} km tra due punti.',
   'route.areaTooLarge':
     'Questo segmento è troppo lungo per il caricamento dinamico attuale. Aggiungi un punto intermedio.',
   'route.networkLoadError':
@@ -701,6 +707,8 @@ const englishTranslations: Record<TranslationKey, string> = {
     'No swissTLM3D path was found near this point.',
   'route.noConnectedPath':
     'No connected path was found between these two points.',
+  'route.sectionTooLong':
+    'This section would be {distance} km as the crow flies. Add an intermediate waypoint: path-following is limited to {maximum} km between two points.',
   'route.areaTooLarge':
     'This segment is too long for the current dynamic loading strategy. Add an intermediate point.',
   'route.networkLoadError':

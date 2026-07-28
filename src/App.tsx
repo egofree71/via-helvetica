@@ -72,7 +72,7 @@ function createRouteExportDefaultName(baseName: string, date = new Date()): stri
 
 /** Root application coordinator for UI state and map-level workflows. */
 export default function App() {
-  const { language, t } = useI18n();
+  const { language, locale, t } = useI18n();
   const appRef = useRef<HTMLElement>(null);
   const mapTargetRef = useRef<HTMLDivElement>(null);
 
@@ -203,6 +203,7 @@ export default function App() {
   } = useEditableRoute({
     mapRuntimeRef,
     mapTargetRef,
+    locale,
     t,
   });
 

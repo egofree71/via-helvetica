@@ -1,19 +1,37 @@
 /**
- * Lifecycle regression tests for the editable-route controller. They protect
- * the routing Worker notice subscription against React Strict Mode's deliberate
- * setup-cleanup-setup development cycle.
+ * Business context: protects editable-route orchestration that cannot be
+ * covered by pure geometry tests, including React Strict Mode Worker lifecycle
+ * and synchronous rejection of ambiguous long sections before routing starts.
  */
 import { StrictMode, act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useEditableRoute } from './useEditableRoute';
+import type { Coordinate } from 'ol/coordinate.js';
+import type { RouteState } from './routeState';
+import { useEditableRoute, type EditableRouteController } from './useEditableRoute';
+
+interface CapturedRouteInteractions {
+  onAppendEndpoint: (
+    expectedState: RouteState,
+    coordinate: Coordinate,
+  ) => void;
+}
 
 const loaderState = vi.hoisted(() => ({
   instances: [] as Array<{
     disposed: boolean;
+    routeCalls: number;
     emit: (notice: 'hiking-enrichment-unavailable') => void;
   }>,
 }));
+
+const interactionState = vi.hoisted(() => ({
+  options: null as CapturedRouteInteractions | null,
+}));
+
+const controllerState: { current: EditableRouteController | null } = {
+  current: null,
+};
 
 vi.mock('../routing/dynamicRoutingNetwork', () => {
   class RoutingAreaTooLargeError extends Error {}
@@ -23,6 +41,7 @@ vi.mock('../routing/dynamicRoutingNetwork', () => {
       (notice: 'hiking-enrichment-unavailable') => void
     >();
     disposed = false;
+    routeCalls = 0;
 
     constructor() {
       loaderState.instances.push(this);
@@ -46,6 +65,7 @@ vi.mock('../routing/dynamicRoutingNetwork', () => {
     }
 
     route(): Promise<null> {
+      this.routeCalls += 1;
       return Promise.resolve(null);
     }
 
@@ -62,11 +82,15 @@ vi.mock('../routing/dynamicRoutingNetwork', () => {
 });
 
 vi.mock('./useRouteInteractions', () => ({
-  useRouteInteractions: () => ({
-    routeContextHint: null,
-    isInteractionActive: false,
-    isPointerInteractionActive: () => false,
-  }),
+  useRouteInteractions: (options: CapturedRouteInteractions) => {
+    interactionState.options = options;
+
+    return {
+      routeContextHint: null,
+      isInteractionActive: false,
+      isPointerInteractionActive: () => false,
+    };
+  },
 }));
 
 vi.mock('./route', () => ({
@@ -77,21 +101,36 @@ function Harness() {
   const controller = useEditableRoute({
     mapRuntimeRef: { current: null },
     mapTargetRef: { current: null },
-    t: (key) =>
-      key === 'route.hikingEnrichmentUnavailable'
-        ? 'Roads-only routing warning'
-        : key,
-  });
+    locale: 'en-CH',
+    t: (key, parameters) => {
+      if (key === 'route.hikingEnrichmentUnavailable') {
+        return 'Roads-only routing warning';
+      }
 
-  return createElement('div', null, controller.routeMessage);
+      if (key === 'route.sectionTooLong') {
+        return `Section ${parameters?.distance} km / ${parameters?.maximum} km`;
+      }
+
+      return key;
+    },
+  });
+  controllerState.current = controller;
+
+  return createElement(
+    'div',
+    null,
+    `${controller.routeMessage}|${controller.isRouteOperationPending}`,
+  );
 }
 
-describe('useEditableRoute routing notice lifecycle', () => {
+describe('useEditableRoute orchestration', () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
 
   beforeEach(() => {
     loaderState.instances.length = 0;
+    interactionState.options = null;
+    controllerState.current = null;
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -123,7 +162,32 @@ describe('useEditableRoute routing notice lifecycle', () => {
       loaderState.instances[1].emit('hiking-enrichment-unavailable');
     });
 
-    expect(container.textContent).toBe('Roads-only routing warning');
+    expect(container.textContent).toBe('Roads-only routing warning|false');
+  });
+
+  it('rejects an overlong appended section before pending state or Worker routing', async () => {
+    await act(async () => {
+      root?.render(createElement(Harness));
+    });
+
+    const expectedState: RouteState = {
+      steps: [
+        {
+          waypoint: [0, 0],
+          segment: null,
+          mode: 'network',
+        },
+      ],
+      closure: null,
+    };
+
+    await act(async () => {
+      interactionState.options?.onAppendEndpoint(expectedState, [16_000, 0]);
+    });
+
+    expect(controllerState.current?.isRouteOperationPending).toBe(false);
+    expect(loaderState.instances[0].routeCalls).toBe(0);
+    expect(container.textContent).toBe('Section 16 km / 15 km|false');
   });
 });
 
