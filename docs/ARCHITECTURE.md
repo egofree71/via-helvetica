@@ -873,8 +873,9 @@ GitHub Pages provides HTTPS, which is required for browser geolocation outside
 
 Static discovery assets include canonical, Open Graph, social-card, and
 Schema.org metadata in `index.html`, plus `robots.txt` and `sitemap.xml` under
-`public/`. The route-and-elevation screenshot is used consistently by Open Graph,
-Twitter metadata, structured data, and the image sitemap. The React root is marked
+`public/`. A dedicated hiking photograph is used consistently by Open Graph,
+Twitter metadata, structured data, and the image sitemap. It is a search and
+social-discovery asset rather than an application screenshot. The React root is marked
 `data-nosnippet` so transient interface text, including startup messages, is not
 selected as a search-result excerpt or text-fragment deep link. These are
 deployment concerns rather than runtime application services.
