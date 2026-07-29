@@ -1470,10 +1470,6 @@ select {
 }
 
 .about-dialog-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
   padding: 1.3rem 1.35rem 1rem;
   border-bottom: 1px solid rgb(32 47 60 / 12%);
 }
@@ -1491,27 +1487,10 @@ select {
   line-height: 1.45;
 }
 
-.about-dialog-icon-close {
-  display: grid;
-  width: 2.35rem;
-  height: 2.35rem;
-  flex: 0 0 auto;
-  padding: 0;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: #44515c;
-  background: transparent;
-  cursor: pointer;
-  font-size: 1.65rem;
-  line-height: 1;
+.about-dialog-header h2:focus {
+  outline: none;
 }
 
-.about-dialog-icon-close:hover {
-  background: #eef1f3;
-}
-
-.about-dialog-icon-close:focus-visible,
 .about-dialog-close:focus-visible,
 .about-dialog a:focus-visible {
   outline: 3px solid rgb(23 105 224 / 38%);
@@ -1608,6 +1587,126 @@ select {
 
 .about-dialog-close:hover {
   background: #125ac2;
+}
+
+.release-notes-dialog {
+  width: min(42rem, calc(100vw - 2rem));
+  max-width: none;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  color: #17212b;
+  background: transparent;
+  overflow: visible;
+}
+
+.release-notes-dialog::backdrop {
+  background: rgb(20 29 37 / 48%);
+  backdrop-filter: blur(2px);
+}
+
+.release-notes-dialog-panel {
+  display: flex;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgb(32 47 60 / 22%);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 99%);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 30%);
+}
+
+.release-notes-dialog-header {
+  padding: 1.2rem 1.3rem 0.95rem;
+  border-bottom: 1px solid rgb(32 47 60 / 12%);
+}
+
+.release-notes-dialog-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.25;
+}
+
+.release-notes-dialog-header h2:focus {
+  outline: none;
+}
+
+.release-notes-dialog-content {
+  padding: 1rem 1.3rem 1.15rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.release-notes-list {
+  display: grid;
+  gap: 0.8rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.release-notes-list li {
+  padding-left: 0.15rem;
+  color: #3f4d58;
+  line-height: 1.48;
+}
+
+.release-notes-list strong {
+  color: #25333d;
+}
+
+.release-notes-dialog-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.85rem 1.3rem 1rem;
+  border-top: 1px solid rgb(32 47 60 / 12%);
+}
+
+.release-notes-dialog-footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #125cb8;
+  font-weight: 600;
+}
+
+.release-notes-new-tab-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.release-notes-dialog-close {
+  min-width: 6.5rem;
+  height: 2.65rem;
+  padding: 0 1rem;
+  border: 1px solid #1769e0;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #1769e0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.release-notes-dialog-close:hover {
+  background: #125ac2;
+}
+
+.release-notes-dialog-close:focus-visible,
+.release-notes-dialog a:focus-visible {
+  outline: 3px solid rgb(23 105 224 / 38%);
+  outline-offset: 2px;
 }
 
 .route-export-dialog {
@@ -1836,7 +1935,9 @@ select {
      navigation bars expand or collapse. Dynamic viewport units keep both dialog
      edges visible on real devices while the vh declaration remains a fallback. */
   .about-dialog,
-  .about-dialog-panel {
+  .about-dialog-panel,
+  .release-notes-dialog,
+  .release-notes-dialog-panel {
     max-height: calc(100vh - 2.5rem);
     max-height: calc(100dvh - 2.5rem);
   }

@@ -36,7 +36,7 @@ application can remain usable without an account or a project-owned backend.
 | Import and export | Read-only GPX loading with route statistics and elevation profile, plus named GPX export for editable and selected SwitzerlandMobility routes with simplified geometry and smoothed elevations when available |
 | Safety | Official hiking-trail closures and detours, plus military shooting notices and danger zones with localized details |
 | Public transport | Passenger-relevant stops, mode-specific symbols, next departures grouped by date, and links to the official SBB/CFF/FFS timetable |
-| Interface | Compact floating controls, no permanent toolbar, French, German, Italian, and English translations with shareable localized URLs, and a localized About dialog with project, support, professional profile, safety, and data-credit information |
+| Interface | Compact floating controls, no permanent toolbar, French, German, Italian, and English translations with shareable localized URLs, a one-time release-highlights dialog, and localized About and static release-history pages |
 
 ## Project principles
 
@@ -123,7 +123,9 @@ http://localhost:5173/
   named routes share the clicked path, choose one before framing.
 - Use the information button to open the localized About dialog with the
   project summary, support contact, source code, license, professional profile,
-  and official data credits.
+  release history, and official data credits. Returning visitors are introduced
+  once to each newer application version through a compact dialog that links to
+  the complete history; first-time visitors go directly to the map.
 
 The application requests browser geolocation only after the location button is
 pressed. Deployed geolocation requires HTTPS.
@@ -183,7 +185,8 @@ The focused Vitest suite covers immutable route transformations, route editing,
 GPX parsing and export, route metrics, directional-arrow placement,
 location-search provider normalization, local WGS 84/LV95 coordinate parsing,
 rendered-layer provider contracts, default opacity and persistence,
-passenger-stop filtering and viewport loading, worker-client messaging, and the
+release acknowledgement and localized history content, passenger-stop filtering
+and viewport loading, worker-client messaging, and the
 dynamic routing engine's corridor, cache, cancellation cleanup, retry,
 hiking-enrichment fallback, and
 straight-fallback behaviour.
@@ -206,9 +209,9 @@ Build the production bundle with:
 npm run build
 ```
 
-The build first generates localized HTML entries for `/fr/`, `/de/`, `/it/`,
-and `/en/` from the shared metadata source, then bundles them as a Vite
-multi-page application.
+The build first generates localized application entries for `/fr/`, `/de/`,
+`/it/`, and `/en/`, plus static release-history pages below each language path,
+then bundles them as a Vite multi-page application.
 
 Preview it locally with:
 

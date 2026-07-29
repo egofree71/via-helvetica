@@ -6,6 +6,10 @@
  */
 import { useLayoutEffect, useRef } from 'react';
 import { useI18n } from '../i18n/I18nContext';
+import {
+  CURRENT_RELEASE_VERSION,
+  releaseHistoryPath,
+} from '../releases/releaseHistory';
 
 /** Controlled visibility and close callback for the application information dialog. */
 interface AboutDialogProps {
@@ -32,8 +36,9 @@ export default function AboutDialog({
   isOpen,
   onClose,
 }: AboutDialogProps) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
 
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
@@ -47,6 +52,10 @@ export default function AboutDialog({
         dialog.showModal();
       }
 
+      // The native dialog otherwise focuses the first link in the content.
+      // Starting on the heading announces the dialog context and avoids making
+      // an unrelated project link look preselected when the panel opens.
+      titleRef.current?.focus({ preventScroll: true });
       return;
     }
 
@@ -73,20 +82,14 @@ export default function AboutDialog({
     >
       <article className="about-dialog-panel">
         <header className="about-dialog-header">
-          <div>
-            <h2 id="about-dialog-title">{t('about.title')}</h2>
-            <p className="about-dialog-tagline">{t('about.tagline')}</p>
-          </div>
-
-          <button
-            type="button"
-            className="about-dialog-icon-close"
-            aria-label={t('about.close')}
-            title={t('about.close')}
-            onClick={onClose}
+          <h2
+            ref={titleRef}
+            id="about-dialog-title"
+            tabIndex={-1}
           >
-            ×
-          </button>
+            {t('about.title')}
+          </h2>
+          <p className="about-dialog-tagline">{t('about.tagline')}</p>
         </header>
 
         <div className="about-dialog-content">
@@ -146,6 +149,22 @@ export default function AboutDialog({
                     rel="noopener noreferrer"
                   >
                     LinkedIn
+                  </a>
+                </dd>
+              </div>
+              <div>
+                <dt>{t('about.currentVersion')}</dt>
+                <dd>{CURRENT_RELEASE_VERSION}</dd>
+              </div>
+              <div>
+                <dt>{t('about.releaseHistory')}</dt>
+                <dd>
+                  <a
+                    href={releaseHistoryPath(language)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {t('about.releaseHistoryAction')}
                   </a>
                 </dd>
               </div>

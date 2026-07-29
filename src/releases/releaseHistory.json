@@ -1,0 +1,273 @@
+{
+  "currentVersion": "1.1.0",
+  "locales": {
+    "fr": {
+      "dialog": {
+        "title": "Nouveautés de Via Helvetica 1.1.0",
+        "historyLink": "Voir l’historique complet",
+        "historyLinkNewTabLabel": "s’ouvre dans un nouvel onglet"
+      },
+      "page": {
+        "title": "Historique des versions – Via Helvetica",
+        "description": "Découvrez l’historique des versions du planificateur d’itinéraires de randonnée Via Helvetica.",
+        "heading": "Historique des versions",
+        "intro": "Découvrez les principales évolutions de Via Helvetica depuis sa première version publique.",
+        "backToApp": "Retour à Via Helvetica",
+        "currentLabel": "Version actuelle",
+        "languageNavigation": "Langue",
+        "versionLabel": "Version"
+      },
+      "releases": [
+        {
+          "version": "1.1.0",
+          "summary": "Cette version ajoute la sélection d’itinéraires SuisseMobile, la recherche par coordonnées et plusieurs améliorations de l’interface.",
+          "items": [
+            {
+              "id": "switzerlandMobility",
+              "title": "Itinéraires SuisseMobile :",
+              "description": "La couche optionnelle « À pied SuisseMobile », à activer dans le menu des couches, permet de sélectionner un itinéraire, de consulter son profil et de l’exporter au format GPX.",
+              "details": []
+            },
+            {
+              "id": "coordinateSearch",
+              "title": "Recherche par coordonnées :",
+              "description": "Vous pouvez désormais rechercher un lieu à partir de coordonnées GPS décimales (WGS 84) ou suisses (LV95).",
+              "details": []
+            },
+            {
+              "id": "layerOpacity",
+              "title": "Opacité des couches :",
+              "description": "L’opacité des couches d’information peut être ajustée pour mieux lire la carte sous-jacente.",
+              "details": []
+            },
+            {
+              "id": "distantWaypoints",
+              "title": "Points de passage éloignés :",
+              "description": "Lorsqu’un point est trop éloigné pour être relié par le routage automatique, un message vous invite à ajouter un point intermédiaire.",
+              "details": []
+            },
+            {
+              "id": "generalImprovements",
+              "title": "Améliorations générales :",
+              "description": "Le déplacement des points, l’affichage des panneaux d’information, le résumé de l’itinéraire et l’export GPX ont été rendus plus fluides.",
+              "details": [
+                "La carte se déplace automatiquement lorsqu’un point d’itinéraire est glissé près du bord de l’écran.",
+                "Les arrêts de transports publics, fermetures et zones de danger sélectionnés restent visibles à côté de leur panneau d’information.",
+                "Les libellés du résumé d’itinéraire sont plus lisibles et la sélection de fichiers d’export est limitée au format GPX.",
+                "Les langues disposent d’adresses dédiées (/fr/, /de/, /it/ et /en/) afin de partager un lien dans la bonne langue et d’améliorer le référencement.",
+                "Plusieurs ajustements améliorent l’affichage des dialogues et des contrôles sur les petits écrans."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
+        {
+          "version": "1.0.0",
+          "summary": "Première version publique de Via Helvetica : création et modification d’itinéraires, routage expérimental basé sur swissTLM3D, profil d’altitude, import et export GPX, fermetures, zones de danger et informations sur les transports publics.",
+          "items": []
+        }
+      ]
+    },
+    "de": {
+      "dialog": {
+        "title": "Neu in Via Helvetica 1.1.0",
+        "historyLink": "Vollständigen Versionsverlauf anzeigen",
+        "historyLinkNewTabLabel": "öffnet in einem neuen Tab"
+      },
+      "page": {
+        "title": "Versionsverlauf – Via Helvetica",
+        "description": "Entdecken Sie den Versionsverlauf des Schweizer Wander-Routenplaners Via Helvetica.",
+        "heading": "Versionsverlauf",
+        "intro": "Entdecken Sie die wichtigsten Entwicklungen von Via Helvetica seit der ersten öffentlichen Version.",
+        "backToApp": "Zurück zu Via Helvetica",
+        "currentLabel": "Aktuelle Version",
+        "languageNavigation": "Sprache",
+        "versionLabel": "Version"
+      },
+      "releases": [
+        {
+          "version": "1.1.0",
+          "summary": "Diese Version ergänzt die Auswahl von SchweizMobil-Routen, die Koordinatensuche und mehrere Verbesserungen der Benutzeroberfläche.",
+          "items": [
+            {
+              "id": "switzerlandMobility",
+              "title": "SchweizMobil-Routen:",
+              "description": "Die optionale Ebene «Wanderland SchweizMobil» lässt sich im Ebenenmenü aktivieren. Danach können Sie eine Route auswählen, ihr Höhenprofil anzeigen und sie als GPX exportieren.",
+              "details": []
+            },
+            {
+              "id": "coordinateSearch",
+              "title": "Koordinatensuche:",
+              "description": "Orte können nun über dezimale GPS-Koordinaten (WGS 84) oder Schweizer Koordinaten (LV95) gesucht werden.",
+              "details": []
+            },
+            {
+              "id": "layerOpacity",
+              "title": "Deckkraft der Ebenen:",
+              "description": "Die Deckkraft der Informationsebenen lässt sich anpassen, damit die darunterliegende Karte besser lesbar bleibt.",
+              "details": []
+            },
+            {
+              "id": "distantWaypoints",
+              "title": "Weit entfernte Wegpunkte:",
+              "description": "Ist ein Punkt für die automatische Routenberechnung zu weit entfernt, fordert eine Meldung dazu auf, einen Zwischenpunkt hinzuzufügen.",
+              "details": []
+            },
+            {
+              "id": "generalImprovements",
+              "title": "Allgemeine Verbesserungen:",
+              "description": "Das Verschieben von Punkten, die Anzeige von Informationsfenstern, die Routenzusammenfassung und der GPX-Export wurden flüssiger gestaltet.",
+              "details": [
+                "Die Karte verschiebt sich automatisch, wenn ein Wegpunkt nahe an den Bildschirmrand gezogen wird.",
+                "Ausgewählte Haltestellen, Sperrungen und Gefahrenzonen bleiben neben ihrem Informationsfenster sichtbar.",
+                "Die Beschriftungen der Routenzusammenfassung sind besser lesbar, und die Dateiauswahl beim Export ist auf GPX beschränkt.",
+                "Eigene Sprachpfade (/fr/, /de/, /it/ und /en/) öffnen geteilte Links in der gewählten Sprache und verbessern die Auffindbarkeit.",
+                "Weitere Anpassungen verbessern Dialoge und Bedienelemente auf kleinen Bildschirmen."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
+        {
+          "version": "1.0.0",
+          "summary": "Erste öffentliche Version von Via Helvetica: Erstellen und Bearbeiten von Routen, experimentelles swissTLM3D-Routing, Höhenprofil, GPX-Import und -Export, Sperrungen, Gefahrenzonen und Informationen zum öffentlichen Verkehr.",
+          "items": []
+        }
+      ]
+    },
+    "it": {
+      "dialog": {
+        "title": "Novità di Via Helvetica 1.1.0",
+        "historyLink": "Vedi la cronologia completa",
+        "historyLinkNewTabLabel": "si apre in una nuova scheda"
+      },
+      "page": {
+        "title": "Cronologia delle versioni – Via Helvetica",
+        "description": "Scopri la cronologia delle versioni del pianificatore di itinerari escursionistici Via Helvetica.",
+        "heading": "Cronologia delle versioni",
+        "intro": "Scopri le principali evoluzioni di Via Helvetica dalla prima versione pubblica.",
+        "backToApp": "Ritorna a Via Helvetica",
+        "currentLabel": "Versione attuale",
+        "languageNavigation": "Lingua",
+        "versionLabel": "Versione"
+      },
+      "releases": [
+        {
+          "version": "1.1.0",
+          "summary": "Questa versione aggiunge la selezione degli itinerari SvizzeraMobile, la ricerca per coordinate e diversi miglioramenti dell’interfaccia.",
+          "items": [
+            {
+              "id": "switzerlandMobility",
+              "title": "Itinerari SvizzeraMobile:",
+              "description": "Il livello opzionale «A piedi SvizzeraMobile», attivabile dal menu dei livelli, consente di selezionare un itinerario, consultarne il profilo altimetrico ed esportarlo in formato GPX.",
+              "details": []
+            },
+            {
+              "id": "coordinateSearch",
+              "title": "Ricerca per coordinate:",
+              "description": "È ora possibile cercare un luogo tramite coordinate GPS decimali (WGS 84) o coordinate svizzere (LV95).",
+              "details": []
+            },
+            {
+              "id": "layerOpacity",
+              "title": "Opacità dei livelli:",
+              "description": "L’opacità dei livelli informativi può essere regolata per leggere meglio la carta sottostante.",
+              "details": []
+            },
+            {
+              "id": "distantWaypoints",
+              "title": "Punti di passaggio lontani:",
+              "description": "Quando un punto è troppo lontano per essere collegato dal calcolo automatico, un messaggio invita ad aggiungere un punto intermedio.",
+              "details": []
+            },
+            {
+              "id": "generalImprovements",
+              "title": "Miglioramenti generali:",
+              "description": "Lo spostamento dei punti, la visualizzazione dei pannelli informativi, il riepilogo dell’itinerario e l’esportazione GPX sono stati resi più fluidi.",
+              "details": [
+                "La carta si sposta automaticamente quando un punto dell’itinerario viene trascinato vicino al bordo dello schermo.",
+                "Le fermate, le chiusure e le zone di pericolo selezionate restano visibili accanto al relativo pannello informativo.",
+                "Le etichette del riepilogo dell’itinerario sono più leggibili e la selezione dei file di esportazione è limitata al formato GPX.",
+                "Gli indirizzi dedicati alle lingue (/fr/, /de/, /it/ e /en/) permettono di condividere la versione corretta e migliorano la visibilità nei motori di ricerca.",
+                "Altri ritocchi migliorano la visualizzazione delle finestre e dei controlli sugli schermi piccoli."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
+        {
+          "version": "1.0.0",
+          "summary": "Prima versione pubblica di Via Helvetica: creazione e modifica di itinerari, routing sperimentale basato su swissTLM3D, profilo altimetrico, importazione ed esportazione GPX, chiusure, zone di pericolo e informazioni sui trasporti pubblici.",
+          "items": []
+        }
+      ]
+    },
+    "en": {
+      "dialog": {
+        "title": "What’s new in Via Helvetica 1.1.0",
+        "historyLink": "View full release history",
+        "historyLinkNewTabLabel": "opens in a new tab"
+      },
+      "page": {
+        "title": "Release history – Via Helvetica",
+        "description": "Explore the release history of the Via Helvetica Swiss hiking route planner.",
+        "heading": "Release history",
+        "intro": "Explore the main changes to Via Helvetica since its first public release.",
+        "backToApp": "Back to Via Helvetica",
+        "currentLabel": "Current version",
+        "languageNavigation": "Language",
+        "versionLabel": "Version"
+      },
+      "releases": [
+        {
+          "version": "1.1.0",
+          "summary": "This release adds SwitzerlandMobility route selection, coordinate search, and several interface improvements.",
+          "items": [
+            {
+              "id": "switzerlandMobility",
+              "title": "SwitzerlandMobility routes:",
+              "description": "The optional “Hiking SwitzerlandMobility” layer can be enabled from the layer menu, then used to select a route, inspect its elevation profile, and export it as GPX.",
+              "details": []
+            },
+            {
+              "id": "coordinateSearch",
+              "title": "Coordinate search:",
+              "description": "You can now search for a place using decimal GPS coordinates (WGS 84) or Swiss coordinates (LV95).",
+              "details": []
+            },
+            {
+              "id": "layerOpacity",
+              "title": "Layer opacity:",
+              "description": "Information-layer opacity can be adjusted to keep the underlying map easier to read.",
+              "details": []
+            },
+            {
+              "id": "distantWaypoints",
+              "title": "Distant waypoints:",
+              "description": "When a point is too far away for automatic routing, a message asks you to add an intermediate waypoint.",
+              "details": []
+            },
+            {
+              "id": "generalImprovements",
+              "title": "General improvements:",
+              "description": "Waypoint dragging, information panels, the route summary, and GPX export have all been made smoother.",
+              "details": [
+                "The map now pans automatically when a route point is dragged near the edge of the screen.",
+                "Selected stops, closures, and danger zones remain visible beside their information panel.",
+                "Route-summary labels are easier to read, and the export file picker is limited to the supported GPX format.",
+                "Dedicated language paths (/fr/, /de/, /it/, and /en/) keep shared links in the selected language and improve search visibility.",
+                "Additional adjustments improve dialogs and controls on small screens."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
+        {
+          "version": "1.0.0",
+          "summary": "First public release of Via Helvetica: route creation and editing, experimental swissTLM3D routing, elevation profiles, GPX import and export, closures, danger zones, and public-transport information.",
+          "items": []
+        }
+      ]
+    }
+  }
+}

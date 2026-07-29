@@ -1,7 +1,7 @@
 /**
- * Business context: generates one static HTML entry per supported language so
- * search engines and social crawlers receive localized metadata without adding
- * a server or duplicating the complete application shell by hand.
+ * Business context: generates localized application entries and indexable
+ * release-history pages so search and social crawlers receive complete content
+ * without adding a server or duplicating maintained HTML by hand.
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -12,13 +12,26 @@ const PROJECT_ROOT = path.resolve(
   '..',
 );
 const SITE_ORIGIN = 'https://viahelvetica.ch';
-const TEMPLATE_PATH = path.join(PROJECT_ROOT, 'index.html');
+const APP_TEMPLATE_PATH = path.join(PROJECT_ROOT, 'index.html');
+const RELEASE_TEMPLATE_PATH = path.join(
+  PROJECT_ROOT,
+  'scripts',
+  'templates',
+  'releases.html',
+);
 const METADATA_PATH = path.join(
   PROJECT_ROOT,
   'src',
   'i18n',
   'seoMetadata.json',
 );
+const RELEASE_HISTORY_PATH = path.join(
+  PROJECT_ROOT,
+  'src',
+  'releases',
+  'releaseHistory.json',
+);
+const PACKAGE_PATH = path.join(PROJECT_ROOT, 'package.json');
 const SUPPORTED_LANGUAGES = ['fr', 'de', 'it', 'en'];
 
 function escapeHtmlAttribute(value) {
@@ -98,7 +111,7 @@ function replaceOpenGraphAlternates(html, activeLocale, metadata) {
   );
 }
 
-function structuredDataFor(language, metadata) {
+function structuredDataForApplication(language, metadata) {
   const entry = metadata[language];
   const localizedUrl = `${SITE_ORIGIN}${entry.path}`;
 
@@ -134,7 +147,7 @@ function structuredDataFor(language, metadata) {
   };
 }
 
-function localizeTemplate(template, language, metadata) {
+function localizeApplicationTemplate(template, language, metadata) {
   const entry = metadata[language];
   const localizedUrl = `${SITE_ORIGIN}${entry.path}`;
   let html = template;
@@ -176,17 +189,299 @@ function localizeTemplate(template, language, metadata) {
   html = replaceOpenGraphAlternates(html, entry.locale, metadata);
   html = replaceStructuredData(
     html,
-    structuredDataFor(language, metadata),
+    structuredDataForApplication(language, metadata),
   );
 
   return html;
 }
 
-const [template, metadataSource] = await Promise.all([
-  readFile(TEMPLATE_PATH, 'utf8'),
+function releasePagePath(language) {
+  return `/${language}/releases/`;
+}
+
+function replaceTemplateToken(template, token, value) {
+  const marker = `{{${token}}}`;
+
+  if (!template.includes(marker)) {
+    throw new Error(`Missing release-page template token: ${token}`);
+  }
+
+  return template.replaceAll(marker, value);
+}
+
+function renderHreflangLinks() {
+  return [
+    ...SUPPORTED_LANGUAGES.map(
+      (language) =>
+        `    <link rel="alternate" hreflang="${language}" href="${SITE_ORIGIN}${releasePagePath(language)}" />`,
+    ),
+    `    <link rel="alternate" hreflang="x-default" href="${SITE_ORIGIN}/releases/" />`,
+  ].join('\n');
+}
+
+function renderOpenGraphAlternates(activeLanguage, metadata) {
+  return SUPPORTED_LANGUAGES
+    .filter((language) => language !== activeLanguage)
+    .map(
+      (language) =>
+        `    <meta property="og:locale:alternate" content="${escapeHtmlAttribute(metadata[language].locale)}" />`,
+    )
+    .join('\n');
+}
+
+function renderLanguageLinks(activeLanguage) {
+  return SUPPORTED_LANGUAGES.map((language) => {
+    const current = language === activeLanguage
+      ? ' aria-current="page"'
+      : '';
+
+    return `          <a href="${releasePagePath(language)}" hreflang="${language}"${current}>${language.toUpperCase()}</a>`;
+  }).join('\n');
+}
+
+function renderReleaseItems(items) {
+  if (items.length === 0) {
+    return '';
+  }
+
+  const renderedItems = items.map((item) => {
+    const details = item.details.length > 0
+      ? `\n            <ul class="release-detail-list">\n${item.details
+          .map((detail) => `              <li>${escapeHtmlText(detail)}</li>`)
+          .join('\n')}\n            </ul>`
+      : '';
+
+    return `          <li>\n            <p><strong>${escapeHtmlText(item.title)}</strong> ${escapeHtmlText(item.description)}</p>${details}\n          </li>`;
+  }).join('\n');
+
+  return `\n        <ul class="release-items">\n${renderedItems}\n        </ul>`;
+}
+
+function releaseElementId(version) {
+  return `release-${version.replaceAll('.', '-')}`;
+}
+
+function renderReleaseCards(localizedHistory, currentVersion) {
+  return localizedHistory.releases.map((release) => {
+    const isCurrent = release.version === currentVersion;
+    const currentBadge = isCurrent
+      ? `\n          <span class="release-current-badge">${escapeHtmlText(localizedHistory.page.currentLabel)}</span>`
+      : '';
+
+    return `        <article class="release-card" aria-labelledby="${releaseElementId(release.version)}">\n          <header class="release-card-header">\n            <h2 id="${releaseElementId(release.version)}">${escapeHtmlText(localizedHistory.page.versionLabel)} ${escapeHtmlText(release.version)}</h2>${currentBadge}\n          </header>\n          <p class="release-summary">${escapeHtmlText(release.summary)}</p>${renderReleaseItems(release.items)}\n        </article>`;
+  }).join('\n');
+}
+
+function structuredDataForReleasePage(language, localizedHistory) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: localizedHistory.page.heading,
+    url: `${SITE_ORIGIN}${releasePagePath(language)}`,
+    description: localizedHistory.page.description,
+    inLanguage: language,
+    isPartOf: {
+      '@type': 'WebSite',
+      name: 'Via Helvetica',
+      url: SITE_ORIGIN,
+    },
+  };
+}
+
+function localizeReleaseTemplate(
+  template,
+  language,
+  metadata,
+  releaseHistory,
+  options = {},
+) {
+  const localizedHistory = releaseHistory.locales[language];
+  const pagePath = options.pagePath ?? releasePagePath(language);
+  const canonicalPath = options.canonicalPath ?? pagePath;
+  const canonicalUrl = `${SITE_ORIGIN}${canonicalPath}`;
+  let html = template;
+  const replacements = {
+    LANGUAGE: escapeHtmlAttribute(language),
+    DESCRIPTION: escapeHtmlAttribute(localizedHistory.page.description),
+    CANONICAL_URL: escapeHtmlAttribute(canonicalUrl),
+    HREFLANG_LINKS: renderHreflangLinks(),
+    OG_LOCALE: escapeHtmlAttribute(metadata[language].locale),
+    OG_ALTERNATES: renderOpenGraphAlternates(language, metadata),
+    TITLE: escapeHtmlText(localizedHistory.page.title),
+    IMAGE_ALT: escapeHtmlAttribute(metadata[language].imageAlt),
+    STRUCTURED_DATA: JSON.stringify(
+      structuredDataForReleasePage(language, localizedHistory),
+      null,
+      2,
+    )
+      .split('\n')
+      .map((line) => `      ${line}`)
+      .join('\n'),
+    APP_PATH: escapeHtmlAttribute(metadata[language].path),
+    LANGUAGE_NAVIGATION: escapeHtmlAttribute(
+      localizedHistory.page.languageNavigation,
+    ),
+    LANGUAGE_LINKS: renderLanguageLinks(language),
+    BACK_TO_APP: escapeHtmlText(localizedHistory.page.backToApp),
+    HEADING: escapeHtmlText(localizedHistory.page.heading),
+    INTRO: escapeHtmlText(localizedHistory.page.intro),
+    RELEASES: renderReleaseCards(
+      localizedHistory,
+      releaseHistory.currentVersion,
+    ),
+  };
+
+  for (const [token, value] of Object.entries(replacements)) {
+    html = replaceTemplateToken(html, token, value);
+  }
+
+  if (/{{[A-Z_]+}}/.test(html)) {
+    throw new Error(`Unresolved release-page template token for ${pagePath}`);
+  }
+
+  return html;
+}
+
+function validateReleaseHistory(releaseHistory, packageManifest) {
+  if (releaseHistory.currentVersion !== packageManifest.version) {
+    throw new Error(
+      `Release version ${releaseHistory.currentVersion} does not match package version ${packageManifest.version}.`,
+    );
+  }
+
+  let referenceVersions = null;
+  let referenceCurrentItemIds = null;
+  let referenceCurrentDialogItemIds = null;
+
+  for (const language of SUPPORTED_LANGUAGES) {
+    const localizedHistory = releaseHistory.locales[language];
+
+    if (!localizedHistory) {
+      throw new Error(`Missing release history for language: ${language}`);
+    }
+
+    const requiredDialogFields = [
+      'title',
+      'historyLink',
+      'historyLinkNewTabLabel',
+    ];
+    const requiredPageFields = [
+      'title',
+      'description',
+      'heading',
+      'intro',
+      'backToApp',
+      'languageNavigation',
+      'versionLabel',
+      'currentLabel',
+    ];
+
+    for (const field of requiredDialogFields) {
+      if (typeof localizedHistory.dialog[field] !== 'string' || !localizedHistory.dialog[field].trim()) {
+        throw new Error(`Missing release dialog field ${field} for language: ${language}`);
+      }
+    }
+
+    for (const field of requiredPageFields) {
+      if (typeof localizedHistory.page[field] !== 'string' || !localizedHistory.page[field].trim()) {
+        throw new Error(`Missing release page field ${field} for language: ${language}`);
+      }
+    }
+
+    const versions = localizedHistory.releases.map((release) => release.version);
+
+    if (versions[0] !== releaseHistory.currentVersion) {
+      throw new Error(`Current release must be first for language: ${language}`);
+    }
+
+    if (referenceVersions && JSON.stringify(versions) !== JSON.stringify(referenceVersions)) {
+      throw new Error(`Release versions differ for language: ${language}`);
+    }
+
+    referenceVersions ??= versions;
+
+    const currentRelease = localizedHistory.releases[0];
+    const currentItemIds = currentRelease.items.map((item) => item.id);
+
+    if (
+      referenceCurrentItemIds
+      && JSON.stringify(currentItemIds) !== JSON.stringify(referenceCurrentItemIds)
+    ) {
+      throw new Error(`Current release items differ for language: ${language}`);
+    }
+
+    referenceCurrentItemIds ??= currentItemIds;
+
+    const currentDialogItemIds = currentRelease.items
+      .filter((item) => item.showInDialog !== false)
+      .map((item) => item.id);
+
+    if (
+      referenceCurrentDialogItemIds
+      && JSON.stringify(currentDialogItemIds)
+        !== JSON.stringify(referenceCurrentDialogItemIds)
+    ) {
+      throw new Error(
+        `Current release dialog items differ for language: ${language}`,
+      );
+    }
+
+    referenceCurrentDialogItemIds ??= currentDialogItemIds;
+
+    for (const release of localizedHistory.releases) {
+      if (!release.version || !release.summary?.trim()) {
+        throw new Error(`Incomplete release content for ${language}.`);
+      }
+
+      for (const item of release.items) {
+        if (
+          !item.id
+          || !item.title?.trim()
+          || !item.description?.trim()
+          || !Array.isArray(item.details)
+          || (
+            item.showInDialog !== undefined
+            && typeof item.showInDialog !== 'boolean'
+          )
+        ) {
+          throw new Error(
+            `Incomplete release item for ${language} ${release.version}.`,
+          );
+        }
+      }
+
+      const duplicateIds = release.items.filter(
+        (item, index, items) =>
+          items.findIndex((candidate) => candidate.id === item.id) !== index,
+      );
+
+      if (duplicateIds.length > 0) {
+        throw new Error(
+          `Duplicate release item ${duplicateIds[0].id} for ${language} ${release.version}.`,
+        );
+      }
+    }
+  }
+}
+
+const [
+  appTemplate,
+  releaseTemplate,
+  metadataSource,
+  releaseHistorySource,
+  packageSource,
+] = await Promise.all([
+  readFile(APP_TEMPLATE_PATH, 'utf8'),
+  readFile(RELEASE_TEMPLATE_PATH, 'utf8'),
   readFile(METADATA_PATH, 'utf8'),
+  readFile(RELEASE_HISTORY_PATH, 'utf8'),
+  readFile(PACKAGE_PATH, 'utf8'),
 ]);
 const metadata = JSON.parse(metadataSource);
+const releaseHistory = JSON.parse(releaseHistorySource);
+const packageManifest = JSON.parse(packageSource);
+
+validateReleaseHistory(releaseHistory, packageManifest);
 
 for (const language of SUPPORTED_LANGUAGES) {
   if (!metadata[language]) {
@@ -197,11 +492,45 @@ for (const language of SUPPORTED_LANGUAGES) {
     throw new Error(`Invalid localized path for language: ${language}`);
   }
 
-  const outputDirectory = path.join(PROJECT_ROOT, language);
-  await mkdir(outputDirectory, { recursive: true });
+  const applicationOutputDirectory = path.join(PROJECT_ROOT, language);
+  await mkdir(applicationOutputDirectory, { recursive: true });
   await writeFile(
-    path.join(outputDirectory, 'index.html'),
-    localizeTemplate(template, language, metadata),
+    path.join(applicationOutputDirectory, 'index.html'),
+    localizeApplicationTemplate(appTemplate, language, metadata),
+    'utf8',
+  );
+
+  const releaseOutputDirectory = path.join(
+    PROJECT_ROOT,
+    language,
+    'releases',
+  );
+  await mkdir(releaseOutputDirectory, { recursive: true });
+  await writeFile(
+    path.join(releaseOutputDirectory, 'index.html'),
+    localizeReleaseTemplate(
+      releaseTemplate,
+      language,
+      metadata,
+      releaseHistory,
+    ),
     'utf8',
   );
 }
+
+const defaultReleaseOutputDirectory = path.join(PROJECT_ROOT, 'releases');
+await mkdir(defaultReleaseOutputDirectory, { recursive: true });
+await writeFile(
+  path.join(defaultReleaseOutputDirectory, 'index.html'),
+  localizeReleaseTemplate(
+    releaseTemplate,
+    'en',
+    metadata,
+    releaseHistory,
+    {
+      pagePath: '/releases/',
+      canonicalPath: '/en/releases/',
+    },
+  ),
+  'utf8',
+);

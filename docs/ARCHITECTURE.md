@@ -81,6 +81,7 @@ contextual and temporary:
 - information popups;
 - elevation profile;
 - GPX export dialog;
+- one-time release-highlights dialog;
 - About dialog.
 
 The responsive layout resolves collisions by moving small controls rather than
@@ -206,6 +207,7 @@ flowchart TB
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
 | Search | `src/search/locationSearch.ts`, `src/search/coordinateSearch.ts`, `src/components/LocationSearch.tsx` | Local WGS 84/LV95 parsing, provider contract, session cache, result UI, keyboard navigation, and request cancellation |
 | Localization | `src/i18n/`, `scripts/generate-localized-pages.mjs` | Typed dictionaries, language persistence, locale paths, runtime document metadata, and generated localized HTML entries |
+| Release history | `src/releases/`, `src/components/ReleaseNotesDialog.tsx`, `scripts/templates/releases.html` | Returning-visitor release acknowledgement, compact localized highlights with one explicit footer dismissal, a signposted new-tab history link, a distinct current-version display and history action in About, and generated indexable release-history pages |
 | Static deployment | `.github/workflows/deploy.yml`, `vite.config.ts` | Test, build, Pages deployment, and root-relative production assets |
 
 ### 3.3 Application composition
@@ -217,6 +219,9 @@ capabilities. Examples of cross-workflow coordination include:
 - starting route creation clears an imported GPX and temporary search marker;
 - a successful GPX import leaves route mode and clears editable history;
 - opening the About dialog closes map-feature information;
+- a newer release opens once for returning visitors after the initial map is
+  usable, while first-time visitors and unavailable storage skip the courtesy
+  dialog; closing it records only the acknowledged version in browser storage;
 - selecting a SwitzerlandMobility route keeps the previous itinerary until complete
   public geometry has been validated, then clears editable history or an imported
   GPX and makes the selected public route the single current read-only itinerary;
@@ -345,7 +350,10 @@ The same profile samples support:
    transient markers.
 5. Focused hooks apply persisted background, overlay visibility, and opacity
    choices without recreating the map.
-6. Optional providers begin work only when their layer, zoom, or user action
+6. Once the initial map is usable, the current release dialog opens only for a
+   returning visitor whose stored acknowledgement is older and whose browser can
+   persist the dismissal. A first visit records the current version silently.
+7. Optional providers begin work only when their layer, zoom, or user action
    requires it.
 
 ### 5.2 Editable-route creation
@@ -490,7 +498,7 @@ Visibility, zoom, language, and workflow changes abort obsolete requests and
 clear stale selections. These overlays never mutate route geometry or routing
 costs.
 
-### 5.7 Search, geolocation, fullscreen, and About
+### 5.7 Search, geolocation, fullscreen, About, and releases
 
 Location search first applies a strict local parser to the complete input. It
 accepts decimal WGS 84 and Swiss LV95 coordinate pairs, detects safely reversible
@@ -513,10 +521,23 @@ Fullscreen requests target the complete application root. A
 `map.updateSize()` after viewport changes.
 
 The About dialog contains project context, experimental-routing guidance,
-creator and support details, source and license links, professional profile, and
-complete data credits. Its permanently visible map control provides direct
-access to the centralized source references without occupying additional map
-space.
+creator and support details, source and license links, professional profile, a
+link to the localized release history, and complete data credits. Its permanently
+visible map control provides direct access to the centralized source references
+without occupying additional map space.
+
+The release dialog reads the current semantic version and the highlights marked
+for compact display from `src/releases/releaseHistory.json`; history-only items
+remain available on the static page. It opens only after the map has reached its
+usable startup state, only for a returning visitor whose acknowledgement is
+older, and only when at least one compact highlight exists. A first visit records
+the current version silently. Because version 1.0.0 had no release key, the
+existing language preference acts as the migration marker for a returning
+visitor. Storage read or write failures suppress this courtesy dialog rather
+than risking a modal that returns on every load. Closing
+the dialog or opening the complete history stores the current version. The
+history link visibly indicates that it opens a localized static page in a new
+tab so the current itinerary is not lost.
 
 ## 6. Map and geodata integration
 
@@ -779,11 +800,13 @@ stay small and should not become new orchestration layers.
 
 ### 10.5 Localization boundary
 
-All user-facing strings belong to typed French, German, Italian, and English
+General interface strings belong to typed French, German, Italian, and English
 dictionaries. Adding a translation key must fail compilation until every
 supported language provides it. Search and social metadata shared by the build
-generator and runtime live in `src/i18n/seoMetadata.json`. Provider identifiers
-and domain enums remain language-neutral.
+generator and runtime live in `src/i18n/seoMetadata.json`. Release announcements
+and static history copy live in `src/releases/releaseHistory.json`; the generator
+validates that versions and item identifiers match across all languages. Provider
+identifiers and domain enums remain language-neutral.
 
 The root URL remains the `x-default` negotiation entry and consolidates on
 `/en/` for static discovery. On first application startup it is replaced, without
@@ -811,6 +834,9 @@ appearance. They cover:
   place-versus-coordinate zoom policy;
 - locale-path priority, History API language changes, browser back/forward
   restoration, and localized runtime metadata;
+- first-visit and returning-visitor release acknowledgement, silent storage
+  failure, history-only highlights, consistent localized identifiers, and the
+  compact dialog's single close action and signposted new-tab history link;
 - rendered-layer provider identifiers, semitransparent defaults, explicit-only
   opacity persistence, minimum-opacity migration, and focused runtime updates;
 - the bounded expandable opacity control for every visible optional information
@@ -841,8 +867,9 @@ manual checks include:
 
 - mouse, pen, and touch route editing, including edge auto-pan while moving or
   inserting a waypoint and cancellation after focus or pointer loss;
-- responsive control collisions, translated layer-label wrapping, and the
-  expandable opacity sliders on narrow and short viewports;
+- responsive control collisions, translated layer-label wrapping, the release
+  and About dialogs, and the expandable opacity sliders on narrow and short
+  viewports;
 - official hiking and SwitzerlandMobility portrayals across useful zooms and
   restored opacity preferences after a reload;
 - selection, overlap choice, highlighting, full-route fitting, and profile
@@ -892,20 +919,26 @@ GitHub Pages provides HTTPS, which is required for browser geolocation outside
 `localhost`.
 
 Before development and production builds, `scripts/generate-localized-pages.mjs`
-creates `/fr/`, `/de/`, `/it/`, and `/en/` HTML entries from the root template
-and `src/i18n/seoMetadata.json`. Vite treats the root and those four pages as
-multi-page inputs and preserves their directories in `dist/`, which lets GitHub
-Pages serve every localized URL directly after a reload. The generated source
-directories are ignored by Git because they are deterministic build inputs.
+creates `/fr/`, `/de/`, `/it/`, and `/en/` application entries from the root
+template and `src/i18n/seoMetadata.json`. The same build step generates
+`/releases/` plus `/fr/releases/`, `/de/releases/`, `/it/releases/`, and
+`/en/releases/` from `scripts/templates/releases.html` and the shared release
+history. Vite treats all entries as multi-page inputs and preserves their
+directories in `dist/`, which lets GitHub Pages serve every localized URL
+directly after a reload. Generated source directories are ignored by Git because
+they are deterministic build inputs.
 
 Each localized entry contains a self-referencing canonical, reciprocal
 `hreflang` links, localized Open Graph, Twitter, Schema.org, `noscript`, and
 document metadata. The root remains the `x-default` negotiation entry for
 existing links and browser-language fallback, but its canonical discovery signal
-points to `/en/`; only the four canonical localized URLs are listed in the
-sitemap. A dedicated hiking photograph is used consistently by Open Graph,
-Twitter metadata, structured data, and the image sitemap. It is a search and
-social-discovery asset rather than an application screenshot.
+points to `/en/`; only the four canonical localized application URLs are listed
+in the sitemap. Release history follows the same pattern: `/releases/` is the
+`x-default` entry with a canonical to `/en/releases/`, while the four localized
+history pages are canonical and listed in the sitemap. A dedicated hiking
+photograph is used consistently by Open Graph, Twitter metadata, structured data,
+and the image sitemap. It is a search and social-discovery asset rather than an
+application screenshot.
 
 The rendered application exposes one localized, visually hidden `h1` so
 assistive technologies and rendered-page analysis receive a stable page heading
@@ -920,8 +953,9 @@ rather than runtime application services.
 - Centralize provider identifiers, projections, and geographic constants.
 - Keep internal geometry in EPSG:2056 and transform only at exchange boundaries.
 - Keep network contracts outside React components.
-- Keep every user-facing string in all four typed dictionaries and keep shared
-  search/social metadata complete in `seoMetadata.json`.
+- Keep every user-facing string in all four typed dictionaries, keep shared
+  search/social metadata complete in `seoMetadata.json`, and keep release history
+  complete in every locale of `releaseHistory.json`.
 - Sanitize provider HTML before rendering its limited semantic markup.
 - Abort superseded asynchronous work and guard against stale completion.
 - Preserve explicit OpenLayers layer ordering.

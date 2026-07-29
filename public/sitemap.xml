@@ -27,4 +27,16 @@
       <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
     </image:image>
   </url>
+  <url>
+    <loc>https://viahelvetica.ch/fr/releases/</loc>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/de/releases/</loc>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/it/releases/</loc>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/en/releases/</loc>
+  </url>
 </urlset>

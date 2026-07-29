@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { containsCoordinate } from 'ol/extent.js';
 import AboutDialog from './components/AboutDialog';
+import ReleaseNotesDialog from './components/ReleaseNotesDialog';
 import MapLayersSelector from './components/MapLayersSelector';
 import LanguageSelector from './components/LanguageSelector';
 import LocationSearch from './components/LocationSearch';
@@ -53,6 +54,11 @@ import {
 } from './map/searchResult';
 import { useItineraryMetrics } from './metrics/useItineraryMetrics';
 import type { LocationSearchResult } from './search/locationSearch';
+import {
+  getCurrentReleaseDialogItems,
+  markCurrentReleaseSeen,
+  shouldShowCurrentRelease,
+} from './releases/releaseHistory';
 
 /** Itinerary source named by the shared GPX export dialog. */
 type RouteExportSource = 'editable' | 'switzerlandMobility';
@@ -77,6 +83,19 @@ export default function App() {
   const mapTargetRef = useRef<HTMLDivElement>(null);
 
   const [isAboutDialogOpen, setIsAboutDialogOpen] = useState(false);
+  const [isReleaseNotesDialogOpen, setIsReleaseNotesDialogOpen] =
+    useState(false);
+  const [shouldAnnounceCurrentRelease, setShouldAnnounceCurrentRelease] =
+    useState(() => {
+      if (getCurrentReleaseDialogItems(language).length === 0) {
+        // A release may remain in the complete history without having compact
+        // highlights worth blocking the map with an empty announcement.
+        markCurrentReleaseSeen();
+        return false;
+      }
+
+      return shouldShowCurrentRelease();
+    });
   const [isRouteExportDialogOpen, setIsRouteExportDialogOpen] =
     useState(false);
   const [locationSearchResetVersion, setLocationSearchResetVersion] =
@@ -123,6 +142,15 @@ export default function App() {
     mapRuntimeRef,
     initialOpacities: initialMapLayerOpacities,
   });
+
+  useEffect(() => {
+    if (status === 'ready' && shouldAnnounceCurrentRelease) {
+      // Wait for the map to become usable so the first visit is not covered by
+      // both a startup status and a release announcement at the same time.
+      setIsReleaseNotesDialogOpen(true);
+    }
+  }, [shouldAnnounceCurrentRelease, status]);
+
   const {
     baseMapStyle,
     setBaseMapStyle,
@@ -334,6 +362,13 @@ export default function App() {
     closeMapInformationPopup();
     setIsAboutDialogOpen(true);
   }, [closeMapInformationPopup]);
+
+  /** Acknowledges the current release before dismissing its one-time dialog. */
+  const closeReleaseNotesDialog = useCallback(() => {
+    markCurrentReleaseSeen();
+    setShouldAnnounceCurrentRelease(false);
+    setIsReleaseNotesDialogOpen(false);
+  }, []);
 
   /** Places a temporary marker and frames one place or coordinate result. */
   const selectSearchResult = (result: LocationSearchResult) => {
@@ -734,6 +769,11 @@ export default function App() {
           {routeMessage}
         </div>
       )}
+
+      <ReleaseNotesDialog
+        isOpen={isReleaseNotesDialogOpen}
+        onClose={closeReleaseNotesDialog}
+      />
 
       <AboutDialog
         isOpen={isAboutDialogOpen}
