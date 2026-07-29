@@ -1,8 +1,8 @@
 /**
- * Business context: adapts the official GeoAdmin SearchServer response to the
- * small location-search contract used by the map interface. Repeated searches
- * are cached for the browser session so common typing and deletion cycles do
- * not issue the same provider request again.
+ * Business context: defines the small place-or-coordinate result contract and
+ * adapts official GeoAdmin SearchServer places to it. Repeated text searches are
+ * cached for the browser session so common typing and deletion cycles do not
+ * issue the same provider request again.
  */
 import type { Language } from '../i18n/translations';
 
@@ -19,8 +19,14 @@ const RESULT_LIMIT = 8;
 const SEARCH_CACHE_LIMIT = 64;
 const SEARCH_ORIGINS = ['zipcode', 'gg25', 'gazetteer'] as const;
 
-/** GeoAdmin origin used to translate the category in the interface layer. */
+/** GeoAdmin origin used to translate provider categories in the interface. */
 export type SearchOrigin = (typeof SEARCH_ORIGINS)[number];
+
+/** Locally recognized coordinate system shown beneath a coordinate result. */
+export type CoordinateSearchOrigin = 'wgs84' | 'lv95';
+
+/** Category shared by provider-backed places and local coordinate results. */
+export type LocationSearchOrigin = SearchOrigin | CoordinateSearchOrigin;
 
 /** Loose top-level contract returned by the GeoAdmin SearchServer endpoint. */
 interface SearchServerResponse {
@@ -47,12 +53,12 @@ interface SearchServerItem {
 
 /** Normalized location result returned to the React component. */
 export interface LocationSearchResult {
-  /** Stable option identifier built from the provider origin and item ID. */
+  /** Stable identifier built from provider or normalized coordinate data. */
   id: string;
-  /** Plain-text place label safe to render directly through React. */
+  /** Plain-text display label safe to render directly through React. */
   label: string;
-  /** Language-neutral category translated by the interface layer. */
-  origin: SearchOrigin;
+  /** Language-neutral place or coordinate category translated by the UI. */
+  origin: LocationSearchOrigin;
   /** Validated WGS84 latitude in decimal degrees. */
   latitude: number;
   /** Validated WGS84 longitude in decimal degrees. */

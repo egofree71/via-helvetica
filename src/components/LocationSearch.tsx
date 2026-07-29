@@ -1,6 +1,7 @@
 /**
  * Business context: provides a compact, keyboard-accessible search field for
- * official Swiss places while keeping the map visible beneath temporary results.
+ * official Swiss places or pasted coordinates while keeping the map visible
+ * beneath temporary results.
  */
 import {
   useEffect,
@@ -11,6 +12,10 @@ import {
 } from 'react';
 import { useI18n } from '../i18n/I18nContext';
 import {
+  isCoordinateSearchDraft,
+  parseCoordinateSearch,
+} from '../search/coordinateSearch';
+import {
   getCachedLocationSearch,
   searchLocations,
   type LocationSearchResult,
@@ -20,12 +25,19 @@ import {
 interface LocationSearchProps {
   /** Closes map information when the search field becomes active. */
   onSearchFocus: () => void;
-  /** Moves the map to the selected official search result. */
+  /** Moves the map to the selected place or coordinate result. */
   onSelect: (result: LocationSearchResult) => void;
+  /** Removes the temporary map marker when its search context is edited. */
+  onClear: () => void;
 }
 
 /** Request lifecycle used to render loading, results, and retryable errors. */
-type SearchStatus = 'idle' | 'loading' | 'ready' | 'error';
+type SearchStatus =
+  | 'idle'
+  | 'loading'
+  | 'ready'
+  | 'error'
+  | 'coordinate-outside';
 
 /** Minimum characters required before GeoAdmin is queried. */
 const MINIMUM_QUERY_LENGTH = 2;
@@ -33,17 +45,19 @@ const MINIMUM_QUERY_LENGTH = 2;
 const SEARCH_DELAY_MS = 300;
 
 /**
- * Renders the debounced, keyboard-accessible GeoAdmin location search control.
+ * Renders the keyboard-accessible place and coordinate search control. Text
+ * searches stay debounced, while coordinate parsing remains immediate and local.
  * Network cancellation and stale-result protection remain local to the control,
  * while map movement is delegated through the supplied callbacks.
  */
 export default function LocationSearch({
   onSearchFocus,
   onSelect,
+  onClear,
 }: LocationSearchProps) {
   const { language, t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
-  const skipNextSearchRef = useRef(false);
+  const selectedLabelRef = useRef<string | null>(null);
   const listboxId = useId();
 
   const [query, setQuery] = useState('');
@@ -85,14 +99,44 @@ export default function LocationSearch({
   }, [activeIndex, isOpen, listboxId]);
 
   useEffect(() => {
-    if (skipNextSearchRef.current) {
-      skipNextSearchRef.current = false;
+    if (selectedLabelRef.current === query) {
+      // The selected label is already the complete search context. Reopening
+      // suggestions here would obscure the map immediately after selection.
       return;
     }
 
+    selectedLabelRef.current = null;
     const searchText = query.trim();
+    const coordinateSearch = parseCoordinateSearch(searchText);
 
     setActiveIndex(-1);
+
+    if (coordinateSearch.kind === 'result') {
+      // Coordinate parsing is deliberately synchronous and local: a pasted
+      // coordinate should never wait for the debounce or contact GeoAdmin.
+      setResults([coordinateSearch.result]);
+      setStatus('ready');
+      setIsOpen(true);
+      setActiveIndex(0);
+      return;
+    }
+
+    if (coordinateSearch.kind === 'outside-map') {
+      setResults([]);
+      setStatus('coordinate-outside');
+      setIsOpen(true);
+      return;
+    }
+
+    if (isCoordinateSearchDraft(searchText)) {
+      // An unfinished numeric coordinate should remain a quiet local workflow.
+      // This avoids pointless SearchServer traffic and no-result flicker while
+      // preserving ordinary postal-code and place-name searches.
+      setResults([]);
+      setStatus('idle');
+      setIsOpen(false);
+      return;
+    }
 
     if (searchText.length < MINIMUM_QUERY_LENGTH) {
       setResults([]);
@@ -148,11 +192,21 @@ export default function LocationSearch({
   }, [language, query]);
 
   const handleQueryChange = (nextQuery: string) => {
+    if (
+      selectedLabelRef.current !== null &&
+      nextQuery !== selectedLabelRef.current
+    ) {
+      // The marker and selected label form one temporary context. Editing the
+      // label invalidates the old marker before a replacement is selected.
+      selectedLabelRef.current = null;
+      onClear();
+    }
+
     setQuery(nextQuery);
   };
 
   const selectResult = (result: LocationSearchResult) => {
-    skipNextSearchRef.current = true;
+    selectedLabelRef.current = result.label;
     setQuery(result.label);
     setResults([]);
     setStatus('idle');
@@ -198,13 +252,20 @@ export default function LocationSearch({
       return;
     }
 
-    if (event.key === 'Enter' && activeIndex >= 0) {
-      event.preventDefault();
-      selectResult(results[activeIndex]);
+    if (event.key === 'Enter') {
+      const selectedIndex =
+        activeIndex >= 0 ? activeIndex : results.length === 1 ? 0 : -1;
+
+      if (selectedIndex >= 0) {
+        event.preventDefault();
+        selectResult(results[selectedIndex]);
+      }
     }
   };
 
   const clearSearch = () => {
+    selectedLabelRef.current = null;
+    onClear();
     setQuery('');
     setResults([]);
     setStatus('idle');
@@ -214,6 +275,7 @@ export default function LocationSearch({
 
   const showPanel =
     isOpen && query.trim().length >= MINIMUM_QUERY_LENGTH;
+  const showResults = showPanel && results.length > 0;
 
   return (
     <div className="location-search" ref={containerRef}>
@@ -236,7 +298,7 @@ export default function LocationSearch({
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={showPanel}
-          aria-controls={listboxId}
+          aria-controls={showResults ? listboxId : undefined}
           aria-activedescendant={
             activeIndex >= 0
               ? `${listboxId}-${activeIndex}`
@@ -290,13 +352,19 @@ export default function LocationSearch({
             </div>
           )}
 
+          {status === 'coordinate-outside' && (
+            <div className="location-search-status" role="alert">
+              {t('search.coordinatesOutside')}
+            </div>
+          )}
+
           {status === 'ready' && results.length === 0 && (
             <div className="location-search-status">
               {t('search.noResults')}
             </div>
           )}
 
-          {results.length > 0 && (
+          {showResults && (
             <ul
               id={listboxId}
               className="location-search-results"
@@ -317,6 +385,7 @@ export default function LocationSearch({
                       .filter(Boolean)
                       .join(' ')}
                     role="option"
+                    tabIndex={-1}
                     aria-selected={index === activeIndex}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => selectResult(result)}

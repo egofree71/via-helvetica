@@ -20,3 +20,11 @@ pnpm-debug.log*
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Generated localized HTML entries
+/fr/
+/de/
+/it/
+/en/
+/releases/
+

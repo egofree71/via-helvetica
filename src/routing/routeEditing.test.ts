@@ -15,7 +15,9 @@ import {
   rebuildRouteAfterWaypointDeletion,
   rebuildRouteAfterWaypointInsertion,
   rebuildRouteAfterWaypointMove,
+  requestNetworkRouteSection,
 } from './routeEditing';
+import { RouteSectionTooLongError } from './routeSectionLimit';
 import type { RouteState } from '../map/routeState';
 
 /** Creates a test loader with independently controlled snap and route results. */
@@ -153,6 +155,46 @@ describe('routeEditing', () => {
     expect(route).toHaveBeenCalledOnce();
   });
 
+  it('rejects an overlong network section before invoking the routing loader', async () => {
+    const { loader, route } = createRoutingLoader({
+      routedCoordinates: [
+        [0, 0],
+        [16_000, 0],
+      ],
+    });
+
+    await expect(
+      requestNetworkRouteSection(
+        [0, 0],
+        [16_000, 0],
+        loader,
+        new AbortController().signal,
+      ),
+    ).rejects.toBeInstanceOf(RouteSectionTooLongError);
+    expect(route).not.toHaveBeenCalled();
+  });
+
+  it('keeps overlong straight sections available without routing work', async () => {
+    const { loader, route } = createRoutingLoader();
+
+    await expect(
+      rebuildFixedRouteSection(
+        [0, 0],
+        [16_000, 0],
+        'straight',
+        loader,
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({
+      segment: [
+        [0, 0],
+        [16_000, 0],
+      ],
+      mode: 'straight',
+    });
+    expect(route).not.toHaveBeenCalled();
+  });
+
   it('falls back to an exact straight section when routing has no path', async () => {
     const { loader } = createRoutingLoader({ routedCoordinates: null });
 
@@ -287,6 +329,98 @@ describe('routeEditing', () => {
       mode: 'network',
     });
     expect(route).toHaveBeenCalledOnce();
+  });
+
+  it('rejects moving a waypoint when an affected network section exceeds the limit', async () => {
+    const state = createThreePointRoute();
+    const { loader, route } = createRoutingLoader();
+
+    await expect(
+      rebuildRouteAfterWaypointMove(
+        state,
+        1,
+        [16_000, 0],
+        'network',
+        loader,
+        new AbortController().signal,
+      ),
+    ).rejects.toBeInstanceOf(RouteSectionTooLongError);
+    expect(route).not.toHaveBeenCalled();
+  });
+
+  it('rejects insertion before routing a valid first half when the second is overlong', async () => {
+    const state: RouteState = {
+      steps: [
+        { waypoint: [0, 0], segment: null, mode: 'straight' },
+        {
+          waypoint: [10, 0],
+          segment: [
+            [0, 0],
+            [10, 0],
+          ],
+          mode: 'straight',
+        },
+        {
+          waypoint: [16_000, 0],
+          segment: [
+            [10, 0],
+            [16_000, 0],
+          ],
+          mode: 'straight',
+        },
+      ],
+      closure: null,
+    };
+    const { loader, route } = createRoutingLoader();
+
+    await expect(
+      rebuildRouteAfterWaypointInsertion(
+        state,
+        2,
+        [20, 0],
+        'network',
+        loader,
+        new AbortController().signal,
+      ),
+    ).rejects.toBeInstanceOf(RouteSectionTooLongError);
+    expect(route).not.toHaveBeenCalled();
+  });
+
+  it('rejects deletion before reconnecting distant neighbours', async () => {
+    const state: RouteState = {
+      steps: [
+        { waypoint: [0, 0], segment: null, mode: 'straight' },
+        {
+          waypoint: [10, 0],
+          segment: [
+            [0, 0],
+            [10, 0],
+          ],
+          mode: 'straight',
+        },
+        {
+          waypoint: [16_000, 0],
+          segment: [
+            [10, 0],
+            [16_000, 0],
+          ],
+          mode: 'straight',
+        },
+      ],
+      closure: null,
+    };
+    const { loader, route } = createRoutingLoader();
+
+    await expect(
+      rebuildRouteAfterWaypointDeletion(
+        state,
+        1,
+        'network',
+        loader,
+        new AbortController().signal,
+      ),
+    ).rejects.toBeInstanceOf(RouteSectionTooLongError);
+    expect(route).not.toHaveBeenCalled();
   });
 
   it('reduces a closed two-point route to one open waypoint after deletion', async () => {

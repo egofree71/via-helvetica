@@ -28,7 +28,12 @@ import {
   rebuildRouteAfterWaypointDeletion,
   rebuildRouteAfterWaypointInsertion,
   rebuildRouteAfterWaypointMove,
+  requestNetworkRouteSection,
 } from '../routing/routeEditing';
+import {
+  assertNetworkRouteSectionDistance,
+  RouteSectionTooLongError,
+} from '../routing/routeSectionLimit';
 import type { MapRuntime } from './mapRuntime';
 import {
   useRouteInteractions,
@@ -54,8 +59,13 @@ export interface UseEditableRouteOptions {
   mapRuntimeRef: RefObject<MapRuntime | null>;
   /** Map container used to keep contextual guidance inside the viewport. */
   mapTargetRef: RefObject<HTMLDivElement | null>;
-  /** Typed interface translation helper. */
-  t: (key: TranslationKey) => string;
+  /** Swiss locale used to format the rejected section distance. */
+  locale: string;
+  /** Typed interface translation helper with optional named substitutions. */
+  t: (
+    key: TranslationKey,
+    parameters?: Record<string, string | number>,
+  ) => string;
 }
 
 /** State and actions exposed to the application shell and route controls. */
@@ -90,8 +100,11 @@ export interface EditableRouteController {
   toggleRouteLoop: () => void;
   /** Clears the editable route while keeping route creation active. */
   deleteRoute: () => void;
-  /** Exits editing and clears route history before a GPX becomes current. */
-  replaceWithImportedItinerary: () => void;
+  /**
+   * Exits editing and clears route history before a read-only itinerary becomes
+   * current.
+   */
+  replaceWithReadOnlyItinerary: () => void;
   /** Displays an actionable route message for a bounded duration. */
   showTemporaryRouteMessage: (
     message: string,
@@ -118,10 +131,13 @@ interface AsyncRouteMutationOptions {
   ) => Promise<RouteState>;
 }
 
+/** Pair of intended LV95 endpoints checked before a network-backed edit. */
+type RouteSectionEndpoints = readonly [Coordinate, Coordinate];
+
 /** Duration in milliseconds for actionable route errors before auto-dismissal. */
 const ROUTE_MESSAGE_DURATION_MS = 7_000;
 
-/** Creates the empty immutable history used by a new or imported itinerary. */
+/** Creates the empty immutable history used before any read-only itinerary. */
 function createEmptyRouteHistory(): RouteHistory {
   return {
     steps: [],
@@ -167,6 +183,14 @@ export function useEditableRoute(
     () => collectRouteCoordinates(routeHistory.steps, routeHistory.closure),
     [routeHistory.steps, routeHistory.closure],
   );
+  const sectionDistanceFormat = useMemo(
+    () =>
+      new Intl.NumberFormat(options.locale, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      }),
+    [options.locale],
+  );
 
   const clearRouteMessageTimer = useCallback(() => {
     if (routeMessageTimerRef.current !== null) {
@@ -192,6 +216,47 @@ export function useEditableRoute(
       }, ROUTE_MESSAGE_DURATION_MS);
     },
     [clearRouteMessageTimer],
+  );
+
+  /** Shows the same actionable message for preflight and defensive failures. */
+  const showRouteSectionTooLongMessage = useCallback(
+    (error: RouteSectionTooLongError) => {
+      showTemporaryRouteMessage(
+        options.t('route.sectionTooLong', {
+          distance: sectionDistanceFormat.format(error.distanceMeters / 1_000),
+          maximum: sectionDistanceFormat.format(
+            error.maximumDistanceMeters / 1_000,
+          ),
+        }),
+        'error',
+      );
+    },
+    [options.t, sectionDistanceFormat, showTemporaryRouteMessage],
+  );
+
+  /**
+   * Rejects an ambiguous network edit synchronously, before pending UI state or
+   * Worker creation. The routing functions repeat the same check defensively so
+   * future callers cannot bypass the product rule.
+   */
+  const rejectOverlongNetworkSections = useCallback(
+    (sections: readonly RouteSectionEndpoints[]): boolean => {
+      try {
+        for (const [startCoordinate, endCoordinate] of sections) {
+          assertNetworkRouteSectionDistance(startCoordinate, endCoordinate);
+        }
+      } catch (error) {
+        if (error instanceof RouteSectionTooLongError) {
+          showRouteSectionTooLongMessage(error);
+          return true;
+        }
+
+        throw error;
+      }
+
+      return false;
+    },
+    [showRouteSectionTooLongMessage],
   );
 
   /** Keeps the synchronous ref and React render state on one history object. */
@@ -303,6 +368,11 @@ export function useEditableRoute(
             restoreCommittedRouteDisplay();
           }
 
+          if (error instanceof RouteSectionTooLongError) {
+            showRouteSectionTooLongMessage(error);
+            return;
+          }
+
           if (error instanceof RoutingAreaTooLargeError) {
             showTemporaryRouteMessage(
               options.t('route.areaTooLarge'),
@@ -335,6 +405,7 @@ export function useEditableRoute(
       commitAsyncRouteMutation,
       options.t,
       restoreCommittedRouteDisplay,
+      showRouteSectionTooLongMessage,
       showTemporaryRouteMessage,
     ],
   );
@@ -377,6 +448,15 @@ export function useEditableRoute(
         return;
       }
 
+      if (
+        previousStep &&
+        rejectOverlongNetworkSections([
+          [previousStep.waypoint, clickedCoordinate],
+        ])
+      ) {
+        return;
+      }
+
       runAsyncRouteMutation({
         expectedState,
         errorContext: 'Unable to load or route on swissTLM3D.',
@@ -397,9 +477,10 @@ export function useEditableRoute(
                 }
               : createStraightRouteStep(undefined, clickedCoordinate);
           } else {
-            const routedPath = await routingLoader.route(
+            const routedPath = await requestNetworkRouteSection(
               previousStep.waypoint,
               clickedCoordinate,
+              routingLoader,
               signal,
             );
 
@@ -439,6 +520,7 @@ export function useEditableRoute(
     [
       appendRouteStep,
       isRouteSnapEnabled,
+      rejectOverlongNetworkSections,
       runAsyncRouteMutation,
     ],
   );
@@ -533,17 +615,23 @@ export function useEditableRoute(
       return;
     }
 
+    const firstStep = expectedState.steps[0];
+    const lastStep = expectedState.steps[expectedState.steps.length - 1];
+
+    if (
+      !firstStep ||
+      !lastStep ||
+      rejectOverlongNetworkSections([
+        [lastStep.waypoint, firstStep.waypoint],
+      ])
+    ) {
+      return;
+    }
+
     runAsyncRouteMutation({
       expectedState,
       errorContext: 'Unable to close the route loop.',
       calculate: async (routingLoader, signal) => {
-        const firstStep = expectedState.steps[0];
-        const lastStep = expectedState.steps[expectedState.steps.length - 1];
-
-        if (!firstStep || !lastStep) {
-          throw new Error('The route endpoints are unavailable.');
-        }
-
         return {
           steps: expectedState.steps,
           closure: await rebuildFixedRouteSection(
@@ -556,7 +644,12 @@ export function useEditableRoute(
         };
       },
     });
-  }, [commitRouteMutation, isRouteSnapEnabled, runAsyncRouteMutation]);
+  }, [
+    commitRouteMutation,
+    isRouteSnapEnabled,
+    rejectOverlongNetworkSections,
+    runAsyncRouteMutation,
+  ]);
 
   const deleteRoute = useCallback(() => {
     if (
@@ -585,6 +678,42 @@ export function useEditableRoute(
         return;
       }
 
+      if (isRouteSnapEnabled) {
+        const previousStep = expectedState.steps[waypointIndex - 1];
+        const nextStep = expectedState.steps[waypointIndex + 1];
+        const sections: RouteSectionEndpoints[] = [];
+
+        if (previousStep) {
+          sections.push([previousStep.waypoint, targetCoordinate]);
+        }
+
+        if (nextStep) {
+          sections.push([targetCoordinate, nextStep.waypoint]);
+        }
+
+        if (expectedState.closure && waypointIndex === 0) {
+          const lastStep = expectedState.steps[expectedState.steps.length - 1];
+
+          if (lastStep) {
+            sections.push([lastStep.waypoint, targetCoordinate]);
+          }
+        } else if (
+          expectedState.closure &&
+          waypointIndex === expectedState.steps.length - 1
+        ) {
+          const firstStep = expectedState.steps[0];
+
+          if (firstStep) {
+            sections.push([targetCoordinate, firstStep.waypoint]);
+          }
+        }
+
+        if (rejectOverlongNetworkSections(sections)) {
+          restoreCommittedRouteDisplay();
+          return;
+        }
+      }
+
       runAsyncRouteMutation({
         expectedState,
         errorContext: 'Unable to recalculate the moved route waypoint.',
@@ -600,7 +729,12 @@ export function useEditableRoute(
           ),
       });
     },
-    [isRouteSnapEnabled, restoreCommittedRouteDisplay, runAsyncRouteMutation],
+    [
+      isRouteSnapEnabled,
+      rejectOverlongNetworkSections,
+      restoreCommittedRouteDisplay,
+      runAsyncRouteMutation,
+    ],
   );
 
   /** Inserts one waypoint into a dragged route section as one undoable edit. */
@@ -618,6 +752,30 @@ export function useEditableRoute(
         return;
       }
 
+      if (isRouteSnapEnabled) {
+        const isClosureSection =
+          stepIndex === expectedState.steps.length &&
+          expectedState.closure !== null;
+        const previousStep = isClosureSection
+          ? expectedState.steps[expectedState.steps.length - 1]
+          : expectedState.steps[stepIndex - 1];
+        const destinationStep = isClosureSection
+          ? expectedState.steps[0]
+          : expectedState.steps[stepIndex];
+
+        if (
+          previousStep &&
+          destinationStep &&
+          rejectOverlongNetworkSections([
+            [previousStep.waypoint, targetCoordinate],
+            [targetCoordinate, destinationStep.waypoint],
+          ])
+        ) {
+          restoreCommittedRouteDisplay();
+          return;
+        }
+      }
+
       runAsyncRouteMutation({
         expectedState,
         errorContext: 'Unable to insert the dragged route waypoint.',
@@ -633,7 +791,12 @@ export function useEditableRoute(
           ),
       });
     },
-    [isRouteSnapEnabled, restoreCommittedRouteDisplay, runAsyncRouteMutation],
+    [
+      isRouteSnapEnabled,
+      rejectOverlongNetworkSections,
+      restoreCommittedRouteDisplay,
+      runAsyncRouteMutation,
+    ],
   );
 
   /** Deletes one clicked waypoint as a single undoable route edit. */
@@ -645,6 +808,44 @@ export function useEditableRoute(
       ) {
         restoreCommittedRouteDisplay();
         return;
+      }
+
+      if (isRouteSnapEnabled) {
+        const { steps, closure } = expectedState;
+        let replacementSection: RouteSectionEndpoints | null = null;
+
+        if (
+          steps.length > 2 &&
+          waypointIndex > 0 &&
+          waypointIndex < steps.length - 1
+        ) {
+          replacementSection = [
+            steps[waypointIndex - 1].waypoint,
+            steps[waypointIndex + 1].waypoint,
+          ];
+        } else if (closure && steps.length > 2 && waypointIndex === 0) {
+          replacementSection = [
+            steps[steps.length - 1].waypoint,
+            steps[1].waypoint,
+          ];
+        } else if (
+          closure &&
+          steps.length > 2 &&
+          waypointIndex === steps.length - 1
+        ) {
+          replacementSection = [
+            steps[steps.length - 2].waypoint,
+            steps[0].waypoint,
+          ];
+        }
+
+        if (
+          replacementSection &&
+          rejectOverlongNetworkSections([replacementSection])
+        ) {
+          restoreCommittedRouteDisplay();
+          return;
+        }
       }
 
       runAsyncRouteMutation({
@@ -661,7 +862,12 @@ export function useEditableRoute(
           ),
       });
     },
-    [isRouteSnapEnabled, restoreCommittedRouteDisplay, runAsyncRouteMutation],
+    [
+      isRouteSnapEnabled,
+      rejectOverlongNetworkSections,
+      restoreCommittedRouteDisplay,
+      runAsyncRouteMutation,
+    ],
   );
 
   const toggleRouteCreation = useCallback(() => {
@@ -691,7 +897,7 @@ export function useEditableRoute(
     setIsRouteSnapEnabled((enabled) => !enabled);
   }, []);
 
-  const replaceWithImportedItinerary = useCallback(() => {
+  const replaceWithReadOnlyItinerary = useCallback(() => {
     routingAbortControllerRef.current?.abort();
     routingAbortControllerRef.current = null;
     routeOperationPendingRef.current = false;
@@ -781,7 +987,7 @@ export function useEditableRoute(
     reverseRoute,
     toggleRouteLoop,
     deleteRoute,
-    replaceWithImportedItinerary,
+    replaceWithReadOnlyItinerary,
     showTemporaryRouteMessage,
     isPointerInteractionActive,
   };

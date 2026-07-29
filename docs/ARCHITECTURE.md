@@ -7,7 +7,9 @@ hiking route at a time in Switzerland. React owns the user-interface state,
 OpenLayers owns the imperative map runtime, and a dedicated Web Worker owns the
 CPU- and network-intensive routing engine. The application is deployed as static
 files on GitHub Pages and has no project-owned backend, user database, account
-system, or remote route storage.
+system, or remote route storage. Localized static entries at `/fr/`, `/de/`,
+`/it/`, and `/en/` expose language-specific discovery metadata while loading
+the same React/OpenLayers application.
 
 The map and internal geometry use the Swiss LV95 projection (`EPSG:2056`).
 Official swisstopo backgrounds and geodata are loaded directly from federal
@@ -79,13 +81,16 @@ contextual and temporary:
 - information popups;
 - elevation profile;
 - GPX export dialog;
+- one-time release-highlights dialog;
 - About dialog.
 
 The responsive layout resolves collisions by moving small controls rather than
 permanently reserving large strips of viewport space. The route summary stays on
 the bottom edge, while the About control joins the right-side control stack when
 horizontal space becomes tight. The metric scale is hidden at phone widths where
-it would otherwise remain covered by the summary.
+it would otherwise remain covered by the summary. Tall temporary dialogs use the
+dynamic mobile viewport height, with a conventional viewport fallback, so browser
+address and navigation bars cannot cover their header or footer.
 
 ### 1.5 Explicit workflow boundaries
 
@@ -126,7 +131,7 @@ flowchart LR
 
 | Provider or API | Purpose | Failure impact |
 |---|---|---|
-| swisstopo WMTS | Color, grey, aerial, and hiking-trail portrayals | Initial base-map failure is blocking; later isolated tile failures are not |
+| Federal WMTS (`geo.admin.ch`) | Color, grey, aerial, hiking-trail, and SwitzerlandMobility hiking portrayals | Initial base-map failure is blocking; optional or later isolated tile failures are not |
 | GeoAdmin SearchServer | Official place search | Localized, retryable search failure |
 | GeoAdmin identify | swissTLM3D routing data and map-feature inspection | Routing requests may fail; information overlays remain non-blocking |
 | GeoAdmin HTML popup | Localized closure and military metadata | Popup reports a local error without changing route state |
@@ -146,10 +151,13 @@ system and avoids reprojecting the official WMTS map in the browser.
 WGS 84 (`EPSG:4326`) is used only at exchange boundaries:
 
 - browser geolocation input;
-- SearchServer results;
+- SearchServer results and decimal WGS 84 coordinate input;
 - GPX import;
 - GPX export;
 - geodesic calculations where required.
+
+The search control also accepts LV95 directly and validates it against the
+navigable map extent before publishing the selected point.
 
 `src/map/projection.ts` registers LV95 through `proj4`, exposes the official
 WMTS extent and resolution pyramid, and centralizes WGS 84/LV95 conversion.
@@ -189,16 +197,17 @@ flowchart TB
 |---|---|---|
 | Application composition | `src/App.tsx` | Connects focused hooks, resolves which temporary workflow owns the current itinerary, and owns modal state |
 | Map lifetime | `src/map/mapRuntime.ts`, `src/map/useMapRuntime.ts` | Creates and disposes the single OpenLayers runtime; synchronizes startup and fullscreen state |
-| Map controls | `src/map/useMapViewControls.ts` | Background choice, hiking-overlay visibility, zoom, fullscreen, and explicit geolocation |
-| Information overlays | `src/map/useMapInformationLayers.ts` | Visibility, loading, inspection priority, popup state, selection, caching, and cancellation |
+| Map controls | `src/map/useMapViewControls.ts`, `src/map/useMapLayerOpacities.ts`, `src/components/MapLayersSelector.tsx` | Background choice, persisted overlay visibility and opacity, zoom, fullscreen, and explicit geolocation |
+| Information overlays | `src/map/useMapInformationLayers.ts`, `src/map/mapInformationViewport.ts`, `src/map/useSwitzerlandMobilityHikingSelection.ts`, `src/switzerlandMobility/hikingRoutes.ts` | Visibility, loading, inspection priority, click-anchor visibility beside temporary panels, public-route selection and fitting, popup state, caching, and cancellation |
 | Editable-route domain | `src/map/routeState.ts`, `src/map/useEditableRoute.ts` | Immutable route state, history, snap mode, serialized mutations, and route actions |
 | Pointer interaction | `src/map/useRouteInteractions.ts`, `src/map/routePointerInteraction.ts` | Waypoint and section hit detection, drag previews, click/drag lifecycle, and semantic edit requests |
 | Route presentation | `src/map/routeDisplay.ts`, `src/map/itineraryDirection.ts`, `src/map/itineraryEndpoints.ts` | Committed geometry, previews, direction arrows, and A/B markers |
 | Imported GPX | `src/import/gpx.ts`, `src/map/useImportedRoute.ts`, `src/map/importedRoute.ts` | Local parsing, projection, read-only display, elevation reuse, and responsive view fitting |
-| Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and map/profile synchronisation |
+| Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts`, `src/map/useRouteProfileSynchronization.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and exclusive map/profile synchronisation for the active itinerary or selected public route |
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
-| Search | `src/search/locationSearch.ts`, `src/components/LocationSearch.tsx` | Provider contract, session cache, result UI, keyboard navigation, and request cancellation |
-| Localization | `src/i18n/` | Typed dictionaries, language persistence, Swiss locales, and document metadata |
+| Search | `src/search/locationSearch.ts`, `src/search/coordinateSearch.ts`, `src/components/LocationSearch.tsx` | Local WGS 84/LV95 parsing, provider contract, session cache, result UI, keyboard navigation, and request cancellation |
+| Localization | `src/i18n/`, `scripts/generate-localized-pages.mjs` | Typed dictionaries, language persistence, locale paths, runtime document metadata, and generated localized HTML entries |
+| Release history | `src/releases/`, `src/components/ReleaseNotesDialog.tsx`, `scripts/templates/releases.html` | Returning-visitor release acknowledgement, compact localized highlights with one explicit footer dismissal, a signposted new-tab history link, a distinct current-version display and history action in About, and generated indexable release-history pages |
 | Static deployment | `.github/workflows/deploy.yml`, `vite.config.ts` | Test, build, Pages deployment, and root-relative production assets |
 
 ### 3.3 Application composition
@@ -210,7 +219,15 @@ capabilities. Examples of cross-workflow coordination include:
 - starting route creation clears an imported GPX and temporary search marker;
 - a successful GPX import leaves route mode and clears editable history;
 - opening the About dialog closes map-feature information;
-- changing language clears temporary search state and provider selections;
+- a newer release opens once for returning visitors after the initial map is
+  usable, while first-time visitors and unavailable storage skip the courtesy
+  dialog; closing it records only the acknowledged version in browser storage;
+- selecting a SwitzerlandMobility route keeps the previous itinerary until complete
+  public geometry has been validated, then clears editable history or an imported
+  GPX and makes the selected public route the single current read-only itinerary;
+- changing language updates the shareable locale path through the History API,
+  clears temporary search state and provider selections, and preserves the
+  loaded map and current itinerary;
 - a valid import or route change becomes the single current itinerary for
   metrics.
 
@@ -285,12 +302,26 @@ The import workflow owns:
 Starting a new editable route removes the imported itinerary without converting
 it into route history.
 
-### 4.3 Shared current-itinerary metrics
+### 4.3 Selected SwitzerlandMobility route
+
+A selected public route is another read-only current itinerary. The selection
+workflow retains independent LV95 segments, public identity metadata, calculated
+metrics, and the elevation samples required by its profile and GPX export.
+
+The previous editable route or imported GPX is cleared only after complete public
+geometry has been retrieved and validated. Identification, overlap choice, or a
+failed geometry request therefore cannot destroy the user's current itinerary.
+
+### 4.4 Shared current-itinerary metrics
 
 `useItineraryMetrics` receives either editable-route segments or imported-GPX
 segments. It calculates distance immediately and then resolves altitude-
 dependent values from embedded GPX elevations or the GeoAdmin elevation-profile
 service.
+
+Independent segments sent to the GeoAdmin profile service share one global
+sampling budget. This keeps profile size bounded when provider geometry contains
+genuine gaps instead of multiplying the normal limit by the number of parts.
 
 Every asynchronous result is tied to the exact immutable segment-array identity
 that requested it. Superseded requests are aborted, and stale responses cannot
@@ -308,16 +339,21 @@ The same profile samples support:
 
 ### 5.1 Application startup
 
-1. `main.tsx` mounts React and the language provider.
-2. The language provider resolves the stored or browser language and updates
-   ordinary document metadata.
+1. `main.tsx` mounts React and the language provider from either the root or a
+   localized static HTML entry.
+2. The language provider gives an explicit `/fr/`, `/de/`, `/it/`, or `/en/`
+   path priority over stored and browser preferences, then keeps the path and
+   document metadata synchronized without reloading the application.
 3. `useMapRuntime` creates the single OpenLayers runtime after the map target is
    mounted.
 4. `mapRuntime.ts` creates the LV95 view, explicit layer order, displays, and
    transient markers.
-5. Focused hooks apply persisted background and overlay choices without
-   recreating the map.
-6. Optional providers begin work only when their layer, zoom, or user action
+5. Focused hooks apply persisted background, overlay visibility, and opacity
+   choices without recreating the map.
+6. Once the initial map is usable, the current release dialog opens only for a
+   returning visitor whose stored acknowledgement is older and whose browser can
+   persist the dismissal. A first visit records the current version silently.
+7. Optional providers begin work only when their layer, zoom, or user action
    requires it.
 
 ### 5.2 Editable-route creation
@@ -334,6 +370,7 @@ sequenceDiagram
     alt Straight mode
         UI->>UI: Build direct section
     else Snapping enabled
+        UI->>UI: Validate the 15 km direct section limit
         UI->>Worker: Snap or route request
         Worker->>GeoAdmin: Load missing bounded cells
         GeoAdmin-->>Worker: Roads and optional hiking geometry
@@ -347,7 +384,14 @@ sequenceDiagram
 ```
 
 The first snapped waypoint loads only cells intersecting its maximum snapping
-box. Later sections load a corridor between the existing endpoint and the new
+box. Before any later section reaches the Worker, the editable-route controller
+checks that its intended endpoints are no more than 15 km apart in direct LV95
+distance. The same product rule covers additions, waypoint movement, insertion,
+deletion reconnection, and loop closure. A rejected edit keeps the committed
+route unchanged and asks for an intermediate waypoint; explicit straight mode
+remains unrestricted because it does not load swissTLM3D data.
+
+Admitted sections load a corridor between the existing endpoint and the new
 selection. The routing engine first tries a narrow corridor and retries once
 with a wider corridor when coverage or graph connectivity is insufficient.
 
@@ -365,6 +409,10 @@ Pointer interaction stays separate from route calculation:
 
 - waypoint or route-section hit detection begins a possible gesture;
 - pointer movement renders temporary straight previews only;
+- dragging near a viewport edge auto-pans the OpenLayers view and keeps the
+  preview attached to the coordinate under the stationary pointer;
+- window-level pointer release, focus-loss, and page-visibility guards cancel an
+  abandoned drag and stop its animation before restoring committed geometry;
 - no routing request is performed during drag;
 - release emits one semantic move, insertion, or deletion request;
 - `routeEditing.ts` rebuilds only affected sections using the snap mode selected
@@ -389,6 +437,8 @@ GPX export:
 
 - asks for a route name;
 - simplifies each section independently so every waypoint remains exact;
+- preserves independent read-only geometry as separate GPX track segments, so
+  provider gaps are not connected artificially;
 - merges valid elevation samples without creating centimetre-scale duplicate
   points;
 - converts LV95 geometry to WGS 84;
@@ -427,23 +477,40 @@ route mode:
 
 1. already loaded public-transport stop vectors;
 2. visible hiking closures;
-3. visible military danger zones.
+3. visible SwitzerlandMobility hiking routes;
+4. visible military danger zones.
 
 The stop layer uses validated structured data and a project-owned popup. Closure
 and military details arrive as official HTML fragments, pass through a strict
 sanitizer, and are rendered inside project-owned popup wrappers. Selected
 military geometry is highlighted in a separate vector layer.
 
+For stop, closure, and danger-zone panels, the exact click coordinate remains
+the visual anchor and the zoom remains unchanged. Stops use the smallest pan
+needed to keep their point visible. A closure or danger-zone click that would be
+hidden or leave too little surrounding context is placed near the centre of the
+largest useful map region outside the measured panel. Panel size changes are
+observed because timetable and provider content can arrive after the initial
+render. This click-based rule avoids trying to fit a potentially long closure
+line or a broad, irregular danger-zone polygon.
+
 Visibility, zoom, language, and workflow changes abort obsolete requests and
 clear stale selections. These overlays never mutate route geometry or routing
 costs.
 
-### 5.7 Search, geolocation, fullscreen, and About
+### 5.7 Search, geolocation, fullscreen, About, and releases
 
-Location search uses a bounded language-aware session cache and aborts
-superseded uncached requests. Results are converted to plain text before React
-renders them. Selecting a result creates a temporary marker that is cleared when
-a higher-priority workflow takes ownership.
+Location search first applies a strict local parser to the complete input. It
+accepts decimal WGS 84 and Swiss LV95 coordinate pairs, detects safely reversible
+axis order inside the Swiss map extent, and reports valid coordinates outside
+that extent without contacting GeoAdmin. Unfinished input with strong coordinate
+markers remains local and keeps the result panel closed, while ordinary numeric
+place searches such as postal codes still reach SearchServer. Text searches then
+use a bounded language-aware session cache and abort superseded uncached requests.
+Provider labels are converted to plain text before React renders them. Selecting
+a place frames the broader planning context; selecting an exact coordinate uses
+the closer geolocation scale. Either result creates a temporary marker that is
+cleared when a higher-priority workflow takes ownership.
 
 Geolocation is requested only after explicit user action. A valid WGS 84
 position is converted to LV95, checked against the configured extent, displayed,
@@ -454,10 +521,23 @@ Fullscreen requests target the complete application root. A
 `map.updateSize()` after viewport changes.
 
 The About dialog contains project context, experimental-routing guidance,
-creator and support details, source and license links, professional profile, and
-complete data credits. Its permanently visible map control provides direct
-access to the centralized source references without occupying additional map
-space.
+creator and support details, source and license links, professional profile, a
+link to the localized release history, and complete data credits. Its permanently
+visible map control provides direct access to the centralized source references
+without occupying additional map space.
+
+The release dialog reads the current semantic version and the highlights marked
+for compact display from `src/releases/releaseHistory.json`; history-only items
+remain available on the static page. It opens only after the map has reached its
+usable startup state, only for a returning visitor whose acknowledgement is
+older, and only when at least one compact highlight exists. A first visit records
+the current version silently. Because version 1.0.0 had no release key, the
+existing language preference acts as the migration marker for a returning
+visitor. Storage read or write failures suppress this courtesy dialog rather
+than risking a modal that returns on every load. Closing
+the dialog or opening the complete history stores the current version. The
+history link visibly indicates that it opens a localized static page in a new
+tab so the current itinerary is not lost.
 
 ## 6. Map and geodata integration
 
@@ -473,26 +553,81 @@ Selectable backgrounds include:
 - official grey national map, including its detailed source at close zoom;
 - SWISSIMAGE aerial imagery.
 
-The rendered hiking layer is a transparent official portrayal. It is independent
-from the optional vector hiking geometry used to influence route costs.
+The rendered hiking-trail layer and optional `ch.astra.wanderland` WMTS layer
+add the ordinary official hiking portrayal and the green national, regional, and
+local SwitzerlandMobility routes. The green layer starts disabled. Ordinary
+hiking trails and trail closures start at 80% opacity, SwitzerlandMobility routes
+and military danger zones at 60%, and public-transport stops at 100%; these
+defaults balance readability with visibility of labels, roads, and terrain
+underneath. The shared layer menu exposes an expandable opacity slider for every
+information layer, bounded from 20% to 100%. Complete hiding remains the role of
+the visibility toggle, avoiding an apparently enabled but invisible layer. A
+layer's settings button is disabled while that layer is hidden, and its temporary
+slider closes when visibility is removed because opacity changes would have no
+visible feedback.
+
+Only explicit slider changes are persisted in browser storage. Product defaults
+therefore remain free to evolve for visitors who never adjusted a layer, and one
+slider gesture updates only the corresponding OpenLayers portrayal. Visibility
+and opacity preferences remain independent and do not recreate the map. Any
+selection overlay created by an explicit click—selected SwitzerlandMobility
+route, military danger zone, or public-transport stop—remains opaque while the
+overview portrayal follows the visitor's chosen opacity.
+
+The rendered portrayals remain independent from the vector hiking geometry used
+to influence route costs.
 
 ### 6.2 Ordered layers
 
 The runtime creates one explicit layer order. In broad terms:
 
 1. selected raster background;
-2. rendered hiking portrayal;
-3. closure and military WMS overlays;
-4. selection and public-transport vectors;
-5. imported read-only itinerary;
-6. editable route;
-7. temporary search and user-location markers.
+2. rendered hiking-trail portrayal;
+3. optional green SwitzerlandMobility hiking routes;
+4. selected SwitzerlandMobility route vector and closure WMS overlay;
+5. public-transport and military information vectors and portrayals;
+6. imported read-only itinerary;
+7. editable route;
+8. temporary search and user-location markers.
 
 Route and endpoint readability takes priority over informational overlays.
 Layer construction remains centralized so later features do not depend on
 implicit insertion order.
 
-### 6.3 Hiking closures and military danger zones
+### 6.3 SwitzerlandMobility route inspection
+
+Outside route-creation mode, the information-layer click pipeline can identify a
+feature beneath the optional `ch.astra.wanderland` portrayal. Identification first
+requests public metadata only. A single match is selected immediately; when
+several named routes share the same path, the compact bottom panel presents an
+explicit chooser before any map movement.
+
+After selection, a focused get-feature request retrieves the complete public
+geometry in LV95. Once that geometry is validated, the workflow clears any
+editable route or imported GPX and the public route becomes the single current
+read-only itinerary. A temporary vector layer draws an opaque dark-green line with
+a white casing above the semitransparent overview. The view fits the complete
+selected geometry once, with responsive bottom padding for the panel and the same
+maximum fit zoom and screen margins used by GPX imports. These margins keep route
+endpoints clear of the search field, the right-side map controls, and the compact
+bottom panel. Closing the panel clears the highlight and pending requests but
+preserves the fitted map view, so an explicit close does not undo the user's new
+navigation context.
+
+The panel uses public route identity, route number, stage number, and localized
+section text. Distance, ascent, descent, walking time, and profile samples are
+calculated by Via Helvetica from the retrieved geometry and the existing
+elevation-profile service; no SwitzerlandMobility editorial descriptions or photos
+are reproduced. The profile is collapsed by default and reuses the same chart and
+black map marker as editable routes and imported GPX tracks. The header export
+action reuses the shared naming dialog and writes the complete selected geometry as
+a GPX 1.1 track, preserving independent line segments and embedding calculated
+elevations when available. A shared synchronization hook grants marker ownership
+only to the visible summary. Starting route creation, hiding the layer, changing
+language, selecting another map information feature, or opening another temporary
+workflow clears the selection and profile state.
+
+### 6.4 Hiking closures and military danger zones
 
 Both safety layers use official server-rendered WMS portrayals and localized
 feature inspection. They are enabled independently and persist their visibility
@@ -505,7 +640,7 @@ avoid a visible closure or military zone because:
 - current applicability may depend on dates or local conditions;
 - information-layer availability should not change graph connectivity silently.
 
-### 6.4 Public-transport stops
+### 6.5 Public-transport stops
 
 The source dataset contains passenger stops as well as technical, retired, and
 operational records. Via Helvetica therefore loads vector features and applies a
@@ -554,6 +689,7 @@ React/OpenLayers thread. The map remains interactive while routing work runs.
 
 Provider activity is constrained by:
 
+- a 15 km product-level direct-distance limit checked before network work;
 - regular routing cells;
 - corridor-based loading rather than national data loading;
 - a maximum cell count per operation;
@@ -615,6 +751,7 @@ the capability that caused it.
 | Search | Show a temporary localized error and allow immediate retry |
 | Geolocation and fullscreen | Report capability-specific failure without changing route state |
 | Information overlays | Keep map and route usable; abort stale work; show local popup or layer error |
+| Routed section over 15 km direct distance | Preserve the current route and ask for an intermediate waypoint before Worker activity |
 | Routing coverage miss | Free first waypoint or straight section fallback; keep snap mode enabled |
 | Routing provider or parsing error | Preserve current route; report an actionable error |
 | Optional hiking enrichment | Switch to roads-only mode and continue required routing |
@@ -663,10 +800,22 @@ stay small and should not become new orchestration layers.
 
 ### 10.5 Localization boundary
 
-All user-facing strings belong to typed French, German, Italian, and English
+General interface strings belong to typed French, German, Italian, and English
 dictionaries. Adding a translation key must fail compilation until every
-supported language provides it. Provider identifiers and domain enums remain
-language-neutral.
+supported language provides it. Search and social metadata shared by the build
+generator and runtime live in `src/i18n/seoMetadata.json`. Release announcements
+and static history copy live in `src/releases/releaseHistory.json`; the generator
+validates that versions and item identifiers match across all languages. Provider
+identifiers and domain enums remain language-neutral.
+
+The root URL remains the `x-default` negotiation entry and consolidates on
+`/en/` for static discovery. On first application startup it is replaced, without
+a reload, by the localized path resolved from persisted or browser preferences.
+The four localized paths are static Vite HTML inputs with self-referencing
+canonicals and reciprocal `hreflang` links. Selecting another language calls
+`history.pushState()` rather than navigating, so OpenLayers, route history, and
+imported GPX state are not recreated. A `popstate` listener restores the
+corresponding interface language.
 
 ## 11. Testing and validation
 
@@ -678,10 +827,31 @@ appearance. They cover:
 - immutable route transformations and history;
 - affected-section reconstruction;
 - route-pointer interaction primitives;
-- GPX parsing, projection, metrics, and export;
+- GPX parsing, projection, metrics, editable export, and segmented read-only export;
 - directional-arrow placement;
-- location-search caching and normalization;
+- location-search caching and normalization, local WGS 84/LV95 parsing,
+  coordinate-draft provider bypass, compact combobox accessibility, and distinct
+  place-versus-coordinate zoom policy;
+- locale-path priority, History API language changes, browser back/forward
+  restoration, and localized runtime metadata;
+- first-visit and returning-visitor release acknowledgement, silent storage
+  failure, history-only highlights, consistent localized identifiers, and the
+  compact dialog's single close action and signposted new-tab history link;
+- rendered-layer provider identifiers, semitransparent defaults, explicit-only
+  opacity persistence, minimum-opacity migration, and focused runtime updates;
+- the bounded expandable opacity control for every visible optional information
+  layer, including disabled settings buttons, automatic closure when a layer is
+  hidden, and compact slider accessibility contracts;
+- SwitzerlandMobility metadata normalization, full-geometry selection,
+  strict malformed-line rejection, responsive route fitting, single-itinerary
+  replacement, export, and profile-panel behavior;
 - public-transport filtering, viewport reuse, and API scale separation;
+- screen-space adjustment that keeps an information click visible beside its
+  measured popup without fitting the selected feature;
+- information-click lifecycle when an existing public-route panel is replaced,
+  including preservation of the new identify request;
+- one global elevation-profile sampling budget across independent segments;
+- the 15 km network-section boundary and pre-Worker rejection across route edits;
 - routing-grid footprints;
 - Worker request correlation, typed errors, cancellation, and disposal;
 - dynamic routing engine caching, retry, fallback, and provider errors.
@@ -695,11 +865,20 @@ OpenLayers canvas rendering and complete pointer workflows remain manually
 validated where a browser-level test would cost more than it protects. Important
 manual checks include:
 
-- mouse, pen, and touch route editing;
-- responsive control collisions;
+- mouse, pen, and touch route editing, including edge auto-pan while moving or
+  inserting a waypoint and cancellation after focus or pointer loss;
+- responsive control collisions, translated layer-label wrapping, the release
+  and About dialogs, and the expandable opacity sliders on narrow and short
+  viewports;
+- official hiking and SwitzerlandMobility portrayals across useful zooms and
+  restored opacity preferences after a reload;
+- selection, overlap choice, highlighting, full-route fitting, and profile
+  synchronization for named SwitzerlandMobility routes;
 - GPX fitting on narrow viewports;
 - map/profile pointer synchronisation;
 - provider portrayals and official popup content;
+- stop, closure, and danger-zone clicks near panel and viewport edges on desktop
+  and mobile layouts;
 - routing behaviour in contrasting geographic regions.
 
 The routing subsystem remains experimental until topology and provider behaviour
@@ -739,13 +918,34 @@ base: '/'
 GitHub Pages provides HTTPS, which is required for browser geolocation outside
 `localhost`.
 
-Static discovery assets include canonical, Open Graph, social-card, and
-Schema.org metadata in `index.html`, plus `robots.txt` and `sitemap.xml` under
-`public/`. The route-and-elevation screenshot is used consistently by Open Graph,
-Twitter metadata, structured data, and the image sitemap. The React root is marked
-`data-nosnippet` so transient interface text, including startup messages, is not
-selected as a search-result excerpt or text-fragment deep link. These are
-deployment concerns rather than runtime application services.
+Before development and production builds, `scripts/generate-localized-pages.mjs`
+creates `/fr/`, `/de/`, `/it/`, and `/en/` application entries from the root
+template and `src/i18n/seoMetadata.json`. The same build step generates
+`/releases/` plus `/fr/releases/`, `/de/releases/`, `/it/releases/`, and
+`/en/releases/` from `scripts/templates/releases.html` and the shared release
+history. Vite treats all entries as multi-page inputs and preserves their
+directories in `dist/`, which lets GitHub Pages serve every localized URL
+directly after a reload. Generated source directories are ignored by Git because
+they are deterministic build inputs.
+
+Each localized entry contains a self-referencing canonical, reciprocal
+`hreflang` links, localized Open Graph, Twitter, Schema.org, `noscript`, and
+document metadata. The root remains the `x-default` negotiation entry for
+existing links and browser-language fallback, but its canonical discovery signal
+points to `/en/`; only the four canonical localized application URLs are listed
+in the sitemap. Release history follows the same pattern: `/releases/` is the
+`x-default` entry with a canonical to `/en/releases/`, while the four localized
+history pages are canonical and listed in the sitemap. A dedicated hiking
+photograph is used consistently by Open Graph, Twitter metadata, structured data,
+and the image sitemap. It is a search and social-discovery asset rather than an
+application screenshot.
+
+The rendered application exposes one localized, visually hidden `h1` so
+assistive technologies and rendered-page analysis receive a stable page heading
+without reducing the map area. The React root remains marked `data-nosnippet` so
+transient interface text, including startup messages, is not selected as a
+search-result excerpt or text-fragment deep link. These are deployment concerns
+rather than runtime application services.
 
 ## 13. Code and documentation conventions
 
@@ -753,7 +953,9 @@ deployment concerns rather than runtime application services.
 - Centralize provider identifiers, projections, and geographic constants.
 - Keep internal geometry in EPSG:2056 and transform only at exchange boundaries.
 - Keep network contracts outside React components.
-- Keep every user-facing string in all four typed dictionaries.
+- Keep every user-facing string in all four typed dictionaries, keep shared
+  search/social metadata complete in `seoMetadata.json`, and keep release history
+  complete in every locale of `releaseHistory.json`.
 - Sanitize provider HTML before rendering its limited semantic markup.
 - Abort superseded asynchronous work and guard against stale completion.
 - Preserve explicit OpenLayers layer ordering.
@@ -817,10 +1019,10 @@ Provider usage and attribution remain subject to the respective official terms.
 | LV95 | Current Swiss national coordinate reference system |
 | EPSG:2056 | EPSG identifier for LV95 |
 | WGS 84 / EPSG:4326 | Longitude/latitude exchange coordinate system |
-| WMTS | Tiled map service used for official raster backgrounds and hiking portrayal |
+| WMTS | Tiled map service used for official raster backgrounds, hiking trails, and SwitzerlandMobility route portrayals |
 | WMS | Map-image service used for closure and military overlays |
 | swissTLM3D | Official topographic landscape model supplying roads, paths, and optional hiking geometry |
 | Worker | Browser execution context that isolates routing loading and computation from the map UI |
 | Snapping | Projection of a user-selected waypoint onto a nearby routable network segment |
 | Straight fallback | Direct section stored when normal coverage or connectivity cannot produce a network path |
-| Current itinerary | Either the editable route or one imported read-only GPX, never both as independent active routes |
+| Current itinerary | Either the editable route, one imported GPX, or one selected SwitzerlandMobility route, never several independent active routes |

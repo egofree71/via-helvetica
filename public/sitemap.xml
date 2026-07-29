@@ -4,9 +4,39 @@
   xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
 >
   <url>
-    <loc>https://viahelvetica.ch/</loc>
+    <loc>https://viahelvetica.ch/fr/</loc>
     <image:image>
-      <image:loc>https://viahelvetica.ch/search-preview-v2.png</image:loc>
+      <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
     </image:image>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/de/</loc>
+    <image:image>
+      <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/it/</loc>
+    <image:image>
+      <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/en/</loc>
+    <image:image>
+      <image:loc>https://viahelvetica.ch/via-helvetica-preview.jpg</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/fr/releases/</loc>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/de/releases/</loc>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/it/releases/</loc>
+  </url>
+  <url>
+    <loc>https://viahelvetica.ch/en/releases/</loc>
   </url>
 </urlset>

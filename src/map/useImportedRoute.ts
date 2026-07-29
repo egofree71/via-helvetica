@@ -27,6 +27,7 @@ import {
 } from '../metrics/routeMetrics';
 import { IMPORTED_ROUTE_MAX_ZOOM } from './config';
 import { updateImportedRouteDisplay } from './importedRoute';
+import { calculateResponsiveMapFitPadding } from './viewFit';
 import type { MapRuntime } from './mapRuntime';
 import { fromWgs84Coordinates } from './projection';
 
@@ -84,22 +85,6 @@ const IMPORTED_ROUTE_FIT_STABILIZATION_FRAME_LIMIT = 12;
  */
 const IMPORTED_ROUTE_REQUIRED_STABLE_SIZE_READINGS = 2;
 
-/** Returns start/end padding scaled to preserve a usable fitting area. */
-function scalePaddingPair(
-  startPadding: number,
-  endPadding: number,
-  viewportLength: number,
-): [number, number] {
-  const desiredTotal = startPadding + endPadding;
-  const availableTotal = Math.max(
-    0,
-    viewportLength - IMPORTED_ROUTE_MIN_FIT_AREA_PX,
-  );
-  const scale = Math.min(1, availableTotal / desiredTotal);
-
-  return [Math.round(startPadding * scale), Math.round(endPadding * scale)];
-}
-
 /**
  * Adapts desktop-oriented GPX framing margins to the current map size.
  * OpenLayers subtracts padding before calculating the fit resolution; leaving
@@ -111,18 +96,11 @@ function scalePaddingPair(
 export function calculateImportedRouteFitPadding(
   size: Size,
 ): [number, number, number, number] {
-  const [top, bottom] = scalePaddingPair(
-    IMPORTED_ROUTE_FIT_PADDING_PX[0],
-    IMPORTED_ROUTE_FIT_PADDING_PX[2],
-    size[1],
+  return calculateResponsiveMapFitPadding(
+    size,
+    IMPORTED_ROUTE_FIT_PADDING_PX,
+    IMPORTED_ROUTE_MIN_FIT_AREA_PX,
   );
-  const [right, left] = scalePaddingPair(
-    IMPORTED_ROUTE_FIT_PADDING_PX[1],
-    IMPORTED_ROUTE_FIT_PADDING_PX[3],
-    size[0],
-  );
-
-  return [top, right, bottom, left];
 }
 
 /** Returns whether two OpenLayers size readings describe the same viewport. */

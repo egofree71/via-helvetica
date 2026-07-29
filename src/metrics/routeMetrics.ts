@@ -21,9 +21,9 @@ const PROFILE_SAMPLE_INTERVAL_METERS = 20;
 /** Minimum profile size required to calculate ascent and descent. */
 const PROFILE_MIN_SAMPLE_POINTS = 2;
 /**
- * Maximum response size requested from the profile service. This keeps long
- * regional routes responsive while retaining roughly 20 metre sampling for
- * ordinary hikes.
+ * Maximum combined response size requested from the profile service. Independent
+ * route segments share this budget so provider fragmentation cannot multiply
+ * profile size while ordinary hikes retain roughly 20 metre sampling.
  */
 const PROFILE_MAX_SAMPLE_POINTS = 1_000;
 /**
@@ -165,15 +165,127 @@ function limitProfileCoordinates(coordinates: Coordinate[]): Coordinate[] {
   return limitedCoordinates;
 }
 
-/** Calculates the requested amount of elevation samples from route length. */
+/** Calculates the ideal amount of elevation samples before applying a budget. */
+function targetProfileSampleCount(distanceMeters: number): number {
+  return Math.max(
+    PROFILE_MIN_SAMPLE_POINTS,
+    Math.ceil(distanceMeters / PROFILE_SAMPLE_INTERVAL_METERS) + 1,
+  );
+}
+
+/** Applies the global safety cap to one continuous route profile. */
 function profileSampleCount(distanceMeters: number): number {
   return Math.min(
     PROFILE_MAX_SAMPLE_POINTS,
-    Math.max(
-      PROFILE_MIN_SAMPLE_POINTS,
-      Math.ceil(distanceMeters / PROFILE_SAMPLE_INTERVAL_METERS) + 1,
-    ),
+    targetProfileSampleCount(distanceMeters),
   );
+}
+
+/** Measurable route segment paired with its geodesic length and sample budget. */
+interface MeasurableProfileSegment {
+  /** Independent route geometry in EPSG:2056. */
+  segment: Coordinate[];
+  /** Geodesic segment length in metres. */
+  distanceMeters: number;
+  /** Number of elevation points requested for this segment. */
+  sampleCount: number;
+}
+
+/**
+ * Shares the global profile budget across independent route segments.
+ *
+ * Every measurable segment keeps at least its two endpoints. Remaining points
+ * are distributed in proportion to the density each segment would request on
+ * its own, while largest fractional remainders consume the final rounding slots.
+ *
+ * @param segments - Independent route geometries in EPSG:2056.
+ * @returns Measurable segments with a combined sample count no greater than 1,000.
+ * @throws {Error} When more independent segments exist than the budget can represent.
+ */
+function allocateSegmentProfileSamples(
+  segments: Coordinate[][],
+): MeasurableProfileSegment[] {
+  const measurableSegments = segments
+    .map((segment) => ({
+      segment,
+      distanceMeters: calculateRouteDistance(segment),
+    }))
+    .filter(
+      ({ segment, distanceMeters }) =>
+        segment.length >= 2 && distanceMeters > 0,
+    );
+
+  if (
+    measurableSegments.length * PROFILE_MIN_SAMPLE_POINTS >
+    PROFILE_MAX_SAMPLE_POINTS
+  ) {
+    throw new Error(
+      'Elevation profile contains too many independent route segments.',
+    );
+  }
+
+  const desiredSampleCounts = measurableSegments.map(({ distanceMeters }) =>
+    targetProfileSampleCount(distanceMeters),
+  );
+  const desiredTotal = desiredSampleCounts.reduce(
+    (total, sampleCount) => total + sampleCount,
+    0,
+  );
+
+  if (desiredTotal <= PROFILE_MAX_SAMPLE_POINTS) {
+    return measurableSegments.map((segment, index) => ({
+      ...segment,
+      sampleCount: desiredSampleCounts[index],
+    }));
+  }
+
+  const minimumTotal =
+    measurableSegments.length * PROFILE_MIN_SAMPLE_POINTS;
+  const remainingBudget = PROFILE_MAX_SAMPLE_POINTS - minimumTotal;
+  const desiredExtraCounts = desiredSampleCounts.map(
+    (sampleCount) => sampleCount - PROFILE_MIN_SAMPLE_POINTS,
+  );
+  const desiredExtraTotal = desiredExtraCounts.reduce(
+    (total, sampleCount) => total + sampleCount,
+    0,
+  );
+  const allocations = desiredExtraCounts.map((desiredExtraCount, index) => {
+    const exactShare =
+      (remainingBudget * desiredExtraCount) / desiredExtraTotal;
+    const allocatedExtraCount = Math.floor(exactShare);
+
+    return {
+      index,
+      allocatedExtraCount,
+      remainder: exactShare - allocatedExtraCount,
+    };
+  });
+  let unallocatedPoints =
+    remainingBudget -
+    allocations.reduce(
+      (total, allocation) => total + allocation.allocatedExtraCount,
+      0,
+    );
+
+  // Largest remainders keep the proportional distribution deterministic while
+  // ensuring rounding never pushes the combined provider request above 1,000.
+  for (const allocation of [...allocations].sort(
+    (first, second) =>
+      second.remainder - first.remainder || first.index - second.index,
+  )) {
+    if (unallocatedPoints === 0) {
+      break;
+    }
+
+    allocation.allocatedExtraCount += 1;
+    unallocatedPoints -= 1;
+  }
+
+  return measurableSegments.map((segment, index) => ({
+    ...segment,
+    sampleCount:
+      PROFILE_MIN_SAMPLE_POINTS + allocations[index].allocatedExtraCount,
+  }));
 }
 
 /**
@@ -365,18 +477,14 @@ export async function fetchRouteSegmentsElevationSummary(
   let descentMeters = 0;
   let cumulativeDistanceMeters = 0;
   const points: RouteElevationPoint[] = [];
+  const measurableSegments = allocateSegmentProfileSamples(segments);
 
-  for (const segment of segments) {
-    const distanceMeters = calculateRouteDistance(segment);
-
-    if (segment.length < 2 || distanceMeters <= 0) {
-      continue;
-    }
-
+  for (const { segment, distanceMeters, sampleCount } of measurableSegments) {
     const summary = await fetchRouteElevationSummary(
       segment,
       distanceMeters,
       signal,
+      sampleCount,
     );
 
     ascentMeters += summary.ascentMeters;
@@ -403,16 +511,26 @@ export async function fetchRouteSegmentsElevationSummary(
  * @param coordinates - Ordered route vertices in EPSG:2056.
  * @param distanceMeters - Already calculated route distance used to size the profile.
  * @param signal - Abort signal used when route history changes before completion.
+ * @param requestedSampleCount - Optional share of a multi-segment global budget.
  * @returns Total ascent and descent in metres.
- * @throws {Error} If the profile response is unavailable, malformed, or incomplete.
+ * @throws {Error} If the route, sample budget, or profile response is invalid.
  */
 export async function fetchRouteElevationSummary(
   coordinates: Coordinate[],
   distanceMeters: number,
   signal: AbortSignal,
+  requestedSampleCount = profileSampleCount(distanceMeters),
 ): Promise<RouteElevationSummary> {
   if (coordinates.length < 2 || distanceMeters <= 0) {
     throw new Error('An elevation profile requires a route line.');
+  }
+
+  if (
+    !Number.isInteger(requestedSampleCount) ||
+    requestedSampleCount < PROFILE_MIN_SAMPLE_POINTS ||
+    requestedSampleCount > PROFILE_MAX_SAMPLE_POINTS
+  ) {
+    throw new Error('Elevation profile sample count is outside safe limits.');
   }
 
   const profileCoordinates = limitProfileCoordinates(coordinates).map(
@@ -429,7 +547,7 @@ export async function fetchRouteElevationSummary(
   requestUrl.searchParams.set('sr', '2056');
   requestUrl.searchParams.set(
     'nb_points',
-    String(profileSampleCount(distanceMeters)),
+    String(requestedSampleCount),
   );
   requestUrl.searchParams.set('offset', String(PROFILE_SMOOTHING_OFFSET));
 

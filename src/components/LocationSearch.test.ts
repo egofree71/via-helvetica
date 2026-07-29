@@ -1,7 +1,7 @@
 /**
- * Interaction regression tests for the compact search combobox. They protect
- * keyboard endpoint navigation and visible active-option tracking without a
- * browser-level map test.
+ * Business context: protects the compact search combobox against interaction
+ * regressions in keyboard navigation, local coordinate handling, and visible
+ * active-option tracking without requiring a browser-level map test.
  */
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -113,6 +113,7 @@ describe('LocationSearch keyboard navigation', () => {
           createElement(LocationSearch, {
             onSearchFocus: vi.fn(),
             onSelect: vi.fn(),
+            onClear: vi.fn(),
           }),
         ),
       );
@@ -152,5 +153,258 @@ describe('LocationSearch keyboard navigation', () => {
 
     expect(options[0].getAttribute('aria-selected')).toBe('true');
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+});
+
+describe('LocationSearch coordinate entry', () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    clearLocationSearchCache();
+    window.localStorage.setItem('via-helvetica-language', 'en');
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+      writable: true,
+    });
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      await act(async () => {
+        root?.unmount();
+      });
+    }
+    container.remove();
+    clearLocationSearchCache();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('shows a local coordinate result and selects it with Enter without fetching', async () => {
+    const fetchMock = vi.fn();
+    const onSelect = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(LocationSearch, {
+            onSearchFocus: vi.fn(),
+            onSelect,
+            onClear: vi.fn(),
+          }),
+        ),
+      );
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input');
+    expect(input).not.toBeNull();
+    expect(input?.placeholder).toBe('Place or coordinates…');
+    expect(input?.hasAttribute('aria-controls')).toBe(false);
+
+    await act(async () => {
+      setInputValue(input!, "2'671'804, 1'204'459");
+    });
+
+    const option = container.querySelector<HTMLElement>('[role="option"]');
+    expect(option?.textContent).toContain("2'671'804, 1'204'459");
+    expect(option?.textContent).toContain('LV95 coordinates');
+    expect(option?.tabIndex).toBe(-1);
+    expect(input?.getAttribute('aria-controls')).toBe(
+      option?.closest('[role="listbox"]')?.id,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      input!.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+        }),
+      );
+    });
+
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect.mock.calls[0][0]).toMatchObject({
+      origin: 'lv95',
+      label: "2'671'804, 1'204'459",
+    });
+    expect(input?.hasAttribute('aria-controls')).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps unfinished coordinates local while preserving postal-code search', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ results: [] }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(LocationSearch, {
+            onSearchFocus: vi.fn(),
+            onSelect: vi.fn(),
+            onClear: vi.fn(),
+          }),
+        ),
+      );
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input');
+
+    await act(async () => {
+      setInputValue(input!, "2'671'804, 1'20");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(input?.getAttribute('aria-expanded')).toBe('false');
+
+    await act(async () => {
+      setInputValue(input!, '1204');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('searches again after editing a selected coordinate with an unchanged label', async () => {
+    const fetchMock = vi.fn();
+    const onClear = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(LocationSearch, {
+            onSearchFocus: vi.fn(),
+            onSelect: vi.fn(),
+            onClear,
+          }),
+        ),
+      );
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input');
+
+    await act(async () => {
+      setInputValue(input!, '46.987, 8.383');
+    });
+
+    await act(async () => {
+      input!.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+        }),
+      );
+    });
+
+    await act(async () => {
+      setInputValue(input!, '46.987, 8.384');
+    });
+
+    const option = container.querySelector<HTMLElement>('[role="option"]');
+
+    expect(option?.textContent).toContain('46.987, 8.384');
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('notifies the map when the selected search context is cleared', async () => {
+    const onClear = vi.fn();
+
+    vi.stubGlobal('fetch', vi.fn());
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(LocationSearch, {
+            onSearchFocus: vi.fn(),
+            onSelect: vi.fn(),
+            onClear,
+          }),
+        ),
+      );
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input');
+
+    await act(async () => {
+      setInputValue(input!, '46.987, 8.383');
+    });
+
+    await act(async () => {
+      input!.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+        }),
+      );
+    });
+
+    const clearButton = container.querySelector<HTMLButtonElement>(
+      '.location-search-clear',
+    );
+
+    await act(async () => {
+      clearButton?.click();
+    });
+
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(input?.value).toBe('');
+  });
+
+  it('explains when a valid coordinate is outside the map', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(LocationSearch, {
+            onSearchFocus: vi.fn(),
+            onSelect: vi.fn(),
+            onClear: vi.fn(),
+          }),
+        ),
+      );
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input');
+
+    await act(async () => {
+      setInputValue(input!, '48.8566, 2.3522');
+    });
+
+    expect(container.textContent).toContain(
+      'These coordinates are outside the area covered by the map.',
+    );
   });
 });

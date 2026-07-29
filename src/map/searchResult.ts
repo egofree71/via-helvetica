@@ -1,7 +1,8 @@
 /**
  * Business context: renders the one temporary marker associated with a selected
- * GeoAdmin search result. Keeping it in a dedicated layer lets search selection
- * change independently from geolocation, route editing, and information popups.
+ * place or coordinate search result. Keeping it in a dedicated layer lets
+ * search selection change independently from geolocation, route editing, and
+ * information popups.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import Feature from 'ol/Feature.js';

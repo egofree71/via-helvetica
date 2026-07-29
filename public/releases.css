@@ -1,0 +1,211 @@
+:root {
+  color: #17212b;
+  background: #edf1f3;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 20rem;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgb(188 218 235 / 42%), transparent 32rem),
+    #edf1f3;
+}
+
+a {
+  color: #125cb8;
+}
+
+a:focus-visible {
+  outline: 3px solid rgb(23 105 224 / 38%);
+  outline-offset: 3px;
+}
+
+.release-site-header {
+  border-bottom: 1px solid rgb(32 47 60 / 14%);
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 2px 12px rgb(20 29 37 / 6%);
+}
+
+.release-site-header-inner {
+  display: flex;
+  width: min(58rem, calc(100% - 2rem));
+  min-height: 4.5rem;
+  margin: 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.release-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: #17212b;
+  font-size: 1.05rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.release-language-nav {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.release-language-nav a {
+  min-width: 2.25rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 7px;
+  color: #4c5a65;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+
+.release-language-nav a:hover,
+.release-language-nav a[aria-current="page"] {
+  color: #ffffff;
+  background: #1769e0;
+}
+
+.release-page {
+  width: min(52rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.release-back-link {
+  display: inline-block;
+  margin-bottom: 1.25rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.release-page h1 {
+  max-width: 44rem;
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.release-page-intro {
+  max-width: 44rem;
+  margin: 1rem 0 2rem;
+  color: #52616d;
+  font-size: 1.08rem;
+  line-height: 1.65;
+}
+
+.release-list {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.release-card {
+  padding: clamp(1.15rem, 3vw, 1.75rem);
+  border: 1px solid rgb(32 47 60 / 15%);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 10px 32px rgb(20 29 37 / 8%);
+}
+
+.release-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+}
+
+.release-card h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.25;
+}
+
+.release-current-badge {
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  color: #0f5a33;
+  background: #dff5e9;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.release-summary {
+  margin: 0.8rem 0 0;
+  color: #52616d;
+  line-height: 1.6;
+}
+
+.release-items {
+  display: grid;
+  gap: 0.95rem;
+  margin: 1.2rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.release-items > li {
+  padding-left: 0.15rem;
+  color: #3f4d58;
+  line-height: 1.55;
+}
+
+.release-items p {
+  margin: 0;
+}
+
+.release-items strong {
+  color: #25333d;
+}
+
+.release-detail-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.55rem 0 0;
+  padding-left: 1.15rem;
+  color: #5a6873;
+  font-size: 0.94rem;
+}
+
+.release-site-footer {
+  display: flex;
+  width: min(52rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 0 0 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #64717b;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 540px) {
+  .release-site-header-inner {
+    width: min(100% - 1.25rem, 58rem);
+  }
+
+  .release-brand span {
+    display: none;
+  }
+
+  .release-page,
+  .release-site-footer {
+    width: min(100% - 1.5rem, 52rem);
+  }
+
+  .release-page {
+    padding-top: 1.4rem;
+  }
+}

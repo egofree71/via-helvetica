@@ -2,6 +2,7 @@
  * Business context: centralizes every user-facing label so the interface can
  * switch languages without scattering translation logic across map modules.
  */
+import seoMetadata from './seoMetadata.json';
 
 /** Languages supported by the application interface and GeoAdmin search. */
 export const SUPPORTED_LANGUAGES = ['fr', 'de', 'it', 'en'] as const;
@@ -21,10 +22,8 @@ export const LANGUAGE_METADATA: Record<
 };
 
 const frenchTranslations = {
-  'app.title':
-    'Via Helvetica – Planificateur d’itinéraires de randonnée en Suisse',
-  'app.description':
-    'Planifiez des itinéraires de randonnée en Suisse sur les cartes officielles, consultez le dénivelé et les informations sur les sentiers, puis importez ou exportez des fichiers GPX.',
+  'app.title': seoMetadata.fr.title,
+  'app.description': seoMetadata.fr.description,
   'about.open': 'À propos de Via Helvetica',
   'about.title': 'Via Helvetica',
   'about.tagline':
@@ -42,8 +41,12 @@ const frenchTranslations = {
   'about.sourceCode': 'Code source',
   'about.license': 'Licence',
   'about.linkedin': 'Profil professionnel',
+  'about.currentVersion': 'Version actuelle',
+  'about.releaseHistory': 'Historique des versions',
+  'about.releaseHistoryAction': 'Consulter',
   'about.creditsTitle': 'Cartes et données',
   'about.maps': 'Cartes et géodonnées',
+  'about.switzerlandMobilityHiking': 'À pied SuisseMobile',
   'about.closures': 'Fermetures et déviations',
   'about.dangerZones': 'Avis de tir et zones de danger',
   'about.transportStops': 'Arrêts de transports publics',
@@ -55,17 +58,21 @@ const frenchTranslations = {
   'language.it': 'Italien',
   'language.en': 'Anglais',
 
-  'search.placeholder': 'Rechercher une localité…',
-  'search.label': 'Rechercher une localité',
+  'search.placeholder': 'Lieu ou coordonnées…',
+  'search.label': 'Rechercher un lieu ou des coordonnées',
   'search.clearLabel': 'Effacer la recherche',
   'search.clearTitle': 'Effacer',
   'search.loading': 'Recherche…',
   'search.unavailable': 'La recherche est momentanément indisponible.',
   'search.noResults': 'Aucun lieu trouvé.',
+  'search.coordinatesOutside':
+    'Ces coordonnées se trouvent hors de la zone couverte par la carte.',
   'search.results': 'Résultats de recherche',
   'search.category.zipcode': 'Localité ou code postal',
   'search.category.gg25': 'Commune',
   'search.category.gazetteer': 'Nom géographique',
+  'search.category.wgs84': 'Coordonnées WGS 84',
+  'search.category.lv95': 'Coordonnées LV95',
 
   'route.toolbar': 'Itinéraire',
   'route.create': 'Créer un itinéraire',
@@ -95,6 +102,8 @@ const frenchTranslations = {
     'Aucun chemin swissTLM3D n’a été trouvé à proximité de ce point.',
   'route.noConnectedPath':
     'Aucun chemin connecté n’a été trouvé entre ces deux points.',
+  'route.sectionTooLong':
+    'Cette section ferait {distance} km à vol d’oiseau. Ajoutez un point intermédiaire : le suivi des chemins est limité à {maximum} km entre deux points.',
   'route.areaTooLarge':
     'Ce segment est trop long pour le chargement dynamique actuel. Ajoutez un point intermédiaire.',
   'route.networkLoadError':
@@ -121,10 +130,30 @@ const frenchTranslations = {
   'map.layers.select': 'Choisir les couches de la carte',
   'map.layers.baseMaps': 'Fond de carte',
   'map.layers.information': 'Couches d’information',
+  'map.layers.opacity': 'Opacité',
+  'map.layers.adjustOpacity': 'Régler l’opacité de la couche « {layer} »',
   'map.baseMap.color': 'Carte couleur',
   'map.baseMap.gray': 'Carte grise',
   'map.baseMap.aerial': 'Photo aérienne',
   'hikingTrails.layer': 'Chemins de randonnée',
+  'switzerlandMobilityHiking.layer': 'À pied SuisseMobile',
+  'switzerlandMobilityHiking.panelAria':
+    'Informations sur l’itinéraire SuisseMobile',
+  'switzerlandMobilityHiking.close': 'Fermer',
+  'switzerlandMobilityHiking.stage': 'Étape {number}',
+  'switzerlandMobilityHiking.stageSection':
+    'Étape {number} : {section}',
+  'switzerlandMobilityHiking.routeNumber': 'Itinéraire {number}',
+  'switzerlandMobilityHiking.unnamedRoute': 'Itinéraire SuisseMobile',
+  'switzerlandMobilityHiking.multipleTitle':
+    'Plusieurs itinéraires passent ici',
+  'switzerlandMobilityHiking.multipleHint':
+    'Choisissez l’itinéraire à afficher.',
+  'switzerlandMobilityHiking.loading': 'Chargement de l’itinéraire…',
+  'switzerlandMobilityHiking.loadError':
+    'Les informations de cet itinéraire n’ont pas pu être chargées.',
+  'switzerlandMobilityHiking.elevationUnavailable':
+    'Profil d’altitude indisponible.',
   'closures.layer': 'Fermetures / déviations',
   'closures.title': 'Fermeture / déviation',
   'closures.close': 'Fermer',
@@ -197,10 +226,8 @@ const frenchTranslations = {
 export type TranslationKey = keyof typeof frenchTranslations;
 
 const germanTranslations: Record<TranslationKey, string> = {
-  'app.title':
-    'Via Helvetica – Routenplaner für Wanderungen in der Schweiz',
-  'app.description':
-    'Planen Sie Wanderungen in der Schweiz auf offiziellen Karten, prüfen Sie Höhenprofil und Weginformationen und importieren oder exportieren Sie GPX-Dateien.',
+  'app.title': seoMetadata.de.title,
+  'app.description': seoMetadata.de.description,
   'about.open': 'Über Via Helvetica',
   'about.title': 'Via Helvetica',
   'about.tagline':
@@ -218,8 +245,12 @@ const germanTranslations: Record<TranslationKey, string> = {
   'about.sourceCode': 'Quellcode',
   'about.license': 'Lizenz',
   'about.linkedin': 'Berufsprofil',
+  'about.currentVersion': 'Aktuelle Version',
+  'about.releaseHistory': 'Versionsverlauf',
+  'about.releaseHistoryAction': 'Ansehen',
   'about.creditsTitle': 'Karten und Daten',
   'about.maps': 'Karten und Geodaten',
+  'about.switzerlandMobilityHiking': 'Wanderland SchweizMobil',
   'about.closures': 'Sperrungen und Umleitungen',
   'about.dangerZones': 'Schiessanzeigen und Gefahrenzonen',
   'about.transportStops': 'Haltestellen des öffentlichen Verkehrs',
@@ -231,17 +262,21 @@ const germanTranslations: Record<TranslationKey, string> = {
   'language.it': 'Italienisch',
   'language.en': 'Englisch',
 
-  'search.placeholder': 'Ort suchen…',
-  'search.label': 'Ort suchen',
+  'search.placeholder': 'Ort oder Koordinaten…',
+  'search.label': 'Ort oder Koordinaten suchen',
   'search.clearLabel': 'Suche löschen',
   'search.clearTitle': 'Löschen',
   'search.loading': 'Suche…',
   'search.unavailable': 'Die Suche ist vorübergehend nicht verfügbar.',
   'search.noResults': 'Kein Ort gefunden.',
+  'search.coordinatesOutside':
+    'Diese Koordinaten liegen ausserhalb des Kartenbereichs.',
   'search.results': 'Suchergebnisse',
   'search.category.zipcode': 'Ort oder Postleitzahl',
   'search.category.gg25': 'Gemeinde',
   'search.category.gazetteer': 'Geografischer Name',
+  'search.category.wgs84': 'WGS-84-Koordinaten',
+  'search.category.lv95': 'LV95-Koordinaten',
 
   'route.toolbar': 'Route',
   'route.create': 'Route erstellen',
@@ -271,6 +306,8 @@ const germanTranslations: Record<TranslationKey, string> = {
     'In der Nähe dieses Punkts wurde kein swissTLM3D-Weg gefunden.',
   'route.noConnectedPath':
     'Zwischen diesen beiden Punkten wurde kein verbundener Weg gefunden.',
+  'route.sectionTooLong':
+    'Dieser Abschnitt wäre in Luftlinie {distance} km lang. Fügen Sie einen Zwischenpunkt hinzu: Die Wegführung ist zwischen zwei Punkten auf {maximum} km begrenzt.',
   'route.areaTooLarge':
     'Dieses Segment ist für das aktuelle dynamische Laden zu lang. Fügen Sie einen Zwischenpunkt hinzu.',
   'route.networkLoadError':
@@ -298,10 +335,30 @@ const germanTranslations: Record<TranslationKey, string> = {
   'map.layers.select': 'Kartenebenen auswählen',
   'map.layers.baseMaps': 'Kartenhintergrund',
   'map.layers.information': 'Informationsebenen',
+  'map.layers.opacity': 'Deckkraft',
+  'map.layers.adjustOpacity': 'Deckkraft der Ebene „{layer}“ einstellen',
   'map.baseMap.color': 'Farbkarte',
   'map.baseMap.gray': 'Graue Karte',
   'map.baseMap.aerial': 'Luftbild',
   'hikingTrails.layer': 'Wanderwege',
+  'switzerlandMobilityHiking.layer': 'Wanderland SchweizMobil',
+  'switzerlandMobilityHiking.panelAria':
+    'Informationen zur SchweizMobil-Wanderroute',
+  'switzerlandMobilityHiking.close': 'Schliessen',
+  'switzerlandMobilityHiking.stage': 'Etappe {number}',
+  'switzerlandMobilityHiking.stageSection':
+    'Etappe {number}: {section}',
+  'switzerlandMobilityHiking.routeNumber': 'Route {number}',
+  'switzerlandMobilityHiking.unnamedRoute': 'SchweizMobil-Wanderroute',
+  'switzerlandMobilityHiking.multipleTitle':
+    'Hier verlaufen mehrere Routen',
+  'switzerlandMobilityHiking.multipleHint':
+    'Wählen Sie die Route aus, die angezeigt werden soll.',
+  'switzerlandMobilityHiking.loading': 'Route wird geladen…',
+  'switzerlandMobilityHiking.loadError':
+    'Die Informationen zu dieser Route konnten nicht geladen werden.',
+  'switzerlandMobilityHiking.elevationUnavailable':
+    'Höhenprofil nicht verfügbar.',
   'closures.layer': 'Sperrungen / Umleitungen',
   'closures.title': 'Sperrung / Umleitung',
   'closures.close': 'Schliessen',
@@ -372,10 +429,8 @@ const germanTranslations: Record<TranslationKey, string> = {
 };
 
 const italianTranslations: Record<TranslationKey, string> = {
-  'app.title':
-    'Via Helvetica – Pianificatore di itinerari escursionistici in Svizzera',
-  'app.description':
-    'Pianifica itinerari escursionistici in Svizzera sulle carte ufficiali, consulta dislivello e informazioni sui sentieri e importa o esporta file GPX.',
+  'app.title': seoMetadata.it.title,
+  'app.description': seoMetadata.it.description,
   'about.open': 'Informazioni su Via Helvetica',
   'about.title': 'Via Helvetica',
   'about.tagline':
@@ -393,8 +448,12 @@ const italianTranslations: Record<TranslationKey, string> = {
   'about.sourceCode': 'Codice sorgente',
   'about.license': 'Licenza',
   'about.linkedin': 'Profilo professionale',
+  'about.currentVersion': 'Versione attuale',
+  'about.releaseHistory': 'Cronologia delle versioni',
+  'about.releaseHistoryAction': 'Consulta',
   'about.creditsTitle': 'Carte e dati',
   'about.maps': 'Carte e geodati',
+  'about.switzerlandMobilityHiking': 'A piedi SvizzeraMobile',
   'about.closures': 'Chiusure e deviazioni',
   'about.dangerZones': 'Avvisi di tiro e zone di pericolo',
   'about.transportStops': 'Fermate dei trasporti pubblici',
@@ -406,17 +465,21 @@ const italianTranslations: Record<TranslationKey, string> = {
   'language.it': 'Italiano',
   'language.en': 'Inglese',
 
-  'search.placeholder': 'Cerca una località…',
-  'search.label': 'Cerca una località',
+  'search.placeholder': 'Luogo o coordinate…',
+  'search.label': 'Cerca un luogo o delle coordinate',
   'search.clearLabel': 'Cancella la ricerca',
   'search.clearTitle': 'Cancella',
   'search.loading': 'Ricerca…',
   'search.unavailable': 'La ricerca non è momentaneamente disponibile.',
   'search.noResults': 'Nessuna località trovata.',
+  'search.coordinatesOutside':
+    'Queste coordinate si trovano fuori dall’area coperta dalla carta.',
   'search.results': 'Risultati della ricerca',
   'search.category.zipcode': 'Località o codice postale',
   'search.category.gg25': 'Comune',
   'search.category.gazetteer': 'Nome geografico',
+  'search.category.wgs84': 'Coordinate WGS 84',
+  'search.category.lv95': 'Coordinate LV95',
 
   'route.toolbar': 'Itinerario',
   'route.create': 'Crea un itinerario',
@@ -446,6 +509,8 @@ const italianTranslations: Record<TranslationKey, string> = {
     'Nessun percorso swissTLM3D è stato trovato vicino a questo punto.',
   'route.noConnectedPath':
     'Nessun percorso collegato è stato trovato tra questi due punti.',
+  'route.sectionTooLong':
+    'Questo tratto sarebbe lungo {distance} km in linea d’aria. Aggiungi un punto intermedio: il calcolo sui sentieri è limitato a {maximum} km tra due punti.',
   'route.areaTooLarge':
     'Questo segmento è troppo lungo per il caricamento dinamico attuale. Aggiungi un punto intermedio.',
   'route.networkLoadError':
@@ -473,10 +538,31 @@ const italianTranslations: Record<TranslationKey, string> = {
   'map.layers.select': 'Scegli i livelli della carta',
   'map.layers.baseMaps': 'Sfondo della carta',
   'map.layers.information': 'Livelli informativi',
+  'map.layers.opacity': 'Opacità',
+  'map.layers.adjustOpacity': 'Regola l’opacità del livello « {layer} »',
   'map.baseMap.color': 'Carta a colori',
   'map.baseMap.gray': 'Carta grigia',
   'map.baseMap.aerial': 'Foto aerea',
   'hikingTrails.layer': 'Sentieri escursionistici',
+  'switzerlandMobilityHiking.layer': 'A piedi SvizzeraMobile',
+  'switzerlandMobilityHiking.panelAria':
+    'Informazioni sull’itinerario SvizzeraMobile',
+  'switzerlandMobilityHiking.close': 'Chiudi',
+  'switzerlandMobilityHiking.stage': 'Tappa {number}',
+  'switzerlandMobilityHiking.stageSection':
+    'Tappa {number}: {section}',
+  'switzerlandMobilityHiking.routeNumber': 'Itinerario {number}',
+  'switzerlandMobilityHiking.unnamedRoute':
+    'Itinerario escursionistico SvizzeraMobile',
+  'switzerlandMobilityHiking.multipleTitle':
+    'Qui passano diversi itinerari',
+  'switzerlandMobilityHiking.multipleHint':
+    'Scegli l’itinerario da visualizzare.',
+  'switzerlandMobilityHiking.loading': 'Caricamento dell’itinerario…',
+  'switzerlandMobilityHiking.loadError':
+    'Non è stato possibile caricare le informazioni su questo itinerario.',
+  'switzerlandMobilityHiking.elevationUnavailable':
+    'Profilo altimetrico non disponibile.',
   'closures.layer': 'Chiusure / deviazioni',
   'closures.title': 'Chiusura / deviazione',
   'closures.close': 'Chiudi',
@@ -547,9 +633,8 @@ const italianTranslations: Record<TranslationKey, string> = {
 };
 
 const englishTranslations: Record<TranslationKey, string> = {
-  'app.title': 'Via Helvetica – Swiss Hiking Route Planner',
-  'app.description':
-    'Plan hiking routes in Switzerland on official maps, inspect elevation and trail information, and import or export GPX files. Free and open source.',
+  'app.title': seoMetadata.en.title,
+  'app.description': seoMetadata.en.description,
   'about.open': 'About Via Helvetica',
   'about.title': 'Via Helvetica',
   'about.tagline':
@@ -567,8 +652,12 @@ const englishTranslations: Record<TranslationKey, string> = {
   'about.sourceCode': 'Source code',
   'about.license': 'License',
   'about.linkedin': 'Professional profile',
+  'about.currentVersion': 'Current version',
+  'about.releaseHistory': 'Release history',
+  'about.releaseHistoryAction': 'View',
   'about.creditsTitle': 'Maps and data',
   'about.maps': 'Maps and geodata',
+  'about.switzerlandMobilityHiking': 'Hiking SwitzerlandMobility',
   'about.closures': 'Closures and detours',
   'about.dangerZones': 'Shooting notices and danger zones',
   'about.transportStops': 'Public transport stops',
@@ -580,17 +669,21 @@ const englishTranslations: Record<TranslationKey, string> = {
   'language.it': 'Italian',
   'language.en': 'English',
 
-  'search.placeholder': 'Search for a place…',
-  'search.label': 'Search for a place',
+  'search.placeholder': 'Place or coordinates…',
+  'search.label': 'Search for a place or coordinates',
   'search.clearLabel': 'Clear search',
   'search.clearTitle': 'Clear',
   'search.loading': 'Searching…',
   'search.unavailable': 'Search is temporarily unavailable.',
   'search.noResults': 'No place found.',
+  'search.coordinatesOutside':
+    'These coordinates are outside the area covered by the map.',
   'search.results': 'Search results',
   'search.category.zipcode': 'Place or postal code',
   'search.category.gg25': 'Municipality',
   'search.category.gazetteer': 'Geographic name',
+  'search.category.wgs84': 'WGS 84 coordinates',
+  'search.category.lv95': 'LV95 coordinates',
 
   'route.toolbar': 'Route',
   'route.create': 'Create a route',
@@ -620,6 +713,8 @@ const englishTranslations: Record<TranslationKey, string> = {
     'No swissTLM3D path was found near this point.',
   'route.noConnectedPath':
     'No connected path was found between these two points.',
+  'route.sectionTooLong':
+    'This section would be {distance} km as the crow flies. Add an intermediate waypoint: path-following is limited to {maximum} km between two points.',
   'route.areaTooLarge':
     'This segment is too long for the current dynamic loading strategy. Add an intermediate point.',
   'route.networkLoadError':
@@ -646,10 +741,31 @@ const englishTranslations: Record<TranslationKey, string> = {
   'map.layers.select': 'Choose map layers',
   'map.layers.baseMaps': 'Base map',
   'map.layers.information': 'Information layers',
+  'map.layers.opacity': 'Opacity',
+  'map.layers.adjustOpacity': 'Adjust opacity for the “{layer}” layer',
   'map.baseMap.color': 'Colour map',
   'map.baseMap.gray': 'Grey map',
   'map.baseMap.aerial': 'Aerial imagery',
   'hikingTrails.layer': 'Hiking trails',
+  'switzerlandMobilityHiking.layer': 'Hiking SwitzerlandMobility',
+  'switzerlandMobilityHiking.panelAria':
+    'SwitzerlandMobility hiking route information',
+  'switzerlandMobilityHiking.close': 'Close',
+  'switzerlandMobilityHiking.stage': 'Stage {number}',
+  'switzerlandMobilityHiking.stageSection':
+    'Stage {number}: {section}',
+  'switzerlandMobilityHiking.routeNumber': 'Route {number}',
+  'switzerlandMobilityHiking.unnamedRoute':
+    'SwitzerlandMobility hiking route',
+  'switzerlandMobilityHiking.multipleTitle':
+    'Several routes pass here',
+  'switzerlandMobilityHiking.multipleHint':
+    'Choose the route to display.',
+  'switzerlandMobilityHiking.loading': 'Loading route…',
+  'switzerlandMobilityHiking.loadError':
+    'Information for this route could not be loaded.',
+  'switzerlandMobilityHiking.elevationUnavailable':
+    'Elevation profile unavailable.',
   'closures.layer': 'Closures / detours',
   'closures.title': 'Closure / detour',
   'closures.close': 'Close',

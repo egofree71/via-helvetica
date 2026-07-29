@@ -1,10 +1,13 @@
 {
   "name": "via-helvetica",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
+    "generate:localized-pages": "node scripts/generate-localized-pages.mjs",
+    "predev": "npm run generate:localized-pages",
     "dev": "vite",
+    "prebuild": "npm run generate:localized-pages",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",

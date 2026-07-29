@@ -11,6 +11,7 @@ import {
   createImportedRouteElevationSummary,
   estimateHikingDuration,
   fetchRouteElevationSummary,
+  fetchRouteSegmentsElevationSummary,
 } from './routeMetrics';
 
 afterEach(() => {
@@ -208,5 +209,55 @@ describe('route metrics', () => {
         [2_601_000, 1_200_000],
       ],
     });
+  });
+
+  it('shares one 1,000-point profile budget across independent segments', async () => {
+    const requestedSampleCounts: number[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+        const requestUrl = new URL(String(input));
+        requestedSampleCounts.push(
+          Number(requestUrl.searchParams.get('nb_points')),
+        );
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            { dist: 0, alts: { COMB: 500 } },
+            { dist: 1, alts: { COMB: 501 } },
+          ],
+        } as Response;
+      }),
+    );
+
+    await fetchRouteSegmentsElevationSummary(
+      [
+        [
+          [2_600_000, 1_200_000],
+          [2_620_000, 1_200_000],
+        ],
+        [
+          [2_620_000, 1_200_000],
+          [2_660_000, 1_200_000],
+        ],
+      ],
+      new AbortController().signal,
+    );
+
+    expect(requestedSampleCounts).toHaveLength(2);
+    expect(
+      requestedSampleCounts.reduce(
+        (total, sampleCount) => total + sampleCount,
+        0,
+      ),
+    ).toBe(1_000);
+    expect(requestedSampleCounts[1]).toBeGreaterThan(
+      requestedSampleCounts[0],
+    );
+    expect(requestedSampleCounts.every((sampleCount) => sampleCount >= 2)).toBe(
+      true,
+    );
   });
 });

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="{{LANGUAGE}}">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="description" content="{{DESCRIPTION}}" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="canonical" href="{{CANONICAL_URL}}" />
+{{HREFLANG_LINKS}}
+    <link rel="stylesheet" href="/releases.css" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Via Helvetica" />
+    <meta property="og:locale" content="{{OG_LOCALE}}" />
+{{OG_ALTERNATES}}
+    <meta property="og:title" content="{{TITLE}}" />
+    <meta property="og:description" content="{{DESCRIPTION}}" />
+    <meta property="og:url" content="{{CANONICAL_URL}}" />
+    <meta property="og:image" content="https://viahelvetica.ch/via-helvetica-preview.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="{{IMAGE_ALT}}" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="{{TITLE}}" />
+    <meta name="twitter:description" content="{{DESCRIPTION}}" />
+    <meta name="twitter:image" content="https://viahelvetica.ch/via-helvetica-preview.jpg" />
+    <meta name="twitter:image:alt" content="{{IMAGE_ALT}}" />
+
+    <script type="application/ld+json">
+{{STRUCTURED_DATA}}
+    </script>
+
+    <title>{{TITLE}}</title>
+  </head>
+  <body>
+    <header class="release-site-header">
+      <div class="release-site-header-inner">
+        <a class="release-brand" href="{{APP_PATH}}">
+          <img src="/favicon.svg" width="38" height="38" alt="" />
+          <span>Via Helvetica</span>
+        </a>
+        <nav class="release-language-nav" aria-label="{{LANGUAGE_NAVIGATION}}">
+{{LANGUAGE_LINKS}}
+        </nav>
+      </div>
+    </header>
+
+    <main class="release-page">
+      <a class="release-back-link" href="{{APP_PATH}}">← {{BACK_TO_APP}}</a>
+      <h1>{{HEADING}}</h1>
+      <p class="release-page-intro">{{INTRO}}</p>
+
+      <div class="release-list">
+{{RELEASES}}
+      </div>
+    </main>
+
+    <footer class="release-site-footer">
+      <span>Via Helvetica</span>
+      <a href="https://github.com/egofree71/via-helvetica">GitHub</a>
+    </footer>
+
+    <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "a4f59a477bf84799a4c24c6f5710e4eb"}'></script><!-- End Cloudflare Web Analytics -->
+  </body>
+</html>

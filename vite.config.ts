@@ -8,4 +8,21 @@ export default defineConfig({
    */
   base: '/',
   plugins: [react()],
+  build: {
+    rolldownOptions: {
+      // Each generated HTML file keeps its directory in dist for GitHub Pages.
+      input: [
+        'index.html',
+        'fr/index.html',
+        'de/index.html',
+        'it/index.html',
+        'en/index.html',
+        'releases/index.html',
+        'fr/releases/index.html',
+        'de/releases/index.html',
+        'it/releases/index.html',
+        'en/releases/index.html',
+      ],
+    },
+  },
 });
