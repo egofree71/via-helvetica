@@ -1443,6 +1443,7 @@ select {
   width: min(40rem, calc(100vw - 2rem));
   max-width: none;
   max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
   padding: 0;
   border: 0;
   border-radius: 14px;
@@ -1459,6 +1460,7 @@ select {
 .about-dialog-panel {
   display: flex;
   max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgb(32 47 60 / 22%);
@@ -1828,6 +1830,15 @@ select {
   .language-selector {
     width: 2.85rem;
     height: 2.85rem;
+  }
+
+  /* Mobile browser chrome changes the usable viewport height as its address and
+     navigation bars expand or collapse. Dynamic viewport units keep both dialog
+     edges visible on real devices while the vh declaration remains a fallback. */
+  .about-dialog,
+  .about-dialog-panel {
+    max-height: calc(100vh - 2.5rem);
+    max-height: calc(100dvh - 2.5rem);
   }
 
   .about-dialog-details > div,

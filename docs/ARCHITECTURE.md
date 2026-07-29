@@ -87,7 +87,9 @@ The responsive layout resolves collisions by moving small controls rather than
 permanently reserving large strips of viewport space. The route summary stays on
 the bottom edge, while the About control joins the right-side control stack when
 horizontal space becomes tight. The metric scale is hidden at phone widths where
-it would otherwise remain covered by the summary.
+it would otherwise remain covered by the summary. Tall temporary dialogs use the
+dynamic mobile viewport height, with a conventional viewport fallback, so browser
+address and navigation bars cannot cover their header or footer.
 
 ### 1.5 Explicit workflow boundaries
 
