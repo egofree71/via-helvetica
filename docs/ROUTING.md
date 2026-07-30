@@ -69,7 +69,7 @@ flowchart LR
     Facade <--> Worker[dynamicRoutingWorker]
     Worker --> Engine[DynamicRoutingNetworkEngine]
     Engine --> Grid[routingGrid]
-    Engine --> Provider[GeoAdmin, geometry cells, or graph cells]
+    Engine --> Provider[GeoAdmin or binary graph cells]
     Engine --> Router[RoutingNetwork]
     Provider --> GeoAdmin[GeoAdmin identify API]
     Router --> Result[Snap or routed coordinates]
@@ -107,12 +107,12 @@ request-correlation layer.
 
 `src/routing/dynamicRoutingEngine.ts` owns:
 
-- completed geometry or binary graph cell cache;
+- completed GeoAdmin geometry or binary graph cell cache;
 - reusable in-flight cell requests;
 - exact-corridor graph LRU cache;
 - cell loading concurrency;
 - narrow and widened corridor attempts;
-- source-feature merging and compilation when geometry cells are used;
+- source-feature merging and compilation for GeoAdmin cells;
 - typed-array CSR assembly when binary graph cells are used;
 - snapping and A* invocation;
 - the session-wide hiking-enrichment availability flag.
@@ -121,9 +121,9 @@ request-correlation layer.
 
 `src/routing/precomputedRoutingGraph.ts` is a pure shared compiler. It applies
 3D node quantization, pedestrian exclusions, road-cost policy, optional hiking
-matching, and duplicate-segment resolution. Live GeoAdmin and static geometry
-routing call it inside the Worker; the offline generator transpiles and executes
-the same source file.
+matching, and duplicate-segment resolution. Live GeoAdmin routing calls it
+inside the Worker. The offline binary generator transpiles and executes the same
+source file against generated geometry inputs.
 
 `src/routing/networkRouter.ts` joins one or more compiled JSON fragments,
 creates object-based adjacency lists and the snapping index required by the exact
@@ -159,27 +159,25 @@ The dataset and portrayal are official. However, the GeoAdmin layer table does
 not advertise the same feature-tooltip behaviour as the road layer, so vector
 retrieval through `identify` is treated as non-guaranteed enrichment.
 
-### 3.3 Experimental static Geneva sources
+### 3.3 Preprocessed Geneva pipeline
 
-Both local experiments originate from `SWISSTLM3D_2026_LV95_LN02.gpkg`. In the
+Both offline stages originate from `SWISSTLM3D_2026_LV95_LN02.gpkg`. In the
 extracted region, every one of the 4,813 roads whose `wanderwege` field equals
 `Wanderweg` had the same UUID and decoded 3D geometry as the corresponding
 feature in the separate hiking GeoPackage. No hiking feature was missing or
 geometrically different, so the generated files store national road geometry
 only once.
 
-#### 3.3.1 Geometry cells
+#### 3.3.1 Offline geometry source cells
 
 `public/routing-data/geneva/` contains generated, git-ignored normalized road
-geometry, numeric routing attributes, and a direct hiking boolean.
-`scripts/generate-geneva-routing-cells.py` reproduces it from the national
+geometry, numeric routing attributes, and a direct hiking boolean. These files
+are an offline build input and validation oracle; the browser no longer requests
+them. `scripts/generate-geneva-routing-cells.py` reproduces them from the national
 GeoPackage, records source identity and extraction parameters in the manifest,
-and preserves complete unclipped 3D features across cell boundaries. The Worker
-no longer performs GeoAdmin identify requests, adaptive subdivision, or
-road/hiking spatial matching, but it still compiles nodes, pedestrian costs,
-duplicate segments, and the graph for each exact corridor.
+and preserves complete unclipped 3D features across cell boundaries.
 
-Regenerate both experimental stages from the repository root with:
+Regenerate both preprocessing stages from the repository root with:
 
 ```bash
 npm run generate:static-geneva -- "C:\data\SWISSTLM3D_2026_LV95_LN02.gpkg"
@@ -195,8 +193,9 @@ is generated or required.
 
 #### 3.3.2 Binary precomputed graph cells
 
-`public/routing-data/geneva-precomputed-binary/` contains the compiled graph for the same logical cell
-overlap as the geometry source, using a versioned `VHRG` binary contract instead
+`public/routing-data/geneva-precomputed-binary/` contains the compiled graph for
+the same logical cell overlap as the geometry source, using a versioned `VHRG`
+binary contract instead
 of coordinate-derived string keys and nested JavaScript objects. Every
 node and edge receives a deterministic global integer ID. A cell stores columnar
 arrays for node IDs, centimetre-quantized LV95 X/Y, decimetre-quantized Z,
@@ -205,7 +204,8 @@ version 2 adds a CRC32 over the payload and declares the cost-model revision and
 coordinate-validation margin in the manifest.
 
 The overlap is retained deliberately: loading the same corridor produces the
-the same node, segment, hiking, and source-feature counts as direct compilation from the geometry cells.
+same node, segment, hiking, and source-feature counts as direct compilation from
+the geometry cells.
 Duplicate references are removed by integer edge ID inside the Worker, which is
 cheap and avoids changing corridor semantics at cell boundaries. Before caching,
 the parser verifies CRC32, global-ID uniqueness, coordinate and elevation bounds,
@@ -222,12 +222,12 @@ browsers fall back to the raw `.bin` path. A future static host must therefore
 serve `.bin.br` as the stored Brotli payload rather than transparently applying a
 second content encoding.
 
-All three manifests declare the same bounded test rectangle. An unlisted cell inside
+Both manifests declare the same bounded test rectangle. An unlisted cell inside
 that rectangle is valid empty coverage. When a requested corridor overlaps the
 boundary, out-of-region halo cells are ignored while covered cells still build the
 network; a request whose complete footprint is outside the rectangle remains an
-explicit coverage error. Static data is never mixed with GeoAdmin, so comparisons
-remain attributable to the selected provider.
+explicit coverage error. Preprocessed binary data is never mixed with GeoAdmin, so comparisons remain
+attributable to the selected provider.
 
 ### 3.4 Informational overlays are separate
 
@@ -413,9 +413,9 @@ LOCAL_ROUTING_DEVELOPMENT_CONFIG.dataSource
 LOCAL_ROUTING_DEVELOPMENT_CONFIG.useHikingEnrichment
 ```
 
-`dataSource: 'static-geneva'` loads the generated geometry cells;
-`'precomputed-binary-geneva'` loads typed-array graph cells; and `'geo-admin'`
-restores the production request strategy for comparison. With GeoAdmin selected, setting
+`dataSource: 'precomputed-binary-geneva'` loads typed-array graph cells, while
+`'geo-admin'` restores the production request strategy for comparison. With
+GeoAdmin selected, setting
 `useHikingEnrichment` to `false` starts the Worker in roads-only mode and emits
 the same normal notice when the first routing operation begins.
 
@@ -839,16 +839,14 @@ Further work should focus on evidence:
 
 ### 18.2 Static preprocessed data
 
-The Geneva branch validates three representations in the same intermediate
-architecture:
+The Geneva validation pipeline now has one offline source stage and one browser
+runtime representation:
 
 ```text
 official GeoPackage
         ↓
-normalized geometry cells
+normalized geometry cells (offline build input and validation oracle)
         ↓ shared TypeScript graph compiler
-precomputed JSON graph cells
-        ↓ optional fixed-point/global-ID encoding
 precomputed binary graph cells
         ↓
 static hosting
@@ -856,29 +854,21 @@ static hosting
 Worker loads corridor cells on demand
 ```
 
-The geometry experiment contains 102 non-empty cells, 67,208 unique road
+The offline geometry source contains 102 non-empty cells, 67,208 unique road
 features, and 4,813 directly classified hiking features. Its reproducible Python
 generator reads only the national GeoPackage; the separate hiking package is not
-required. It removes identify limits and road/hiking spatial matching while
-preserving runtime graph compilation for a clean source comparison.
+required. The browser no longer loads this JSON representation. It remains the
+input to the binary generator and the independent oracle used by parity tests.
 
-The second experiment stores the compiler output instead: original 3D node
-coordinates, local segment references, final costs, and hiking flags. The Worker
-still joins overlapping cells, derives global node identity, builds adjacency
-and snapping indexes, and runs A*, but no longer interprets swissTLM3D source
-attributes. A deterministic generator executes the same compiler source as live
-routing.
-
-The third experiment keeps that exact logical overlap while assigning global
-integer node and edge IDs and writing versioned, checksummed columnar binary
-arrays. For the 102 Geneva
-cells it contains 383,254 unique nodes and 398,015 unique edges, with 417,093
-node references and 430,223 edge references across overlapping cells. The files
-occupy about 13.35 MiB raw and 4.67 MiB in the generated Brotli form, compared
-with about 37 MB of JSON graph data. In a Node/V8 corridor harness, dense
-nine-cell assembly fell from roughly 300–500 ms for the JSON object graph to
-about 60–70 ms, while the retained-size estimate fell from roughly 85–92 MiB to
-about 5 MiB. These are architecture measurements rather than remote-browser
+The binary representation assigns global integer node and edge IDs and writes
+versioned, checksummed columnar arrays while preserving the geometry-cell overlap.
+For the 102 Geneva cells it contains 383,254 unique nodes and 398,015 unique
+edges, with 417,093 node references and 430,223 edge references across
+overlapping cells. The files occupy about 13.35 MiB raw and 4.67 MiB in the
+generated Brotli form. In a Node/V8 corridor harness, dense corridor assembly
+fell from object-heavy source compilation measured in hundreds of milliseconds
+to tens of milliseconds, while retained memory dropped by more than an order of
+magnitude. These are architecture measurements rather than remote-browser
 latency results.
 
 Before extending any format nationally, validation must still compare cold

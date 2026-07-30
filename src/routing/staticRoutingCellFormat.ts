@@ -1,8 +1,8 @@
 /**
  * Business context: defines and validates the compact geometry-cell contract
- * shared by the browser provider and the offline precomputed-graph generator.
- * Keeping this module free of browser and OpenLayers dependencies prevents the
- * two stages from accepting different coordinates, attributes, or hiking flags.
+ * shared by the offline binary generator and validation tests. Keeping this
+ * module free of browser and OpenLayers dependencies prevents preprocessing and
+ * parity checks from accepting different coordinates, attributes, or hiking flags.
  */
 import type {
   PrecomputedSourceLineFeature,

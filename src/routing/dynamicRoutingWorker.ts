@@ -13,7 +13,6 @@ import {
 import {
   fetchPrecomputedBinaryGenevaRoutingCell,
 } from './precomputedBinaryRoutingData';
-import { fetchStaticGenevaRoutingCell } from './staticRoutingData';
 import type {
   RoutingWorkerRequest,
   RoutingWorkerResponse,
@@ -42,19 +41,13 @@ const engine = new DynamicRoutingNetworkEngine({
       : true,
   onHikingEnrichmentUnavailable: () =>
     postNotice('hiking-enrichment-unavailable'),
-  cellDataLoader:
-    routingDataSource === 'static-geneva'
-      ? fetchStaticGenevaRoutingCell
-      : undefined,
   precomputedBinaryCellLoader:
     routingDataSource === 'precomputed-binary-geneva'
       ? fetchPrecomputedBinaryGenevaRoutingCell
       : undefined,
 });
 
-if (routingDataSource === 'static-geneva') {
-  console.info('[Via Helvetica] Routing with static Geneva geometry cells.');
-} else if (routingDataSource === 'precomputed-binary-geneva') {
+if (routingDataSource === 'precomputed-binary-geneva') {
   console.info(
     '[Via Helvetica] Routing with precomputed binary Geneva graph cells.',
   );

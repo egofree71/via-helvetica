@@ -1,9 +1,8 @@
 /**
  * Business context: owns worker-side swissTLM3D routing state. It loads bounded
- * cells from the configured provider, keeps loaded geometry or compact binary
+ * cells from the configured provider, keeps GeoAdmin geometry or compact binary
  * graph cells inside the dedicated Worker, builds the exact corridor network,
- * and performs snapping and A* without
- * blocking the map UI.
+ * and performs snapping and A* without blocking the map UI.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import {
@@ -123,17 +122,16 @@ export interface DynamicRoutingNetworkEngineOptions {
   /** Called once when optional hiking enrichment is disabled for the session. */
   onHikingEnrichmentUnavailable?: () => void;
   /**
-   * Optional cell loader replacing GeoAdmin for bounded local experiments.
-   * The loader must return the same normalized plain-data contract as the
-   * production provider.
+   * Optional normalized geometry loader injected by regression tests.
+   * Normal runtime geometry loading uses GeoAdmin directly.
    */
-  cellDataLoader?: (
+  geometryCellLoader?: (
     key: CellKey,
     signal: AbortSignal,
   ) => Promise<SwissTlmNetworkData>;
   /**
    * Optional loader for compact binary graph cells with global integer IDs.
-   * It is mutually exclusive with the geometry-cell loader.
+   * It is mutually exclusive with the injected geometry loader.
    */
   precomputedBinaryCellLoader?: (
     key: CellKey,
@@ -259,13 +257,13 @@ export class DynamicRoutingNetworkEngine {
 
   constructor(options: DynamicRoutingNetworkEngineOptions = {}) {
     const configuredLoaders = [
-      options.cellDataLoader,
+      options.geometryCellLoader,
       options.precomputedBinaryCellLoader,
     ].filter(Boolean).length;
 
     if (configuredLoaders > 1) {
       throw new Error(
-        'Geometry and binary precomputed cell loaders are mutually exclusive.',
+        'Injected geometry and binary precomputed cell loaders are mutually exclusive.',
       );
     }
 
@@ -694,8 +692,8 @@ export class DynamicRoutingNetworkEngine {
             graph,
           }))
       : (
-          this.options.cellDataLoader
-            ? this.options.cellDataLoader(key, controller.signal)
+          this.options.geometryCellLoader
+            ? this.options.geometryCellLoader(key, controller.signal)
             : fetchSwissTlmNetworkData(extent, controller.signal, {
                 allowEmpty: true,
                 shouldRequestHikingEnrichment: () =>

@@ -197,15 +197,15 @@ describe('DynamicRoutingNetworkEngine', () => {
     expect(moduleMocks.fetchSwissTlmNetworkData).toHaveBeenCalledTimes(1);
   });
 
-  it('uses an injected static cell loader instead of GeoAdmin', async () => {
-    const cellDataLoader = vi.fn().mockResolvedValue(EMPTY_NETWORK_DATA);
-    const engine = new DynamicRoutingNetworkEngine({ cellDataLoader });
+  it('uses an injected geometry loader instead of GeoAdmin', async () => {
+    const geometryCellLoader = vi.fn().mockResolvedValue(EMPTY_NETWORK_DATA);
+    const engine = new DynamicRoutingNetworkEngine({ geometryCellLoader });
     const coordinate: Coordinate = [1_200, 1_200];
 
     await engine.snap(coordinate, new AbortController().signal);
 
-    expect(cellDataLoader).toHaveBeenCalledTimes(1);
-    expect(cellDataLoader).toHaveBeenCalledWith(
+    expect(geometryCellLoader).toHaveBeenCalledTimes(1);
+    expect(geometryCellLoader).toHaveBeenCalledWith(
       '0:0',
       expect.any(AbortSignal),
     );
@@ -253,7 +253,7 @@ describe('DynamicRoutingNetworkEngine', () => {
     expect(
       () =>
         new DynamicRoutingNetworkEngine({
-          cellDataLoader: vi.fn(),
+          geometryCellLoader: vi.fn(),
           precomputedBinaryCellLoader: vi.fn(),
         }),
     ).toThrow('mutually exclusive');
@@ -414,7 +414,7 @@ describe('DynamicRoutingNetworkEngine', () => {
 
   it('keeps valid edge cells when neighbouring halo cells are outside coverage', async () => {
     const { RoutingCoverageError } = await import('./routingCoverage');
-    const cellDataLoader = vi.fn(
+    const geometryCellLoader = vi.fn(
       async (key: string): Promise<SwissTlmNetworkData> => {
         if (key.startsWith('-')) {
           throw new RoutingCoverageError(
@@ -425,7 +425,7 @@ describe('DynamicRoutingNetworkEngine', () => {
         return EMPTY_NETWORK_DATA;
       },
     );
-    const engine = new DynamicRoutingNetworkEngine({ cellDataLoader });
+    const engine = new DynamicRoutingNetworkEngine({ geometryCellLoader });
 
     await expect(
       engine.snap([100, 1_200], new AbortController().signal),
@@ -435,13 +435,13 @@ describe('DynamicRoutingNetworkEngine', () => {
 
   it('preserves an explicit coverage error when every requested cell is outside', async () => {
     const { RoutingCoverageError } = await import('./routingCoverage');
-    const cellDataLoader = vi.fn(async () => {
+    const geometryCellLoader = vi.fn(async () => {
       throw new RoutingCoverageError(
         'TestCoverageError',
         'Outside the bounded fixture.',
       );
     });
-    const engine = new DynamicRoutingNetworkEngine({ cellDataLoader });
+    const engine = new DynamicRoutingNetworkEngine({ geometryCellLoader });
 
     await expect(
       engine.snap([1_200, 1_200], new AbortController().signal),

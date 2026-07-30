@@ -1,15 +1,13 @@
 /**
  * Business context: exposes development-only routing switches used to compare
- * the production GeoAdmin provider with experimental Geneva geometry and graph
- * cells. Vite's build mode, rather than the URL hostname, is the safety boundary
- * so local-network addresses remain testable while production always uses
- * GeoAdmin.
+ * the production GeoAdmin provider with the precomputed Geneva binary graph.
+ * Vite's build mode, rather than the URL hostname, is the safety boundary so
+ * local-network addresses remain testable while production stays on GeoAdmin.
  */
 
 /** Routing-data providers available to the dedicated Worker. */
 export type RoutingDataSource =
   | 'geo-admin'
-  | 'static-geneva'
   | 'precomputed-binary-geneva';
 
 /** Development-only routing choices used while Vite serves source files. */
@@ -18,7 +16,7 @@ export interface LocalRoutingDevelopmentConfig {
   dataSource: RoutingDataSource;
   /**
    * Whether development GeoAdmin requests include optional hiking geometry.
-   * Static experiments already carry hiking classification or final costs.
+   * The binary graph already contains final hiking-aware edge costs.
    */
   useHikingEnrichment: boolean;
 }
