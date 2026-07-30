@@ -1,9 +1,8 @@
 /**
- * Business context: converts validated Geneva precomputed JSON cells into a
- * compact binary graph with global integer node and edge identifiers. Logical
- * cell overlap is preserved so every corridor remains equivalent to the JSON
- * reference, while numeric IDs make runtime deduplication cheap and avoid
- * rebuilding coordinate-derived string keys.
+ * Business context: compiles validated Geneva geometry cells directly into a
+ * compact binary graph with global integer node and edge identifiers. The same
+ * pure TypeScript compiler used by live routing applies walkability, costs, 3D
+ * node identity, and duplicate-edge rules before the binary format is written.
  */
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -13,14 +12,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const SOURCE_ROOT = join(ROOT, 'public', 'routing-data', 'geneva-precomputed');
-const STATIC_MANIFEST_PATH = join(
-  ROOT,
-  'public',
-  'routing-data',
-  'geneva',
-  'manifest.json',
-);
+const SOURCE_ROOT = join(ROOT, 'public', 'routing-data', 'geneva');
 const OUTPUT_ROOT = join(
   ROOT,
   'public',
@@ -34,6 +26,12 @@ const COMPILER_SOURCE = join(
   'src',
   'routing',
   'precomputedRoutingGraph.ts',
+);
+const CELL_FORMAT_SOURCE = join(
+  ROOT,
+  'src',
+  'routing',
+  'staticRoutingCellFormat.ts',
 );
 
 const FORMAT_NAME = 'via-helvetica-precomputed-binary-routing-graph';
@@ -121,7 +119,7 @@ function payloadCrc32(buffer) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-/** Transpiles the shared node-key function instead of duplicating quantization. */
+/** Transpiles the shared geometry validator and graph compiler. */
 async function loadSharedCompiler() {
   const require = createRequire(import.meta.url);
   let command = 'tsc';
@@ -155,7 +153,7 @@ async function loadSharedCompiler() {
           rootDir: dirname(COMPILER_SOURCE),
           outDir: compiledRoot,
         },
-        files: [COMPILER_SOURCE],
+        files: [COMPILER_SOURCE, CELL_FORMAT_SOURCE],
       },
       null,
       2,
@@ -176,7 +174,12 @@ async function loadSharedCompiler() {
   }
 
   const compilerPath = join(compiledRoot, 'precomputedRoutingGraph.js');
-  return import(`${pathToFileURL(compilerPath).href}?generated=${Date.now()}`);
+  const cellFormatPath = join(compiledRoot, 'staticRoutingCellFormat.js');
+  const [compiler, cellFormat] = await Promise.all([
+    import(`${pathToFileURL(compilerPath).href}?generated=${Date.now()}`),
+    import(`${pathToFileURL(cellFormatPath).href}?generated=${Date.now()}`),
+  ]);
+  return { ...compiler, ...cellFormat };
 }
 
 /** Returns a stable undirected identity for one graph edge. */
@@ -279,19 +282,25 @@ function encodeCell(
 }
 
 async function main() {
-  const [sourceManifest, staticManifest, { precomputedNodeKey }] =
-    await Promise.all([
-      readJson(join(SOURCE_ROOT, 'manifest.json')),
-      readJson(STATIC_MANIFEST_PATH),
-      loadSharedCompiler(),
-    ]);
+  const [
+    sourceManifest,
+    {
+      compilePrecomputedRoutingGraph,
+      readStaticRoutingCell,
+      STATIC_ROUTING_FORMAT,
+      STATIC_ROUTING_FORMAT_VERSION,
+    },
+  ] = await Promise.all([
+    readJson(join(SOURCE_ROOT, 'manifest.json')),
+    loadSharedCompiler(),
+  ]);
 
   if (
-    sourceManifest.version !== 1 ||
-    sourceManifest.format !== 'via-helvetica-precomputed-routing-graph' ||
+    sourceManifest.version !== STATIC_ROUTING_FORMAT_VERSION ||
+    sourceManifest.format !== STATIC_ROUTING_FORMAT ||
     !Array.isArray(sourceManifest.nonEmptyCellKeys)
   ) {
-    throw new Error('Precomputed Geneva JSON manifest is missing or incompatible.');
+    throw new Error('Geneva geometry-cell manifest is missing or incompatible.');
   }
 
   const nodesByKey = new Map();
@@ -300,63 +309,44 @@ async function main() {
 
   for (const key of sourceManifest.nonEmptyCellKeys) {
     const [column, row] = key.split(':');
-    const cell = await readJson(
-      join(SOURCE_ROOT, 'cells', `${column}_${row}.json`),
+    const sourceCell = readStaticRoutingCell(
+      await readJson(join(SOURCE_ROOT, 'cells', `${column}_${row}.json`)),
+      key,
     );
+    const graph = compilePrecomputedRoutingGraph({
+      roads: sourceCell.roads,
+      hikingTrails: [],
+    });
 
-    if (
-      cell.v !== sourceManifest.version ||
-      cell.k !== key ||
-      !Array.isArray(cell.n) ||
-      !Array.isArray(cell.s) ||
-      !Number.isInteger(cell.f) ||
-      cell.f < 0
-    ) {
-      throw new Error(`Precomputed JSON cell ${key} is invalid.`);
+    if (graph.segments.length === 0) {
+      continue;
     }
 
-    const localNodeKeys = cell.n.map((coordinate) => {
-      const nodeKey = precomputedNodeKey(coordinate);
-      const existingCoordinate = nodesByKey.get(nodeKey);
+    for (const node of graph.nodes) {
+      const existingCoordinate = nodesByKey.get(node.key);
 
       if (existingCoordinate) {
         const difference = Math.max(
-          Math.abs(existingCoordinate[0] - coordinate[0]),
-          Math.abs(existingCoordinate[1] - coordinate[1]),
-          Math.abs((existingCoordinate[2] ?? 0) - (coordinate[2] ?? 0)),
+          Math.abs(existingCoordinate[0] - node.coordinate[0]),
+          Math.abs(existingCoordinate[1] - node.coordinate[1]),
+          Math.abs((existingCoordinate[2] ?? 0) - (node.coordinate[2] ?? 0)),
         );
         if (difference > 1e-9) {
-          throw new Error(`Global node ${nodeKey} has conflicting coordinates.`);
+          throw new Error(`Global node ${node.key} has conflicting coordinates.`);
         }
       } else {
-        nodesByKey.set(nodeKey, coordinate);
+        nodesByKey.set(node.key, node.coordinate);
       }
+    }
 
-      return nodeKey;
-    });
-    const segments = [];
-
-    for (const segment of cell.s) {
-      const [startIndex, endIndex, cost, hikingFlag = 0] = segment;
-      const startNodeKey = localNodeKeys[startIndex];
-      const endNodeKey = localNodeKeys[endIndex];
-
-      if (
-        startNodeKey === undefined ||
-        endNodeKey === undefined ||
-        !Number.isFinite(cost) ||
-        cost <= 0 ||
-        (hikingFlag !== 0 && hikingFlag !== 1)
-      ) {
-        throw new Error(`Precomputed JSON cell ${key} has an invalid segment.`);
-      }
-
-      const identity = edgeKey(startNodeKey, endNodeKey);
+    const segmentKeys = [];
+    for (const segment of graph.segments) {
+      const identity = edgeKey(segment.startNodeKey, segment.endNodeKey);
       const candidate = {
-        startNodeKey,
-        endNodeKey,
-        cost,
-        isHikingTrail: hikingFlag === 1,
+        startNodeKey: segment.startNodeKey,
+        endNodeKey: segment.endNodeKey,
+        cost: segment.cost,
+        isHikingTrail: segment.isHikingTrail,
       };
       const existing = edgesByKey.get(identity);
 
@@ -373,19 +363,19 @@ async function main() {
         edgesByKey.set(identity, candidate);
       }
 
-      segments.push(identity);
+      segmentKeys.push(identity);
     }
 
     sourceCells.push({
       key,
-      sourceRoadFeatures: cell.f,
-      nodeKeys: [...new Set(localNodeKeys)],
-      edgeKeys: [...new Set(segments)],
+      sourceRoadFeatures: graph.sourceRoadFeatures,
+      nodeKeys: graph.nodes.map((node) => node.key),
+      edgeKeys: [...new Set(segmentKeys)],
     });
   }
 
-  // Preserve the reference JSON insertion order so equal-cost A* ties expand
-  // nodes and edges in the same deterministic order in both implementations.
+  // Stable source-cell and compiler insertion order gives every regeneration
+  // deterministic global IDs without depending on filesystem enumeration.
   const globalNodeKeys = [...nodesByKey.keys()];
   const nodeIdByKey = new Map(
     globalNodeKeys.map((key, index) => [key, index]),
@@ -406,22 +396,20 @@ async function main() {
 
   for (const sourceCell of sourceCells) {
     const [column, row] = sourceCell.key.split(':');
-    const nodeRecords = sourceCell.nodeKeys
-      .map((key) => ({
-        id: nodeIdByKey.get(key),
-        coordinate: nodesByKey.get(key),
-      }));
-    const edgeRecords = sourceCell.edgeKeys
-      .map((key) => {
-        const edge = edgesByKey.get(key);
-        return {
-          id: edgeIdByKey.get(key),
-          startId: nodeIdByKey.get(edge.startNodeKey),
-          endId: nodeIdByKey.get(edge.endNodeKey),
-          cost: edge.cost,
-          isHikingTrail: edge.isHikingTrail,
-        };
-      });
+    const nodeRecords = sourceCell.nodeKeys.map((key) => ({
+      id: nodeIdByKey.get(key),
+      coordinate: nodesByKey.get(key),
+    }));
+    const edgeRecords = sourceCell.edgeKeys.map((key) => {
+      const edge = edgesByKey.get(key);
+      return {
+        id: edgeIdByKey.get(key),
+        startId: nodeIdByKey.get(edge.startNodeKey),
+        endId: nodeIdByKey.get(edge.endNodeKey),
+        cost: edge.cost,
+        isHikingTrail: edge.isHikingTrail,
+      };
+    });
     const encoded = encodeCell(
       sourceCell.key,
       nodeRecords,
@@ -470,10 +458,13 @@ async function main() {
     hikingEdgeReferences,
     uncompressedCellBytes,
     brotliCellBytes,
-    sourcePrecomputedFormatVersion: sourceManifest.version,
-    sourceGeometryFormatVersion: staticManifest.version,
-    sourceFiles: staticManifest.sourceFiles,
-    sourceRoadFeatureCount: staticManifest.roadFeatureCountBeforeCellDuplication,
+    sourceGeometryFormatVersion: sourceManifest.version,
+    sourceGeometryFormat: sourceManifest.format,
+    sourceFiles: sourceManifest.sourceFiles,
+    sourceSizeBytes: sourceManifest.sourceSizeBytes,
+    sourceSha256: sourceManifest.sourceSha256,
+    sourceLayer: sourceManifest.sourceLayer,
+    sourceRoadFeatureCount: sourceManifest.roadFeatureCountBeforeCellDuplication,
     edgeOwnership: 'global-id-with-logical-cell-references',
     nodeIdentity: 'shared-compiler-quantized-xyz',
   };
@@ -486,8 +477,8 @@ async function main() {
   await rm(TEMP_ROOT, { recursive: true, force: true });
 
   console.log(
-    `Generated ${sourceCells.length} binary Geneva cells from ` +
-      `${globalNodeKeys.length} global nodes and ${globalEdgeKeys.length} global edges.`,
+    `Generated ${sourceCells.length} binary Geneva cells directly from geometry ` +
+      `with ${globalNodeKeys.length} global nodes and ${globalEdgeKeys.length} global edges.`,
   );
   console.log(
     `Raw binary size: ${(uncompressedCellBytes / 1024 / 1024).toFixed(2)} MiB.`,

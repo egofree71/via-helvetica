@@ -10,7 +10,6 @@
 export type RoutingDataSource =
   | 'geo-admin'
   | 'static-geneva'
-  | 'precomputed-geneva'
   | 'precomputed-binary-geneva';
 
 /** Development-only routing choices used while Vite serves source files. */

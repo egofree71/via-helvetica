@@ -107,13 +107,13 @@ request-correlation layer.
 
 `src/routing/dynamicRoutingEngine.ts` owns:
 
-- completed geometry, JSON graph, or binary graph cell cache;
+- completed geometry or binary graph cell cache;
 - reusable in-flight cell requests;
 - exact-corridor graph LRU cache;
 - cell loading concurrency;
 - narrow and widened corridor attempts;
 - source-feature merging and compilation when geometry cells are used;
-- JSON-fragment joining or typed-array CSR assembly when graph cells are used;
+- typed-array CSR assembly when binary graph cells are used;
 - snapping and A* invocation;
 - the session-wide hiking-enrichment availability flag.
 
@@ -183,37 +183,21 @@ Regenerate both experimental stages from the repository root with:
 
 ```bash
 npm run generate:static-geneva -- "C:\data\SWISSTLM3D_2026_LV95_LN02.gpkg"
-npm run generate:precomputed-geneva
 npm run generate:precomputed-binary-geneva
 ```
 
 The first command replaces the geometry dataset atomically and writes the source
 filename, byte size, SHA-256 digest, layer, extraction extent, assignment policy,
-and parsing count into its manifest. The second command validates the geometry
-cells through the same pure module used by the Worker before compiling them. The
-third command converts those validated JSON graph cells into the versioned binary
-contract used by the typed-array experiment.
+and parsing count into its manifest. The second command validates those geometry
+cells and runs the same pure TypeScript graph compiler used by live routing
+before writing the versioned binary contract. No intermediate JSON graph dataset
+is generated or required.
 
-#### 3.3.2 Precomputed graph cells
+#### 3.3.2 Binary precomputed graph cells
 
-`public/routing-data/geneva-precomputed/` contains the output of the shared graph
-compiler: original 2D/3D node coordinates, local segment endpoint references,
-final traversal costs, and hiking flags. The offline generator lives in
-`scripts/generate-precomputed-geneva-graph.mjs` and executes the same
-`precomputedRoutingGraph.ts` source used by live routing rather than maintaining
-a second implementation.
-
-At runtime the Worker derives the stable quantized key for each loaded node,
-joins matching nodes from neighbouring cells, retains the cheapest duplicate
-segment, creates adjacency lists and the snapping index, and runs A*. It no
-longer interprets swissTLM3D road attributes or performs walkability and hiking
-classification for this provider.
-
-#### 3.3.3 Binary precomputed graph cells
-
-`public/routing-data/geneva-precomputed-binary/` contains the same logical cell
-overlap as the JSON graph reference, but replaces coordinate-derived string keys
-and nested JavaScript objects with a versioned `VHRG` binary contract. Every
+`public/routing-data/geneva-precomputed-binary/` contains the compiled graph for the same logical cell
+overlap as the geometry source, using a versioned `VHRG` binary contract instead
+of coordinate-derived string keys and nested JavaScript objects. Every
 node and edge receives a deterministic global integer ID. A cell stores columnar
 arrays for node IDs, centimetre-quantized LV95 X/Y, decimetre-quantized Z,
 edge IDs, endpoint IDs, 0.0001-unit fixed-point costs, and a hiking bit. Format
@@ -221,7 +205,7 @@ version 2 adds a CRC32 over the payload and declares the cost-model revision and
 coordinate-validation margin in the manifest.
 
 The overlap is retained deliberately: loading the same corridor produces the
-same node, segment, hiking, and source-feature counts as the JSON graph mode.
+the same node, segment, hiking, and source-feature counts as direct compilation from the geometry cells.
 Duplicate references are removed by integer edge ID inside the Worker, which is
 cheap and avoids changing corridor semantics at cell boundaries. Before caching,
 the parser verifies CRC32, global-ID uniqueness, coordinate and elevation bounds,
@@ -430,7 +414,6 @@ LOCAL_ROUTING_DEVELOPMENT_CONFIG.useHikingEnrichment
 ```
 
 `dataSource: 'static-geneva'` loads the generated geometry cells;
-`'precomputed-geneva'` loads JSON graph cells;
 `'precomputed-binary-geneva'` loads typed-array graph cells; and `'geo-admin'`
 restores the production request strategy for comparison. With GeoAdmin selected, setting
 `useHikingEnrichment` to `false` starts the Worker in roads-only mode and emits

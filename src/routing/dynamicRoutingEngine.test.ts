@@ -9,7 +9,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const moduleMocks = vi.hoisted(() => ({
   fetchSwissTlmNetworkData: vi.fn(),
   fromSwissTlm: vi.fn(),
-  fromPrecomputed: vi.fn(),
   fromBinary: vi.fn(),
 }));
 
@@ -34,9 +33,6 @@ vi.mock('./networkRouter', () => {
       return moduleMocks.fromSwissTlm(...args);
     }
 
-    static fromPrecomputed(...args: unknown[]): unknown {
-      return moduleMocks.fromPrecomputed(...args);
-    }
   }
 
   return { NoWalkableNetworkError, RoutingNetwork };
@@ -100,8 +96,6 @@ describe('DynamicRoutingNetworkEngine', () => {
     moduleMocks.fetchSwissTlmNetworkData.mockResolvedValue(EMPTY_NETWORK_DATA);
     moduleMocks.fromSwissTlm.mockReset();
     moduleMocks.fromSwissTlm.mockImplementation(() => createNetwork());
-    moduleMocks.fromPrecomputed.mockReset();
-    moduleMocks.fromPrecomputed.mockImplementation(() => createNetwork());
     moduleMocks.fromBinary.mockReset();
     moduleMocks.fromBinary.mockImplementation(() => createNetwork());
   });
@@ -219,33 +213,6 @@ describe('DynamicRoutingNetworkEngine', () => {
   });
 
 
-  it('uses precomputed graph cells without compiling source geometry', async () => {
-    const graph = {
-      nodes: [],
-      segments: [],
-      sourceRoadFeatures: 0,
-      sourceHikingFeatures: 0,
-    };
-    const precomputedCellLoader = vi.fn().mockResolvedValue(graph);
-    const engine = new DynamicRoutingNetworkEngine({
-      precomputedCellLoader,
-    });
-    const coordinate: Coordinate = [1_200, 1_200];
-
-    await engine.snap(coordinate, new AbortController().signal);
-
-    expect(precomputedCellLoader).toHaveBeenCalledWith(
-      '0:0',
-      expect.any(AbortSignal),
-    );
-    expect(moduleMocks.fromPrecomputed).toHaveBeenCalledWith(
-      expect.any(Array),
-      [graph],
-    );
-    expect(moduleMocks.fromSwissTlm).not.toHaveBeenCalled();
-    expect(moduleMocks.fetchSwissTlmNetworkData).not.toHaveBeenCalled();
-  });
-
   it('uses binary precomputed cells through the typed-array network', async () => {
     const graph = {
       key: '0:0' as const,
@@ -279,25 +246,14 @@ describe('DynamicRoutingNetworkEngine', () => {
       expect.any(Array),
       [graph],
     );
-    expect(moduleMocks.fromPrecomputed).not.toHaveBeenCalled();
     expect(moduleMocks.fromSwissTlm).not.toHaveBeenCalled();
   });
 
-  it('rejects simultaneous geometry and precomputed loaders', () => {
+  it('rejects simultaneous geometry and binary precomputed loaders', () => {
     expect(
       () =>
         new DynamicRoutingNetworkEngine({
           cellDataLoader: vi.fn(),
-          precomputedCellLoader: vi.fn(),
-        }),
-    ).toThrow('mutually exclusive');
-  });
-
-  it('rejects simultaneous JSON and binary precomputed loaders', () => {
-    expect(
-      () =>
-        new DynamicRoutingNetworkEngine({
-          precomputedCellLoader: vi.fn(),
           precomputedBinaryCellLoader: vi.fn(),
         }),
     ).toThrow('mutually exclusive');

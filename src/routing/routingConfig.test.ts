@@ -28,15 +28,6 @@ describe('routing development configuration', () => {
     ).toBe('geo-admin');
   });
 
-  it('can select the precomputed graph experiment locally', () => {
-    expect(
-      resolveRoutingDataSource(true, {
-        dataSource: 'precomputed-geneva',
-        useHikingEnrichment: true,
-      }),
-    ).toBe('precomputed-geneva');
-  });
-
   it('can select the binary precomputed graph experiment locally', () => {
     expect(
       resolveRoutingDataSource(true, {

@@ -1,6 +1,6 @@
 /**
  * Business context: owns worker-side swissTLM3D routing state. It loads bounded
- * cells from the configured provider, keeps loaded geometry or precomputed
+ * cells from the configured provider, keeps loaded geometry or compact binary
  * graph cells inside the dedicated Worker, builds the exact corridor network,
  * and performs snapping and A* without
  * blocking the map UI.
@@ -14,7 +14,6 @@ import {
 } from './networkRouter';
 import { BinaryRoutingNetwork } from './binaryRoutingNetwork';
 import type { PrecomputedBinaryRoutingCell } from './precomputedBinaryRoutingFormat';
-import type { PrecomputedRoutingGraphData } from './precomputedRoutingGraph';
 import {
   combinedExtent,
   createCorridorCellKeys,
@@ -63,14 +62,6 @@ interface LoadedGeometryCell {
   data: SwissTlmNetworkData;
 }
 
-/** Completed offline-compiled graph cell retained for the page session. */
-interface LoadedPrecomputedCell {
-  /** Discriminator used before constructing the corridor network. */
-  kind: 'precomputed';
-  /** Globally mergeable nodes and final-cost segments. */
-  graph: PrecomputedRoutingGraphData;
-}
-
 /** Completed typed-array graph cell retained for the page session. */
 interface LoadedBinaryPrecomputedCell {
   /** Discriminator used before constructing the compact corridor network. */
@@ -80,10 +71,7 @@ interface LoadedBinaryPrecomputedCell {
 }
 
 /** Either provider representation accepted by the session cache. */
-type LoadedCell =
-  | LoadedGeometryCell
-  | LoadedPrecomputedCell
-  | LoadedBinaryPrecomputedCell;
+type LoadedCell = LoadedGeometryCell | LoadedBinaryPrecomputedCell;
 
 /** Cached graph built for one exact set of cell keys. */
 interface CachedNetwork {
@@ -97,7 +85,7 @@ interface CachedNetwork {
 
 /** One completed cell plus its conservative retained-size estimate. */
 interface CachedLoadedCell {
-  /** Geometry or precomputed graph data returned by the selected provider. */
+  /** Geometry or compact binary graph data returned by the selected provider. */
   cell: LoadedCell;
   /** Approximate retained bytes used by the LRU budget. */
   estimatedBytes: number;
@@ -144,17 +132,8 @@ export interface DynamicRoutingNetworkEngineOptions {
     signal: AbortSignal,
   ) => Promise<SwissTlmNetworkData>;
   /**
-   * Optional loader for graph cells compiled offline with the same cost model.
-   * It is mutually exclusive with `cellDataLoader` and bypasses source-feature
-   * merging and graph compilation inside the Worker.
-   */
-  precomputedCellLoader?: (
-    key: CellKey,
-    signal: AbortSignal,
-  ) => Promise<PrecomputedRoutingGraphData>;
-  /**
    * Optional loader for compact binary graph cells with global integer IDs.
-   * It is mutually exclusive with both geometry and JSON precomputed loaders.
+   * It is mutually exclusive with the geometry-cell loader.
    */
   precomputedBinaryCellLoader?: (
     key: CellKey,
@@ -229,11 +208,6 @@ function estimateGeometryCellBytes(data: SwissTlmNetworkData): number {
   return coordinateCount * 48 + lineCount * 64 + featureCount * 256;
 }
 
-/** Estimates retained bytes for one precomputed graph fragment. */
-function estimatePrecomputedCellBytes(data: PrecomputedRoutingGraphData): number {
-  return data.nodes.length * 112 + data.segments.length * 144;
-}
-
 /** Returns the exact ArrayBuffer size retained by one binary graph cell. */
 function estimateBinaryPrecomputedCellBytes(
   data: PrecomputedBinaryRoutingCell,
@@ -247,9 +221,7 @@ function estimateLoadedCellBytes(cell: LoadedCell): number {
     return estimateGeometryCellBytes(cell.data);
   }
 
-  return cell.kind === 'precomputed'
-    ? estimatePrecomputedCellBytes(cell.graph)
-    : estimateBinaryPrecomputedCellBytes(cell.graph);
+  return estimateBinaryPrecomputedCellBytes(cell.graph);
 }
 
 /**
@@ -288,13 +260,12 @@ export class DynamicRoutingNetworkEngine {
   constructor(options: DynamicRoutingNetworkEngineOptions = {}) {
     const configuredLoaders = [
       options.cellDataLoader,
-      options.precomputedCellLoader,
       options.precomputedBinaryCellLoader,
     ].filter(Boolean).length;
 
     if (configuredLoaders > 1) {
       throw new Error(
-        'Geometry, JSON precomputed, and binary precomputed cell loaders are mutually exclusive.',
+        'Geometry and binary precomputed cell loaders are mutually exclusive.',
       );
     }
 
@@ -556,18 +527,6 @@ export class DynamicRoutingNetworkEngine {
         combinedExtent(coveredCellKeys),
         binaryCells,
       );
-    } else if (this.options.precomputedCellLoader) {
-      const fragments = cells.map((cell) => {
-        if (cell.kind !== 'precomputed') {
-          throw new Error('Routing cell provider returned mixed representations.');
-        }
-
-        return cell.graph;
-      });
-      network = RoutingNetwork.fromPrecomputed(
-        combinedExtent(coveredCellKeys),
-        fragments,
-      );
     } else {
       const geometryCells = cells.map((cell) => {
         if (cell.kind !== 'geometry') {
@@ -734,14 +693,7 @@ export class DynamicRoutingNetworkEngine {
             kind: 'precomputed-binary',
             graph,
           }))
-      : this.options.precomputedCellLoader
-        ? this.options
-            .precomputedCellLoader(key, controller.signal)
-            .then((graph): LoadedPrecomputedCell => ({
-              kind: 'precomputed',
-              graph,
-            }))
-        : (
+      : (
           this.options.cellDataLoader
             ? this.options.cellDataLoader(key, controller.signal)
             : fetchSwissTlmNetworkData(extent, controller.signal, {
