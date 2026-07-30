@@ -17,6 +17,7 @@ application can remain usable without an account or a project-owned backend.
 - [Features](#features)
 - [Project principles](#project-principles)
 - [Quick start](#quick-start)
+- [Offline routing-data generation](#offline-routing-data-generation)
 - [Basic usage](#basic-usage)
 - [Data sources](#data-sources)
 - [Known limitations](#known-limitations)
@@ -67,6 +68,20 @@ Vite then displays the project address, usually:
 ```text
 http://localhost:5173/
 ```
+
+## Offline routing-data generation
+
+The Geneva binary-routing experiment has two local, git-ignored stages.
+Geometry build inputs are written outside `public/`, while only browser-ready
+binary cells are served by Vite during development:
+
+```bash
+npm run generate:geneva-geometry-cells -- "C:\data\SWISSTLM3D_2026_LV95_LN02.gpkg"
+npm run generate:precomputed-binary-geneva
+```
+
+Detailed format, validation, and deployment notes are kept in
+[Browser routing](docs/ROUTING.md).
 
 ## Basic usage
 

@@ -3,7 +3,8 @@
 Business context: extracts the reproducible Geneva routing experiment from the
 national swissTLM3D GeoPackage. It selects the official road/path layer, keeps
 complete 3D source geometries, attaches the `wanderwege` classification directly
-to each road, and writes compact 2.4 km cells consumed by the browser Worker.
+to each road, and writes compact 2.4 km geometry cells used only by the
+offline binary-graph generator and validation tools.
 
 The script uses only Python's standard library and opens the GeoPackage read-only.
 """
@@ -376,7 +377,7 @@ def generate(source_path: Path, output_root: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate Via Helvetica Geneva routing cells from swissTLM3D."
+        description="Generate Via Helvetica Geneva geometry cells from swissTLM3D."
     )
     parser.add_argument(
         "geopackage",
@@ -386,8 +387,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("public/routing-data/geneva"),
-        help="Generated dataset directory (default: public/routing-data/geneva)",
+        default=Path(".routing-work/geneva-geometry"),
+        help="Generated dataset directory (default: .routing-work/geneva-geometry)",
     )
     return parser.parse_args()
 

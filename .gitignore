@@ -28,9 +28,10 @@ Thumbs.db
 /en/
 /releases/
 
-# Generated local routing experiments (served by Vite, excluded from production)
+# Generated local routing data and compiler workspaces
+/.routing-work/
 /public/routing-data/
-/.tmp-precomputed-routing-compiler/
-/via-helvetica-precomputed-current.zip
 /.tmp-precomputed-binary-routing-compiler/
-/via-helvetica-routing-current.zip
+
+# Local repository archives
+/*.zip

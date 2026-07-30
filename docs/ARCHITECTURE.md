@@ -691,8 +691,10 @@ browser decompression is available.
 
 `routingConfig.ts` activates experiments only in Vite development mode, so LAN
 addresses remain testable while a production bundle always selects GeoAdmin.
-Generated routing files are git-ignored and `vite.config.ts` excludes
-`public/routing-data/` while copying ordinary public assets into `dist`, preventing
+Generated routing data is git-ignored. Offline geometry lives under
+`.routing-work/`, outside Vite's public tree, while browser-ready binary cells stay
+under `public/routing-data/` for local development. `vite.config.ts` excludes that
+public routing directory when copying ordinary assets into `dist`, preventing
 bounded datasets from entering GitHub Pages accidentally.
 
 For the complete design, tuning values, failure semantics, tests, and unresolved

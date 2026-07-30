@@ -170,17 +170,17 @@ only once.
 
 #### 3.3.1 Offline geometry source cells
 
-`public/routing-data/geneva/` contains generated, git-ignored normalized road
+`.routing-work/geneva-geometry/` contains generated, git-ignored normalized road
 geometry, numeric routing attributes, and a direct hiking boolean. These files
 are an offline build input and validation oracle; the browser no longer requests
-them. `scripts/generate-geneva-routing-cells.py` reproduces them from the national
+them. `scripts/generate-geneva-geometry-cells.py` reproduces them from the national
 GeoPackage, records source identity and extraction parameters in the manifest,
 and preserves complete unclipped 3D features across cell boundaries.
 
 Regenerate both preprocessing stages from the repository root with:
 
 ```bash
-npm run generate:static-geneva -- "C:\data\SWISSTLM3D_2026_LV95_LN02.gpkg"
+npm run generate:geneva-geometry-cells -- "C:\data\SWISSTLM3D_2026_LV95_LN02.gpkg"
 npm run generate:precomputed-binary-geneva
 ```
 
@@ -837,7 +837,7 @@ Further work should focus on evidence:
 - inspect roads-only versus enriched route quality;
 - document reproducible problematic corridors.
 
-### 18.2 Static preprocessed data
+### 18.2 Preprocessed routing data
 
 The Geneva validation pipeline now has one offline source stage and one browser
 runtime representation:
@@ -878,10 +878,12 @@ bounds before graph assembly. It remains a deliberately testable intermediate
 format; delta/varint encoding, unique edge ownership, and hierarchical routing
 remain later options only if measurements justify their additional complexity.
 
-Generated routing datasets are git-ignored. Vite serves them during development,
-but the production build disables normal public-directory copying and explicitly
-copies every ordinary public asset except `public/routing-data/`. This prevents a
-local experiment from entering a GitHub Pages artifact by accident.
+Generated routing data is git-ignored. Offline geometry stays under
+`.routing-work/`, outside Vite's public tree. Vite serves only the browser-ready
+binary cells under `public/routing-data/` during development; the production
+build excludes that directory while copying ordinary public assets. This
+prevents either build inputs or a local experiment from entering a GitHub Pages
+artifact by accident.
 
 ### 18.3 National graph or backend
 

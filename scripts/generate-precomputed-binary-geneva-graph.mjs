@@ -1,5 +1,5 @@
 /**
- * Business context: compiles validated Geneva geometry cells directly into a
+ * Business context: compiles validated offline Geneva geometry cells into a
  * compact binary graph with global integer node and edge identifiers. The same
  * pure TypeScript compiler used by live routing applies walkability, costs, 3D
  * node identity, and duplicate-edge rules before the binary format is written.
@@ -12,7 +12,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const SOURCE_ROOT = join(ROOT, 'public', 'routing-data', 'geneva');
+const SOURCE_ROOT = join(ROOT, '.routing-work', 'geneva-geometry');
 const OUTPUT_ROOT = join(
   ROOT,
   'public',

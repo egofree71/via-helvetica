@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate:static-geneva": "python scripts/generate-geneva-routing-cells.py",
+    "generate:geneva-geometry-cells": "python scripts/generate-geneva-geometry-cells.py",
     "generate:precomputed-binary-geneva": "node scripts/generate-precomputed-binary-geneva-graph.mjs"
   },
   "dependencies": {
