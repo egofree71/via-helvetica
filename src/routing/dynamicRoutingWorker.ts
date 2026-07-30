@@ -6,7 +6,12 @@
  * cross back to React.
  */
 import { DynamicRoutingNetworkEngine } from './dynamicRoutingEngine';
-import { shouldUseHikingEnrichment } from './routingConfig';
+import {
+  resolveRoutingDataSource,
+  shouldUseHikingEnrichment,
+} from './routingConfig';
+import { fetchPrecomputedGenevaRoutingCell } from './precomputedRoutingData';
+import { fetchStaticGenevaRoutingCell } from './staticRoutingData';
 import type {
   RoutingWorkerRequest,
   RoutingWorkerResponse,
@@ -26,13 +31,30 @@ function postNotice(notice: RoutingWorkerNotice): void {
   workerScope.postMessage(response);
 }
 
+const routingDataSource = resolveRoutingDataSource(import.meta.env.DEV);
+
 const engine = new DynamicRoutingNetworkEngine({
-  initialHikingEnrichmentEnabled: shouldUseHikingEnrichment(
-    workerScope.location.hostname,
-  ),
+  initialHikingEnrichmentEnabled:
+    routingDataSource === 'geo-admin'
+      ? shouldUseHikingEnrichment(import.meta.env.DEV)
+      : true,
   onHikingEnrichmentUnavailable: () =>
     postNotice('hiking-enrichment-unavailable'),
+  cellDataLoader:
+    routingDataSource === 'static-geneva'
+      ? fetchStaticGenevaRoutingCell
+      : undefined,
+  precomputedCellLoader:
+    routingDataSource === 'precomputed-geneva'
+      ? fetchPrecomputedGenevaRoutingCell
+      : undefined,
 });
+
+if (routingDataSource === 'static-geneva') {
+  console.info('[Via Helvetica] Routing with static Geneva geometry cells.');
+} else if (routingDataSource === 'precomputed-geneva') {
+  console.info('[Via Helvetica] Routing with precomputed Geneva graph cells.');
+}
 
 /** Converts unknown failures into structured-clone-safe error data. */
 function serializeError(error: unknown): SerializedRoutingWorkerError {

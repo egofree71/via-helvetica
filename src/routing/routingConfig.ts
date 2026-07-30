@@ -1,53 +1,61 @@
 /**
- * Business context: exposes the one local-development switch needed to verify
- * roads-only routing without waiting for GeoAdmin's optional hiking-layer
- * identify behavior to fail naturally. Deployed builds always request hiking
- * enrichment regardless of this local test value.
+ * Business context: exposes development-only routing switches used to compare
+ * the production GeoAdmin provider with experimental Geneva geometry and graph
+ * cells. Vite's build mode, rather than the URL hostname, is the safety boundary
+ * so local-network addresses remain testable while production always uses
+ * GeoAdmin.
  */
 
-/** Local-only routing choices used while the application runs on this machine. */
+/** Routing-data providers available to the dedicated Worker. */
+export type RoutingDataSource =
+  | 'geo-admin'
+  | 'static-geneva'
+  | 'precomputed-geneva';
+
+/** Development-only routing choices used while Vite serves source files. */
 export interface LocalRoutingDevelopmentConfig {
+  /** Data provider used only when `import.meta.env.DEV` is true. */
+  dataSource: RoutingDataSource;
   /**
-   * Whether local routing requests include optional hiking geometry.
-   * Set to `false` to exercise the session notice and roads-only fallback while
-   * keeping the rendered hiking-trail map overlay unchanged.
+   * Whether development GeoAdmin requests include optional hiking geometry.
+   * Static experiments already carry hiking classification or final costs.
    */
   useHikingEnrichment: boolean;
 }
 
 /**
  * Manually editable development configuration.
- * Restart the Vite development server after changing this value.
+ * Restart the Vite development server after changing either value.
  */
 export const LOCAL_ROUTING_DEVELOPMENT_CONFIG: LocalRoutingDevelopmentConfig = {
+  dataSource: 'precomputed-geneva',
   useHikingEnrichment: true,
 };
 
-/** Hostnames treated as the developer's local machine. */
-const LOCAL_DEVELOPMENT_HOSTNAMES = new Set([
-  'localhost',
-  '127.0.0.1',
-  '::1',
-  '[::1]',
-]);
+/**
+ * Resolves the routing-data provider for the current build mode.
+ * @param isDevelopment - Vite development flag injected into the Worker bundle.
+ * @param localConfig - Development setting, injectable for regression tests.
+ * @returns The configured experiment in development; always GeoAdmin in production.
+ */
+export function resolveRoutingDataSource(
+  isDevelopment: boolean,
+  localConfig: LocalRoutingDevelopmentConfig =
+    LOCAL_ROUTING_DEVELOPMENT_CONFIG,
+): RoutingDataSource {
+  return isDevelopment ? localConfig.dataSource : 'geo-admin';
+}
 
 /**
  * Resolves whether optional hiking geometry should be requested.
- *
- * @param hostname - Current page or Worker hostname.
- * @param localConfig - Local setting, injectable so the safety rule is testable.
- * @returns The local setting on localhost; always `true` on deployed hosts.
+ * @param isDevelopment - Vite development flag injected into the Worker bundle.
+ * @param localConfig - Development setting, injectable for regression tests.
+ * @returns The development value while serving source; always `true` in production.
  */
 export function shouldUseHikingEnrichment(
-  hostname: string,
+  isDevelopment: boolean,
   localConfig: LocalRoutingDevelopmentConfig =
     LOCAL_ROUTING_DEVELOPMENT_CONFIG,
 ): boolean {
-  if (!LOCAL_DEVELOPMENT_HOSTNAMES.has(hostname.toLowerCase())) {
-    // A forgotten local test value must never disable hiking enrichment in the
-    // deployed GitHub Pages application.
-    return true;
-  }
-
-  return localConfig.useHikingEnrichment;
+  return isDevelopment ? localConfig.useHikingEnrichment : true;
 }

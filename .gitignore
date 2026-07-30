@@ -28,3 +28,6 @@ Thumbs.db
 /en/
 /releases/
 
+# Generated local routing experiments (served by Vite, excluded from production)
+/public/routing-data/
+/.tmp-precomputed-routing-compiler/

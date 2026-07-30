@@ -1,7 +1,9 @@
 /**
  * Business context: owns worker-side swissTLM3D routing state. It loads bounded
- * cells, keeps raw geometries and derived graphs inside the dedicated worker,
- * and performs graph construction, snapping, and A* without blocking the map UI.
+ * cells from the configured provider, keeps loaded geometry or precomputed
+ * graph cells inside the dedicated Worker, builds the exact corridor network,
+ * and performs snapping and A* without
+ * blocking the map UI.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import {
@@ -9,6 +11,7 @@ import {
   RoutingNetwork,
   type RoutedNetworkPath,
 } from './networkRouter';
+import type { PrecomputedRoutingGraphData } from './precomputedRoutingGraph';
 import {
   combinedExtent,
   createCorridorCellKeys,
@@ -17,8 +20,10 @@ import {
   type CellKey,
 } from './routingGrid';
 import { RoutingAreaTooLargeError } from './dynamicRoutingProtocol';
+import { isRoutingCoverageError } from './routingCoverage';
 import {
   fetchSwissTlmNetworkData,
+  mergeSwissTlmFeatures,
   type SwissTlmLineFeature,
   type SwissTlmNetworkData,
 } from './swissTlmApi';
@@ -32,16 +37,39 @@ const ROUTE_RETRY_CELL_RADIUS = 2;
  * triggering excessive API traffic and memory use.
  */
 const MAX_CELLS_PER_OPERATION = 80;
-/** Number of combined RoutingNetwork instances retained in the session LRU cache. */
-const NETWORK_CACHE_LIMIT = 8;
+/** Hard maximum number of combined corridor graphs retained in the Worker. */
+const NETWORK_CACHE_LIMIT = 2;
+/**
+ * Approximate graph-cache budget in bytes. The estimate is conservative and
+ * keeps one oversized current graph rather than evicting the graph just built.
+ */
+const MAX_NETWORK_CACHE_BYTES = 128 * 1024 * 1024;
+/**
+ * Approximate raw-cell cache budget in bytes. Cell entries are evicted by least
+ * recent use; an individual oversized current cell remains available.
+ */
+const MAX_LOADED_CELL_CACHE_BYTES = 64 * 1024 * 1024;
 /** Number of cells loaded concurrently inside the worker. */
 const CELL_LOAD_CONCURRENCY = 2;
 
-/** Completed cell retained in worker memory for the current page session. */
-interface LoadedCell {
+/** Completed source-geometry cell retained for the page session. */
+interface LoadedGeometryCell {
+  /** Discriminator used before merging exact corridor cells. */
+  kind: 'geometry';
   /** Deduplicated swissTLM3D road and hiking features for this cell. */
   data: SwissTlmNetworkData;
 }
+
+/** Completed offline-compiled graph cell retained for the page session. */
+interface LoadedPrecomputedCell {
+  /** Discriminator used before constructing the corridor network. */
+  kind: 'precomputed';
+  /** Globally mergeable nodes and final-cost segments. */
+  graph: PrecomputedRoutingGraphData;
+}
+
+/** Either provider representation accepted by the session cache. */
+type LoadedCell = LoadedGeometryCell | LoadedPrecomputedCell;
 
 /** Cached graph built for one exact set of cell keys. */
 interface CachedNetwork {
@@ -49,6 +77,26 @@ interface CachedNetwork {
   key: string;
   /** Immutable graph built from those cells. */
   network: RoutingNetwork;
+  /** Conservative retained-size estimate used for byte-budget eviction. */
+  estimatedBytes: number;
+}
+
+/** One completed cell plus its conservative retained-size estimate. */
+interface CachedLoadedCell {
+  /** Geometry or precomputed graph data returned by the selected provider. */
+  cell: LoadedCell;
+  /** Approximate retained bytes used by the LRU budget. */
+  estimatedBytes: number;
+}
+
+/** Result of loading one requested corridor key with bounded-provider handling. */
+interface LoadedCellResult {
+  /** Routing-grid key that produced this result. */
+  key: CellKey;
+  /** Completed cell when the provider covers the key. */
+  cell?: LoadedCell;
+  /** Coverage error when the key lies outside a bounded experimental provider. */
+  coverageError?: Error;
 }
 
 /** In-flight cell request shared by concurrent consumers. */
@@ -68,6 +116,24 @@ export interface DynamicRoutingNetworkEngineOptions {
   initialHikingEnrichmentEnabled?: boolean;
   /** Called once when optional hiking enrichment is disabled for the session. */
   onHikingEnrichmentUnavailable?: () => void;
+  /**
+   * Optional cell loader replacing GeoAdmin for bounded local experiments.
+   * The loader must return the same normalized plain-data contract as the
+   * production provider.
+   */
+  cellDataLoader?: (
+    key: CellKey,
+    signal: AbortSignal,
+  ) => Promise<SwissTlmNetworkData>;
+  /**
+   * Optional loader for graph cells compiled offline with the same cost model.
+   * It is mutually exclusive with `cellDataLoader` and bypasses source-feature
+   * merging and graph compilation inside the Worker.
+   */
+  precomputedCellLoader?: (
+    key: CellKey,
+    signal: AbortSignal,
+  ) => Promise<PrecomputedRoutingGraphData>;
 }
 
 /**
@@ -109,18 +175,44 @@ async function mapWithConcurrency<T, R>(
  * @returns Deduplicated features in stable insertion order.
  */
 function mergeFeatures(
-  cells: LoadedCell[],
+  cells: LoadedGeometryCell[],
   selector: (data: SwissTlmNetworkData) => SwissTlmLineFeature[],
 ): SwissTlmLineFeature[] {
-  const features = new Map<string, SwissTlmLineFeature>();
+  return mergeSwissTlmFeatures(
+    cells.flatMap((cell) => selector(cell.data)),
+  ).features;
+}
 
-  for (const cell of cells) {
-    for (const feature of selector(cell.data)) {
-      features.set(feature.id, feature);
+
+/** Estimates retained bytes for one normalized source feature collection. */
+function estimateGeometryCellBytes(data: SwissTlmNetworkData): number {
+  let coordinateCount = 0;
+  let lineCount = 0;
+  let featureCount = 0;
+
+  for (const feature of [...data.roads, ...data.hikingTrails]) {
+    featureCount += 1;
+    lineCount += feature.lines.length;
+    for (const line of feature.lines) {
+      coordinateCount += line.length;
     }
   }
 
-  return [...features.values()];
+  // Coordinates dominate raw-cell memory; the fixed allowances cover nested
+  // arrays, feature objects, strings, and normalized attributes.
+  return coordinateCount * 48 + lineCount * 64 + featureCount * 256;
+}
+
+/** Estimates retained bytes for one precomputed graph fragment. */
+function estimatePrecomputedCellBytes(data: PrecomputedRoutingGraphData): number {
+  return data.nodes.length * 112 + data.segments.length * 144;
+}
+
+/** Returns the conservative cache weight for either provider representation. */
+function estimateLoadedCellBytes(cell: LoadedCell): number {
+  return cell.kind === 'geometry'
+    ? estimateGeometryCellBytes(cell.data)
+    : estimatePrecomputedCellBytes(cell.graph);
 }
 
 /**
@@ -132,11 +224,15 @@ function mergeFeatures(
  */
 export class DynamicRoutingNetworkEngine {
   /** Raw feature cells already completed during this page session. */
-  private readonly loadedCells = new Map<CellKey, LoadedCell>();
+  private readonly loadedCells = new Map<CellKey, CachedLoadedCell>();
+  /** Current conservative retained-size total for completed raw cells. */
+  private loadedCellCacheBytes = 0;
   /** In-flight cell requests shared to avoid duplicate GeoAdmin traffic. */
   private readonly pendingCells = new Map<CellKey, PendingCell>();
   /** Small most-recent-first cache of graphs for exact corridor cell sets. */
   private readonly networkCache: CachedNetwork[] = [];
+  /** Current conservative retained-size total for cached corridor graphs. */
+  private networkCacheBytes = 0;
   /**
    * Whether new cells should still request the optional hiking layer. Once a
    * layer-specific rejection occurs, roads alone are used for the remaining
@@ -147,8 +243,18 @@ export class DynamicRoutingNetworkEngine {
   private readonly options: DynamicRoutingNetworkEngineOptions;
   /** Prevents repeated UI notices after roads-only mode has been reported. */
   private hikingEnrichmentUnavailableReported = false;
+  /** Avoids repeating provider diagnostics for every loaded GeoAdmin cell. */
+  private missingElevationReported = false;
+  /** Avoids repeating provider-ID collision diagnostics for every cell. */
+  private conflictingProviderIdReported = false;
 
   constructor(options: DynamicRoutingNetworkEngineOptions = {}) {
+    if (options.cellDataLoader && options.precomputedCellLoader) {
+      throw new Error(
+        'Geometry and precomputed routing cell loaders are mutually exclusive.',
+      );
+    }
+
     this.options = options;
     this.hikingEnrichmentEnabled =
       options.initialHikingEnrichmentEnabled ?? true;
@@ -174,13 +280,42 @@ export class DynamicRoutingNetworkEngine {
     this.reportHikingEnrichmentUnavailable();
   }
 
+  /** Reports live-provider assumptions that must be verified before comparison. */
+  private reportProviderDiagnostics(diagnostics: {
+    roadCoordinates: number;
+    roadCoordinatesWithZ: number;
+    conflictingFeatureIds: number;
+  }): void {
+    if (
+      !this.missingElevationReported &&
+      diagnostics.roadCoordinatesWithZ < diagnostics.roadCoordinates
+    ) {
+      this.missingElevationReported = true;
+      console.warn(
+        '[Via Helvetica] GeoAdmin swissTLM3D roads contain coordinates without Z:',
+        diagnostics,
+      );
+    }
+
+    if (
+      !this.conflictingProviderIdReported &&
+      diagnostics.conflictingFeatureIds > 0
+    ) {
+      this.conflictingProviderIdReported = true;
+      console.warn(
+        '[Via Helvetica] GeoAdmin reused feature IDs for different geometries:',
+        diagnostics.conflictingFeatureIds,
+      );
+    }
+  }
+
   /**
    * Loads a neighbourhood around a point and snaps it to the local network.
    * @param coordinate - User-selected coordinate in EPSG:2056.
    * @param signal - Abort signal owned by the route-creation session.
    * @returns The snapped coordinate, or `null` when coverage is empty or no segment is close enough.
    * @throws {RoutingAreaTooLargeError} If the generated neighbourhood exceeds the safety limit.
-   * @throws {Error} When GeoAdmin loading or graph construction fails.
+   * @throws {Error} When provider loading or graph construction fails.
    */
   async snap(
     coordinate: Coordinate,
@@ -216,7 +351,7 @@ export class DynamicRoutingNetworkEngine {
    * @param signal - Abort signal owned by the route-creation session.
    * @returns A routed path, or `null` when both corridor widths lack usable coverage or connectivity.
    * @throws {RoutingAreaTooLargeError} If either corridor exceeds the safety limit.
-   * @throws {Error} When GeoAdmin loading or graph construction fails.
+   * @throws {Error} When provider loading or graph construction fails.
    */
   async route(
     startCoordinate: Coordinate,
@@ -319,42 +454,105 @@ export class DynamicRoutingNetworkEngine {
     const cachedNetworkIndex = this.networkCache.findIndex(
       (entry) => entry.key === cacheKey,
     );
-    const cachedNetwork = this.networkCache[cachedNetworkIndex];
+    const reusedNetwork = this.networkCache[cachedNetworkIndex];
 
-    if (cachedNetwork) {
-
+    if (reusedNetwork) {
       // Promote a reused graph so the bounded cache evicts the least-recently
       // used corridor rather than the oldest corridor regardless of access.
       if (cachedNetworkIndex > 0) {
         this.networkCache.splice(cachedNetworkIndex, 1);
-        this.networkCache.unshift(cachedNetwork);
+        this.networkCache.unshift(reusedNetwork);
       }
 
-      return cachedNetwork.network;
+      return reusedNetwork.network;
     }
 
-    const cells = await mapWithConcurrency(
+    const loadResults = await mapWithConcurrency(
       [...cellKeys],
       CELL_LOAD_CONCURRENCY,
-      (key) => this.loadCell(key, signal),
+      async (key): Promise<LoadedCellResult> => {
+        try {
+          return { key, cell: await this.loadCell(key, signal) };
+        } catch (error) {
+          if (isRoutingCoverageError(error)) {
+            return { key, coverageError: error };
+          }
+
+          throw error;
+        }
+      },
+    );
+    const coveredResults = loadResults.filter(
+      (result): result is LoadedCellResult & { cell: LoadedCell } =>
+        result.cell !== undefined,
     );
 
-    const data: SwissTlmNetworkData = {
-      roads: mergeFeatures(cells, (cellData) => cellData.roads),
-      hikingTrails: mergeFeatures(
-        cells,
-        (cellData) => cellData.hikingTrails,
-      ),
+    if (coveredResults.length === 0) {
+      // A completely out-of-region request remains explicit. When only halo
+      // cells are outside coverage, the covered cells still form a usable
+      // partial corridor instead of turning valid edge data into a network error.
+      throw (
+        loadResults.find((result) => result.coverageError)?.coverageError ??
+        new NoWalkableNetworkError()
+      );
+    }
+
+    const coveredCellKeys = new Set(coveredResults.map((result) => result.key));
+    const cells = coveredResults.map((result) => result.cell);
+    let network: RoutingNetwork;
+
+    if (this.options.precomputedCellLoader) {
+      const fragments = cells.map((cell) => {
+        if (cell.kind !== 'precomputed') {
+          throw new Error('Routing cell provider returned mixed representations.');
+        }
+
+        return cell.graph;
+      });
+      network = RoutingNetwork.fromPrecomputed(
+        combinedExtent(coveredCellKeys),
+        fragments,
+      );
+    } else {
+      const geometryCells = cells.map((cell) => {
+        if (cell.kind !== 'geometry') {
+          throw new Error('Routing cell provider returned mixed representations.');
+        }
+
+        return cell;
+      });
+      const data: SwissTlmNetworkData = {
+        roads: mergeFeatures(geometryCells, (cellData) => cellData.roads),
+        hikingTrails: mergeFeatures(
+          geometryCells,
+          (cellData) => cellData.hikingTrails,
+        ),
+      };
+      network = RoutingNetwork.fromSwissTlm(
+        combinedExtent(coveredCellKeys),
+        data,
+      );
+    }
+
+    // Most-recently-built graphs stay at the front. Both a count and a byte
+    // budget bound retained JavaScript object graphs on memory-constrained devices.
+    const cachedNetwork: CachedNetwork = {
+      key: cacheKey,
+      network,
+      estimatedBytes: network.estimatedMemoryBytes,
     };
+    this.networkCache.unshift(cachedNetwork);
+    this.networkCacheBytes += cachedNetwork.estimatedBytes;
 
-    const network = RoutingNetwork.fromSwissTlm(combinedExtent(cellKeys), data);
-
-    // Most-recently-built graphs stay at the front. This small cache avoids
-    // rebuilding common local corridors.
-    this.networkCache.unshift({ key: cacheKey, network });
-
-    if (this.networkCache.length > NETWORK_CACHE_LIMIT) {
-      this.networkCache.pop();
+    while (
+      this.networkCache.length > 1 &&
+      (this.networkCache.length > NETWORK_CACHE_LIMIT ||
+        this.networkCacheBytes > MAX_NETWORK_CACHE_BYTES)
+    ) {
+      const evicted = this.networkCache.pop();
+      if (evicted) {
+        this.networkCacheBytes -= evicted.estimatedBytes;
+      }
     }
 
     return network;
@@ -366,16 +564,20 @@ export class DynamicRoutingNetworkEngine {
    * @param key - Stable routing-cell identifier.
    * @param signal - Abort signal that owns a newly created provider request.
    * @returns Completed cell or the shared in-flight promise.
-   * @throws {Error} Propagates GeoAdmin request and parsing failures.
+   * @throws {Error} Propagates provider request and parsing failures.
    */
   private loadCell(
     key: CellKey,
     signal: AbortSignal,
   ): Promise<LoadedCell> {
-    const loadedCell = this.loadedCells.get(key);
+    const loadedEntry = this.loadedCells.get(key);
 
-    if (loadedCell) {
-      return Promise.resolve(loadedCell);
+    if (loadedEntry) {
+      // Map insertion order acts as the raw-cell LRU. Reinsert a hit so the
+      // oldest untouched cell is evicted first when the byte budget is exceeded.
+      this.loadedCells.delete(key);
+      this.loadedCells.set(key, loadedEntry);
+      return Promise.resolve(loadedEntry.cell);
     }
 
     // Sharing a live promise prevents duplicate API traffic when neighbouring graph builds overlap.
@@ -392,16 +594,62 @@ export class DynamicRoutingNetworkEngine {
     const extent = extentForCellKey(key);
     let promise: Promise<LoadedCell>;
 
-    promise = fetchSwissTlmNetworkData(extent, signal, {
-      allowEmpty: true,
-      shouldRequestHikingEnrichment: () =>
-        this.hikingEnrichmentEnabled,
-      onHikingEnrichmentUnavailable: () =>
-        this.disableHikingEnrichment(),
-    })
-      .then((data): LoadedCell => {
-        const cell = { data };
-        this.loadedCells.set(key, cell);
+    const cellPromise: Promise<LoadedCell> = this.options.precomputedCellLoader
+      ? this.options
+          .precomputedCellLoader(key, signal)
+          .then((graph): LoadedPrecomputedCell => ({
+            kind: 'precomputed',
+            graph,
+          }))
+      : (
+          this.options.cellDataLoader
+            ? this.options.cellDataLoader(key, signal)
+            : fetchSwissTlmNetworkData(extent, signal, {
+                allowEmpty: true,
+                shouldRequestHikingEnrichment: () =>
+                  this.hikingEnrichmentEnabled,
+                onHikingEnrichmentUnavailable: () =>
+                  this.disableHikingEnrichment(),
+                onDiagnostics: (diagnostics) =>
+                  this.reportProviderDiagnostics(diagnostics),
+              })
+        ).then((data): LoadedGeometryCell => ({
+          kind: 'geometry',
+          data,
+        }));
+
+    promise = cellPromise
+      .then((cell): LoadedCell => {
+        const estimatedBytes = estimateLoadedCellBytes(cell);
+        const previous = this.loadedCells.get(key);
+
+        if (previous) {
+          this.loadedCellCacheBytes -= previous.estimatedBytes;
+          this.loadedCells.delete(key);
+        }
+
+        this.loadedCells.set(key, { cell, estimatedBytes });
+        this.loadedCellCacheBytes += estimatedBytes;
+
+        while (
+          this.loadedCells.size > 1 &&
+          this.loadedCellCacheBytes > MAX_LOADED_CELL_CACHE_BYTES
+        ) {
+          const oldestKey = this.loadedCells.keys().next().value as
+            | CellKey
+            | undefined;
+
+          if (oldestKey === undefined) {
+            break;
+          }
+
+          const evicted = this.loadedCells.get(oldestKey);
+          this.loadedCells.delete(oldestKey);
+          if (evicted) {
+            this.loadedCellCacheBytes -= evicted.estimatedBytes;
+          }
+        }
+
         return cell;
       })
       .finally(() => {

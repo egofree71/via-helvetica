@@ -15,6 +15,14 @@ The required graph comes from the official
 the cost of matching graph edges. If that optional layer cannot be obtained, the
 Worker continues in roads-only mode and reports one non-blocking session notice.
 
+Two development-only Geneva providers can instead load 2.4 km static files
+generated from the official 2026 swissTLM3D GeoPackage. The first carries
+normalized road geometry and a direct hiking designation. The second uses the
+same pure TypeScript compiler as live routing to store globally mergeable nodes
+and final-cost walkable segments before the browser receives them. Production
+bundles remain forced to the GeoAdmin provider and exclude generated datasets
+from the deployment artifact.
+
 This subsystem is intentionally bounded and experimental. It does not download
 a national dataset, does not operate a backend, and has not yet been validated
 as a production-grade national router. Users can disable snapping or rely on a
@@ -61,7 +69,7 @@ flowchart LR
     Facade <--> Worker[dynamicRoutingWorker]
     Worker --> Engine[DynamicRoutingNetworkEngine]
     Engine --> Grid[routingGrid]
-    Engine --> Provider[swissTlmApi]
+    Engine --> Provider[GeoAdmin, geometry cells, or graph cells]
     Engine --> Router[RoutingNetwork]
     Provider --> GeoAdmin[GeoAdmin identify API]
     Router --> Result[Snap or routed coordinates]
@@ -99,21 +107,28 @@ request-correlation layer.
 
 `src/routing/dynamicRoutingEngine.ts` owns:
 
-- completed raw-cell cache;
+- completed geometry-cell or precomputed-graph-cell cache;
 - reusable in-flight cell requests;
 - exact-corridor graph LRU cache;
 - cell loading concurrency;
 - narrow and widened corridor attempts;
-- feature merging;
-- graph construction;
+- source-feature merging and compilation when geometry cells are used;
+- precomputed-fragment joining when graph cells are used;
 - snapping and A* invocation;
 - the session-wide hiking-enrichment availability flag.
 
-### 2.4 Graph implementation
+### 2.4 Graph compilation and runtime
 
-`src/routing/networkRouter.ts` normalizes line segments into a walkable graph,
-indexes segments for hiking matching and snapping, applies edge costs, and runs
-A*.
+`src/routing/precomputedRoutingGraph.ts` is a pure shared compiler. It applies
+3D node quantization, pedestrian exclusions, road-cost policy, optional hiking
+matching, and duplicate-segment resolution. Live GeoAdmin and static geometry
+routing call it inside the Worker; the offline generator transpiles and executes
+the same source file.
+
+`src/routing/networkRouter.ts` joins one or more compiled fragments, creates the
+adjacency lists and snapping index required by the exact requested corridor, and
+runs A*. This split keeps route search in the browser without recompiling source
+road attributes in the precomputed provider.
 
 ### 2.5 Route-edit integration
 
@@ -141,7 +156,61 @@ The dataset and portrayal are official. However, the GeoAdmin layer table does
 not advertise the same feature-tooltip behaviour as the road layer, so vector
 retrieval through `identify` is treated as non-guaranteed enrichment.
 
-### 3.3 Informational overlays are separate
+### 3.3 Experimental static Geneva sources
+
+Both local experiments originate from `SWISSTLM3D_2026_LV95_LN02.gpkg`. In the
+extracted region, every one of the 4,813 roads whose `wanderwege` field equals
+`Wanderweg` had the same UUID and decoded 3D geometry as the corresponding
+feature in the separate hiking GeoPackage. No hiking feature was missing or
+geometrically different, so the generated files store national road geometry
+only once.
+
+#### 3.3.1 Geometry cells
+
+`public/routing-data/geneva/` contains generated, git-ignored normalized road
+geometry, numeric routing attributes, and a direct hiking boolean.
+`scripts/generate-geneva-routing-cells.py` reproduces it from the national
+GeoPackage, records source identity and extraction parameters in the manifest,
+and preserves complete unclipped 3D features across cell boundaries. The Worker
+no longer performs GeoAdmin identify requests, adaptive subdivision, or
+road/hiking spatial matching, but it still compiles nodes, pedestrian costs,
+duplicate segments, and the graph for each exact corridor.
+
+Regenerate both experimental stages from the repository root with:
+
+```bash
+npm run generate:static-geneva -- "C:\data\SWISSTLM3D_2026_LV95_LN02.gpkg"
+npm run generate:precomputed-geneva
+```
+
+The first command replaces the geometry dataset atomically and writes the source
+filename, byte size, SHA-256 digest, layer, extraction extent, assignment policy,
+and parsing count into its manifest. The second command validates the geometry
+cells through the same pure module used by the Worker before compiling them.
+
+#### 3.3.2 Precomputed graph cells
+
+`public/routing-data/geneva-precomputed/` contains the output of the shared graph
+compiler: original 2D/3D node coordinates, local segment endpoint references,
+final traversal costs, and hiking flags. The offline generator lives in
+`scripts/generate-precomputed-geneva-graph.mjs` and executes the same
+`precomputedRoutingGraph.ts` source used by live routing rather than maintaining
+a second implementation.
+
+At runtime the Worker derives the stable quantized key for each loaded node,
+joins matching nodes from neighbouring cells, retains the cheapest duplicate
+segment, creates adjacency lists and the snapping index, and runs A*. It no
+longer interprets swissTLM3D road attributes or performs walkability and hiking
+classification for this provider.
+
+Both manifests declare the same bounded test rectangle. An unlisted cell inside
+that rectangle is valid empty coverage. When a requested corridor overlaps the
+boundary, out-of-region halo cells are ignored while covered cells still build the
+network; a request whose complete footprint is outside the rectangle remains an
+explicit coverage error. Static data is never mixed with GeoAdmin, so comparisons
+remain attributable to the selected provider.
+
+### 3.4 Informational overlays are separate
 
 The rendered hiking-trail WMTS overlay, ASTRA closure WMS, military-danger WMS,
 and public-transport stops are independent from the routing graph. Their
@@ -318,19 +387,23 @@ notice across React Strict Mode development setup/cleanup cycles.
 
 ### 6.3 Local manual test switch
 
-`src/routing/routingConfig.ts` exposes a narrow development-only switch:
+`src/routing/routingConfig.ts` exposes two development-only choices:
 
 ```ts
+LOCAL_ROUTING_DEVELOPMENT_CONFIG.dataSource
 LOCAL_ROUTING_DEVELOPMENT_CONFIG.useHikingEnrichment
 ```
 
-When set to `false` on `localhost`, `127.0.0.1`, or IPv6 loopback, the Worker
-starts in roads-only mode and emits the same normal notice when the first routing
-operation begins.
+`dataSource: 'static-geneva'` loads the generated geometry cells;
+`'precomputed-geneva'` loads graph cells; and `'geo-admin'` restores the
+production request strategy for comparison. With GeoAdmin selected, setting
+`useHikingEnrichment` to `false` starts the Worker in roads-only mode and emits
+the same normal notice when the first routing operation begins.
 
-Deployed hostnames always resolve to `true`, even if the local source value is
-left disabled accidentally. The switch does not affect the rendered hiking map
-overlay.
+The choices activate only in a Vite development bundle
+(`import.meta.env.DEV`), including when the page is opened through a LAN address.
+Production bundles always resolve to `dataSource: 'geo-admin'` with hiking
+enrichment enabled. These switches do not affect the rendered hiking map overlay.
 
 ## 7. Worker protocol and lifecycle
 
@@ -355,8 +428,11 @@ session may create a fresh Worker and fresh session caches.
 
 ### 8.1 Completed raw cells
 
-Completed cells remain in Worker memory for the page session. Reusing a cell
-avoids another GeoAdmin request when later route edits revisit the same area.
+Completed cells use a least-recently-used cache with an approximate 64 MiB byte
+budget. Reusing a cell avoids another provider request when nearby edits revisit
+the same area, while old cells can be released on long sessions. One oversized
+current cell is retained rather than immediately evicted; the estimate is a
+browser-independent safeguard, not a precise heap measurement.
 
 ### 8.2 In-flight cell sharing
 
@@ -368,19 +444,26 @@ retry rather than inheriting an aborted promise.
 
 Graphs are cached by an exact sorted signature of their corridor cell set.
 
-- cache limit: 8 `RoutingNetwork` instances;
+- hard limit: 2 `RoutingNetwork` instances;
+- approximate retained-size budget: 128 MiB;
 - a hit is promoted to most-recently-used position;
-- the least-recently-used graph is evicted after the limit;
-- raw cells remain available even when a derived graph is evicted.
+- the least-recently-used graph is evicted when either limit is exceeded;
+- one oversized current graph is retained so the route operation can complete;
+- raw cells use their independent LRU and may outlive or be evicted before a graph.
 
 Exact signatures avoid reusing a graph whose geographic coverage differs from
-the requested corridor.
+the requested corridor. The byte estimates include conservative allowances for
+JavaScript object, adjacency, and spatial-index overhead and should be checked
+against real browser measurements.
 
 ### 8.4 Feature merging
 
 Before graph construction, roads and hiking features from all contributing
-cells are merged by stable feature ID. This prevents duplicate edges when a
-geometry crosses cell boundaries.
+cells are merged by feature ID and a deterministic full-geometry signature.
+Repeated identical geometry is removed, while a provider ID reused for a
+different geometry keeps both features under derived IDs rather than silently
+losing one road. GeoAdmin loads also report the observed ID-conflict count and
+coordinate Z coverage in the Worker console for validation.
 
 ## 9. Graph construction
 
@@ -437,6 +520,11 @@ make a segment more attractive to A*. The minimum configured cost factor is
 
 The exact attribute policy belongs in `networkRouter.ts` and its tests because
 it may evolve as swissTLM3D attributes are validated in more regions.
+
+Distances and costs are horizontal in LV95. Elevation belongs to node identity
+to protect bridges and tunnels, but slope does not currently change A* edge cost;
+the separate elevation-profile workflow applies altitude to walking-time metrics
+after an itinerary has been selected.
 
 ## 10. Hiking-segment matching
 
@@ -633,9 +721,17 @@ straight mode remains unrestricted.
 - road-only retry after combined-layer rejection;
 - road versus hiking truncation semantics;
 - cancellation distinction;
-- response normalization and deduplication.
+- response normalization, invalid-coordinate splitting, collision-safe identity,
+  and measured Z diagnostics.
 
 Live GeoAdmin requests are not used by the regression suite.
+
+The geometry-cell provider tests additionally protect manifest compatibility,
+bounded coverage, empty-cell handling, the shared runtime/generator geometry
+contract, invalid-coordinate splitting, numeric attribute normalization, and
+direct hiking classification. The precomputed provider tests protect its
+separate manifest, compact node and segment tables, local-index resolution,
+global node identity, and explicit out-of-coverage failure.
 
 ### 16.3 Worker-client tests
 
@@ -656,7 +752,8 @@ The engine uses mocked provider loaders and graph doubles to protect:
 - completed cell reuse;
 - in-flight cell reuse;
 - cleanup and retry after an aborted cell request;
-- true least-recently-used graph eviction;
+- partial corridors at bounded-provider edges;
+- true least-recently-used and byte-budget graph eviction;
 - cache and area limits;
 - session-wide roads-only transition;
 - provider-error propagation;
@@ -664,9 +761,10 @@ The engine uses mocked provider loaders and graph doubles to protect:
 
 ### 16.5 Graph tests
 
-`networkRouter` tests cover structured-clone-safe results and focused graph
-behaviour. Algorithm constants and non-obvious heuristics remain documented in
-code and should receive regression tests when their policy changes.
+`networkRouter` and shared-compiler tests cover structured-clone-safe results,
+shared nodes across fragments, duplicate boundary geometry, geometry/precomputed
+route parity, removal of excluded-road orphan nodes, 2D/3D identity separation,
+and the lower-bound invariant required by the A* heuristic.
 
 ### 16.6 Manual geographic validation
 
@@ -719,24 +817,45 @@ Further work should focus on evidence:
 
 ### 18.2 Static preprocessed data
 
-A possible intermediate architecture is:
+The Geneva branch validates two stages of the same intermediate architecture:
 
 ```text
 official GeoPackage
         ↓
-local script or GitHub Actions preparation
+normalized geometry cells
+        ↓ shared TypeScript graph compiler
+precomputed graph cells
         ↓
-compact vector cells
+static hosting
         ↓
-GitHub Pages static storage
-        ↓
-Worker loads cells on demand
+Worker loads corridor cells on demand
 ```
 
-This could remove dependence on non-guaranteed hiking-vector identify behaviour
-while preserving frontend-only deployment. It would add data-preparation,
-versioning, storage, and update responsibilities and therefore requires a
-separate architectural decision.
+The geometry experiment contains 102 non-empty cells, 67,208 unique road
+features, and 4,813 directly classified hiking features. Its reproducible Python
+generator reads only the national GeoPackage; the separate hiking package is not
+required. It removes identify limits and road/hiking spatial matching while
+preserving runtime graph compilation for a clean source comparison.
+
+The second experiment stores the compiler output instead: original 3D node
+coordinates, local segment references, final costs, and hiking flags. The Worker
+still joins overlapping cells, derives global node identity, builds adjacency
+and snapping indexes, and runs A*, but no longer interprets swissTLM3D source
+attributes. A deterministic generator executes the same compiler source as live
+routing.
+
+After orphan-node removal, the current Geneva graph JSON remains larger than the
+geometry JSON: about 37.0 MB versus 34.2 MB in decimal units. Before extending
+either format nationally, validation must compare route output, cold remote
+transfer size, browser parse and graph-assembly time, memory, cache reuse, and
+hosting bandwidth. The current graph format trades some browser CPU for greater
+transfer volume, so coordinate quantization, binary arrays, or retaining geometry
+cells remain evidence-driven options rather than assumed requirements.
+
+Generated routing datasets are git-ignored. Vite serves them during development,
+but the production build disables normal public-directory copying and explicitly
+copies every ordinary public asset except `public/routing-data/`. This prevents a
+local experiment from entering a GitHub Pages artifact by accident.
 
 ### 18.3 National graph or backend
 

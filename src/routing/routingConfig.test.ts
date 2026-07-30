@@ -1,32 +1,44 @@
 /**
- * Business context: protects the local-only routing switch so a developer can
- * test roads-only behavior without accidentally changing production routing.
+ * Business context: protects development routing experiments so neither static
+ * Geneva data nor roads-only GeoAdmin testing can leak into a production build.
  */
 import { describe, expect, it } from 'vitest';
-import { shouldUseHikingEnrichment } from './routingConfig';
+import {
+  resolveRoutingDataSource,
+  shouldUseHikingEnrichment,
+} from './routingConfig';
+
+const LOCAL_CONFIG = {
+  dataSource: 'static-geneva' as const,
+  useHikingEnrichment: false,
+};
 
 describe('routing development configuration', () => {
-  it.each(['localhost', '127.0.0.1', '::1', '[::1]'])(
-    'uses the configured hiking-enrichment value on %s',
-    (hostname) => {
-      expect(
-        shouldUseHikingEnrichment(hostname, {
-          useHikingEnrichment: false,
-        }),
-      ).toBe(false);
-      expect(
-        shouldUseHikingEnrichment(hostname, {
-          useHikingEnrichment: true,
-        }),
-      ).toBe(true);
-    },
-  );
+  it('uses the configured source and hiking value in Vite development mode', () => {
+    expect(resolveRoutingDataSource(true, LOCAL_CONFIG)).toBe('static-geneva');
+    expect(shouldUseHikingEnrichment(true, LOCAL_CONFIG)).toBe(false);
+  });
 
-  it('always enables hiking enrichment outside local development', () => {
+  it('can select GeoAdmin explicitly during local comparison', () => {
     expect(
-      shouldUseHikingEnrichment('egofree71.github.io', {
-        useHikingEnrichment: false,
+      resolveRoutingDataSource(true, {
+        dataSource: 'geo-admin',
+        useHikingEnrichment: true,
       }),
-    ).toBe(true);
+    ).toBe('geo-admin');
+  });
+
+  it('can select the precomputed graph experiment locally', () => {
+    expect(
+      resolveRoutingDataSource(true, {
+        dataSource: 'precomputed-geneva',
+        useHikingEnrichment: true,
+      }),
+    ).toBe('precomputed-geneva');
+  });
+
+  it('always uses production-safe choices in a production bundle', () => {
+    expect(resolveRoutingDataSource(false, LOCAL_CONFIG)).toBe('geo-admin');
+    expect(shouldUseHikingEnrichment(false, LOCAL_CONFIG)).toBe(true);
   });
 });

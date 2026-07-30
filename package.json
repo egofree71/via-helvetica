@@ -11,7 +11,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "generate:precomputed-geneva": "node scripts/generate-precomputed-geneva-graph.mjs",
+    "generate:static-geneva": "python scripts/generate-geneva-routing-cells.py"
   },
   "dependencies": {
     "ol": "^10.9.0",
@@ -20,6 +22,7 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.0",
