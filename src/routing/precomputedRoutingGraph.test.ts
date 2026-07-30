@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   compilePrecomputedRoutingGraph,
+  MAX_ROUTING_COST_FACTOR,
   MIN_ROUTING_COST_FACTOR,
 } from './precomputedRoutingGraph';
 
@@ -131,6 +132,7 @@ describe('compilePrecomputedRoutingGraph', () => {
     const surfaces = [undefined, 100, 200];
     const importances = [undefined, 200, 300];
     let minimumFactor = Number.POSITIVE_INFINITY;
+    let maximumFactor = Number.NEGATIVE_INFINITY;
 
     for (const objectType of objectTypes) {
       for (const restriction of restrictions) {
@@ -155,7 +157,9 @@ describe('compilePrecomputedRoutingGraph', () => {
               });
               const segment = graph.segments[0];
               if (segment) {
-                minimumFactor = Math.min(minimumFactor, segment.cost / 100);
+                const factor = segment.cost / 100;
+                minimumFactor = Math.min(minimumFactor, factor);
+                maximumFactor = Math.max(maximumFactor, factor);
               }
             }
           }
@@ -164,5 +168,6 @@ describe('compilePrecomputedRoutingGraph', () => {
     }
 
     expect(minimumFactor).toBeGreaterThanOrEqual(MIN_ROUTING_COST_FACTOR);
+    expect(maximumFactor).toBeLessThanOrEqual(MAX_ROUTING_COST_FACTOR);
   });
 });

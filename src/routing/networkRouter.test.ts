@@ -58,6 +58,30 @@ describe('RoutingNetwork route result', () => {
     expect(network.stats.hikingSegments).toBe(1);
   });
 
+  it('uses geometry to break equidistant snapping ties deterministically', () => {
+    const lower = {
+      id: 'lower',
+      lines: [[[0, -1], [100, -1]]],
+      attributes: { objectType: 16 },
+    };
+    const upper = {
+      id: 'upper',
+      lines: [[[0, 1], [100, 1]]],
+      attributes: { objectType: 16 },
+    };
+    const first = RoutingNetwork.fromSwissTlm([-10, -10, 110, 10], {
+      roads: [upper, lower],
+      hikingTrails: [],
+    });
+    const second = RoutingNetwork.fromSwissTlm([-10, -10, 110, 10], {
+      roads: [lower, upper],
+      hikingTrails: [],
+    });
+
+    expect(first.snap([50, 0])?.slice(0, 2)).toEqual([50, -1]);
+    expect(second.snap([50, 0])?.slice(0, 2)).toEqual([50, -1]);
+  });
+
   it('returns the same route from live and offline-compiled graph data', () => {
     const data: SwissTlmNetworkData = {
       roads: [

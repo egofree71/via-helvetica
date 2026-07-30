@@ -107,13 +107,13 @@ request-correlation layer.
 
 `src/routing/dynamicRoutingEngine.ts` owns:
 
-- completed geometry-cell or precomputed-graph-cell cache;
+- completed geometry, JSON graph, or binary graph cell cache;
 - reusable in-flight cell requests;
 - exact-corridor graph LRU cache;
 - cell loading concurrency;
 - narrow and widened corridor attempts;
 - source-feature merging and compilation when geometry cells are used;
-- precomputed-fragment joining when graph cells are used;
+- JSON-fragment joining or typed-array CSR assembly when graph cells are used;
 - snapping and A* invocation;
 - the session-wide hiking-enrichment availability flag.
 
@@ -125,10 +125,13 @@ matching, and duplicate-segment resolution. Live GeoAdmin and static geometry
 routing call it inside the Worker; the offline generator transpiles and executes
 the same source file.
 
-`src/routing/networkRouter.ts` joins one or more compiled fragments, creates the
-adjacency lists and snapping index required by the exact requested corridor, and
-runs A*. This split keeps route search in the browser without recompiling source
-road attributes in the precomputed provider.
+`src/routing/networkRouter.ts` joins one or more compiled JSON fragments,
+creates object-based adjacency lists and the snapping index required by the exact
+requested corridor, and runs A*. `src/routing/binaryRoutingNetwork.ts` implements
+the same snapping and A* contract over global integer IDs, fixed-point
+coordinates, CSR adjacency, and typed arrays. This split keeps route search in
+the browser while allowing the binary experiment to remove string-key and
+per-node object reconstruction.
 
 ### 2.5 Route-edit integration
 
@@ -181,12 +184,15 @@ Regenerate both experimental stages from the repository root with:
 ```bash
 npm run generate:static-geneva -- "C:\data\SWISSTLM3D_2026_LV95_LN02.gpkg"
 npm run generate:precomputed-geneva
+npm run generate:precomputed-binary-geneva
 ```
 
 The first command replaces the geometry dataset atomically and writes the source
 filename, byte size, SHA-256 digest, layer, extraction extent, assignment policy,
 and parsing count into its manifest. The second command validates the geometry
-cells through the same pure module used by the Worker before compiling them.
+cells through the same pure module used by the Worker before compiling them. The
+third command converts those validated JSON graph cells into the versioned binary
+contract used by the typed-array experiment.
 
 #### 3.3.2 Precomputed graph cells
 
@@ -203,7 +209,36 @@ segment, creates adjacency lists and the snapping index, and runs A*. It no
 longer interprets swissTLM3D road attributes or performs walkability and hiking
 classification for this provider.
 
-Both manifests declare the same bounded test rectangle. An unlisted cell inside
+#### 3.3.3 Binary precomputed graph cells
+
+`public/routing-data/geneva-precomputed-binary/` contains the same logical cell
+overlap as the JSON graph reference, but replaces coordinate-derived string keys
+and nested JavaScript objects with a versioned `VHRG` binary contract. Every
+node and edge receives a deterministic global integer ID. A cell stores columnar
+arrays for node IDs, centimetre-quantized LV95 X/Y, decimetre-quantized Z,
+edge IDs, endpoint IDs, 0.0001-unit fixed-point costs, and a hiking bit. Format
+version 2 adds a CRC32 over the payload and declares the cost-model revision and
+coordinate-validation margin in the manifest.
+
+The overlap is retained deliberately: loading the same corridor produces the
+same node, segment, hiking, and source-feature counts as the JSON graph mode.
+Duplicate references are removed by integer edge ID inside the Worker, which is
+cheap and avoids changing corridor semantics at cell boundaries. Before caching,
+the parser verifies CRC32, global-ID uniqueness, coordinate and elevation bounds,
+endpoint membership, and plausible cost/length ratios. The assembled network
+stores nodes and edges in typed arrays, builds CSR adjacency, and keeps a compact
+250 m snapping index with a hard per-edge bucket limit. A* reuses generation-
+marked distance and predecessor arrays, and near-equal snapping candidates use a
+geometry-based deterministic tie-breaker across corridor widths.
+
+`scripts/generate-precomputed-binary-geneva-graph.mjs` also writes Brotli files.
+When the browser exposes native Brotli `DecompressionStream` support, the Worker
+requests the explicit `.bin.br` path and decompresses it before validation; other
+browsers fall back to the raw `.bin` path. A future static host must therefore
+serve `.bin.br` as the stored Brotli payload rather than transparently applying a
+second content encoding.
+
+All three manifests declare the same bounded test rectangle. An unlisted cell inside
 that rectangle is valid empty coverage. When a requested corridor overlaps the
 boundary, out-of-region halo cells are ignored while covered cells still build the
 network; a request whose complete footprint is outside the rectangle remains an
@@ -395,8 +430,9 @@ LOCAL_ROUTING_DEVELOPMENT_CONFIG.useHikingEnrichment
 ```
 
 `dataSource: 'static-geneva'` loads the generated geometry cells;
-`'precomputed-geneva'` loads graph cells; and `'geo-admin'` restores the
-production request strategy for comparison. With GeoAdmin selected, setting
+`'precomputed-geneva'` loads JSON graph cells;
+`'precomputed-binary-geneva'` loads typed-array graph cells; and `'geo-admin'`
+restores the production request strategy for comparison. With GeoAdmin selected, setting
 `useHikingEnrichment` to `false` starts the Worker in roads-only mode and emits
 the same normal notice when the first routing operation begins.
 
@@ -436,9 +472,10 @@ browser-independent safeguard, not a precise heap measurement.
 
 ### 8.2 In-flight cell sharing
 
-Concurrent consumers share a pending cell promise when its owning signal is
-still valid. A cancelled pending request is removed so a later operation can
-retry rather than inheriting an aborted promise.
+Concurrent consumers share a cell-owned pending request. Each route operation
+retains its own cancellation signal; cancelling one consumer no longer aborts a
+fetch still needed by another. The provider request is aborted only after every
+consumer has left, and a later operation can retry an aborted cell cleanly.
 
 ### 8.3 Graph LRU
 
@@ -676,8 +713,10 @@ Cancellation occurs when:
 - the application unmounts;
 - the routing facade is disposed.
 
-Completed cells remain useful when they finished before cancellation. A pending
-cell whose request was aborted is removed and can be requested again later.
+Completed cells remain useful when they finished before cancellation. Shared
+cell requests outlive an individual cancelled consumer while another operation
+still depends on them; an all-consumer cancellation removes the pending entry so
+the cell can be requested again later.
 
 Late Worker responses are correlated by request ID and ignored after the
 request has been cancelled or replaced.
@@ -817,14 +856,17 @@ Further work should focus on evidence:
 
 ### 18.2 Static preprocessed data
 
-The Geneva branch validates two stages of the same intermediate architecture:
+The Geneva branch validates three representations in the same intermediate
+architecture:
 
 ```text
 official GeoPackage
         ↓
 normalized geometry cells
         ↓ shared TypeScript graph compiler
-precomputed graph cells
+precomputed JSON graph cells
+        ↓ optional fixed-point/global-ID encoding
+precomputed binary graph cells
         ↓
 static hosting
         ↓
@@ -844,13 +886,24 @@ and snapping indexes, and runs A*, but no longer interprets swissTLM3D source
 attributes. A deterministic generator executes the same compiler source as live
 routing.
 
-After orphan-node removal, the current Geneva graph JSON remains larger than the
-geometry JSON: about 37.0 MB versus 34.2 MB in decimal units. Before extending
-either format nationally, validation must compare route output, cold remote
-transfer size, browser parse and graph-assembly time, memory, cache reuse, and
-hosting bandwidth. The current graph format trades some browser CPU for greater
-transfer volume, so coordinate quantization, binary arrays, or retaining geometry
-cells remain evidence-driven options rather than assumed requirements.
+The third experiment keeps that exact logical overlap while assigning global
+integer node and edge IDs and writing versioned, checksummed columnar binary
+arrays. For the 102 Geneva
+cells it contains 383,254 unique nodes and 398,015 unique edges, with 417,093
+node references and 430,223 edge references across overlapping cells. The files
+occupy about 13.35 MiB raw and 4.67 MiB in the generated Brotli form, compared
+with about 37 MB of JSON graph data. In a Node/V8 corridor harness, dense
+nine-cell assembly fell from roughly 300–500 ms for the JSON object graph to
+about 60–70 ms, while the retained-size estimate fell from roughly 85–92 MiB to
+about 5 MiB. These are architecture measurements rather than remote-browser
+latency results.
+
+Before extending any format nationally, validation must still compare cold
+remote transfer, browser decoding and assembly, snapping and A* time, real Worker
+memory, cache reuse, and hosting bandwidth. The fixed-width binary experiment now validates payload integrity and semantic
+bounds before graph assembly. It remains a deliberately testable intermediate
+format; delta/varint encoding, unique edge ownership, and hierarchical routing
+remain later options only if measurements justify their additional complexity.
 
 Generated routing datasets are git-ignored. Vite serves them during development,
 but the production build disables normal public-directory copying and explicitly

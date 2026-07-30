@@ -10,7 +10,8 @@
 export type RoutingDataSource =
   | 'geo-admin'
   | 'static-geneva'
-  | 'precomputed-geneva';
+  | 'precomputed-geneva'
+  | 'precomputed-binary-geneva';
 
 /** Development-only routing choices used while Vite serves source files. */
 export interface LocalRoutingDevelopmentConfig {
@@ -28,7 +29,7 @@ export interface LocalRoutingDevelopmentConfig {
  * Restart the Vite development server after changing either value.
  */
 export const LOCAL_ROUTING_DEVELOPMENT_CONFIG: LocalRoutingDevelopmentConfig = {
-  dataSource: 'precomputed-geneva',
+  dataSource: 'precomputed-binary-geneva',
   useHikingEnrichment: true,
 };
 

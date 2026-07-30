@@ -37,6 +37,15 @@ describe('routing development configuration', () => {
     ).toBe('precomputed-geneva');
   });
 
+  it('can select the binary precomputed graph experiment locally', () => {
+    expect(
+      resolveRoutingDataSource(true, {
+        dataSource: 'precomputed-binary-geneva',
+        useHikingEnrichment: true,
+      }),
+    ).toBe('precomputed-binary-geneva');
+  });
+
   it('always uses production-safe choices in a production bundle', () => {
     expect(resolveRoutingDataSource(false, LOCAL_CONFIG)).toBe('geo-admin');
     expect(shouldUseHikingEnrichment(false, LOCAL_CONFIG)).toBe(true);

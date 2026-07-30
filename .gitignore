@@ -32,3 +32,5 @@ Thumbs.db
 /public/routing-data/
 /.tmp-precomputed-routing-compiler/
 /via-helvetica-precomputed-current.zip
+/.tmp-precomputed-binary-routing-compiler/
+/via-helvetica-routing-current.zip

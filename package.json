@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "generate:precomputed-geneva": "node scripts/generate-precomputed-geneva-graph.mjs",
-    "generate:static-geneva": "python scripts/generate-geneva-routing-cells.py"
+    "generate:static-geneva": "python scripts/generate-geneva-routing-cells.py",
+    "generate:precomputed-binary-geneva": "node scripts/generate-precomputed-binary-geneva-graph.mjs"
   },
   "dependencies": {
     "ol": "^10.9.0",

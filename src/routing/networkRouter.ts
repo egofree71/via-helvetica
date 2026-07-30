@@ -14,18 +14,16 @@ import {
   type PrecomputedRoutingGraphData,
   type PrecomputedRoutingSegment,
 } from './precomputedRoutingGraph';
-import { MAX_SNAP_DISTANCE } from './routingConstants';
+import {
+  DUPLICATE_COORDINATE_DISTANCE_SQUARED,
+  MAX_SNAP_DISTANCE,
+  ROUTING_SPATIAL_GRID_SIZE_METRES,
+  shouldReplaceSnapCandidate,
+} from './routingConstants';
 import type { SwissTlmNetworkData } from './swissTlmApi';
 
 export { MAX_SNAP_DISTANCE } from './routingConstants';
 
-/**
- * Spatial-index bucket width in metres. It limits candidate scans without
- * creating too many buckets.
- */
-const SPATIAL_GRID_SIZE = 250;
-/** Squared distance in square metres below which consecutive route vertices are duplicates. */
-const DUPLICATE_COORDINATE_DISTANCE_SQUARED = 0.01;
 /**
  * Approximate retained bytes per graph node, including its coordinate, adjacency
  * array, map entries, and spatial-index references. The value is deliberately
@@ -126,6 +124,24 @@ export interface RoutingNetworkStats {
   hikingSegments: number;
 }
 
+
+/** Shared contract implemented by object-based and typed-array routing graphs. */
+export interface RoutableNetwork {
+  /** Diagnostics for the exact corridor graph. */
+  readonly stats: RoutingNetworkStats;
+  /** Conservative retained-size estimate used by the Worker cache. */
+  readonly estimatedMemoryBytes: number;
+  /** Returns whether the graph extent contains the coordinate. */
+  contains(coordinate: Coordinate): boolean;
+  /** Projects a coordinate onto the nearest walkable segment. */
+  snap(coordinate: Coordinate): Coordinate | null;
+  /** Calculates a least-cost route between two requested coordinates. */
+  route(
+    startCoordinate: Coordinate,
+    endCoordinate: Coordinate,
+  ): RoutedNetworkPath | null;
+}
+
 /**
  * Minimal binary min-heap used by A*.
  *
@@ -224,10 +240,10 @@ class SpatialGrid<T> {
     maxX: number,
     maxY: number,
   ): void {
-    const minColumn = Math.floor(minX / SPATIAL_GRID_SIZE);
-    const maxColumn = Math.floor(maxX / SPATIAL_GRID_SIZE);
-    const minRow = Math.floor(minY / SPATIAL_GRID_SIZE);
-    const maxRow = Math.floor(maxY / SPATIAL_GRID_SIZE);
+    const minColumn = Math.floor(minX / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const maxColumn = Math.floor(maxX / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const minRow = Math.floor(minY / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const maxRow = Math.floor(maxY / ROUTING_SPATIAL_GRID_SIZE_METRES);
 
     for (let column = minColumn; column <= maxColumn; column += 1) {
       for (let row = minRow; row <= maxRow; row += 1) {
@@ -251,10 +267,10 @@ class SpatialGrid<T> {
     maxY: number,
   ): Set<T> {
     const items = new Set<T>();
-    const minColumn = Math.floor(minX / SPATIAL_GRID_SIZE);
-    const maxColumn = Math.floor(maxX / SPATIAL_GRID_SIZE);
-    const minRow = Math.floor(minY / SPATIAL_GRID_SIZE);
-    const maxRow = Math.floor(maxY / SPATIAL_GRID_SIZE);
+    const minColumn = Math.floor(minX / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const maxColumn = Math.floor(maxX / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const minRow = Math.floor(minY / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const maxRow = Math.floor(maxY / ROUTING_SPATIAL_GRID_SIZE_METRES);
 
     for (let column = minColumn; column <= maxColumn; column += 1) {
       for (let row = minRow; row <= maxRow; row += 1) {
@@ -746,7 +762,17 @@ export class RoutingNetwork {
         segment.end,
       );
 
-      if (!closest || projection.distanceSquared < closest.distanceSquared) {
+      if (
+        !closest ||
+        shouldReplaceSnapCandidate(
+          projection.distanceSquared,
+          segment.start,
+          segment.end,
+          closest.distanceSquared,
+          closest.segment.start,
+          closest.segment.end,
+        )
+      ) {
         closest = {
           segment,
           coordinate: projection.coordinate,

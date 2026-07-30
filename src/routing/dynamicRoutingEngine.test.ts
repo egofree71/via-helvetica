@@ -10,6 +10,7 @@ const moduleMocks = vi.hoisted(() => ({
   fetchSwissTlmNetworkData: vi.fn(),
   fromSwissTlm: vi.fn(),
   fromPrecomputed: vi.fn(),
+  fromBinary: vi.fn(),
 }));
 
 vi.mock('./swissTlmApi', () => ({
@@ -41,8 +42,15 @@ vi.mock('./networkRouter', () => {
   return { NoWalkableNetworkError, RoutingNetwork };
 });
 
+vi.mock('./binaryRoutingNetwork', () => ({
+  BinaryRoutingNetwork: {
+    fromCells: (...args: unknown[]) => moduleMocks.fromBinary(...args),
+  },
+}));
+
 import type { Coordinate } from 'ol/coordinate.js';
 import { DynamicRoutingNetworkEngine } from './dynamicRoutingEngine';
+import { PRECOMPUTED_BINARY_HEADER_BYTES } from './precomputedBinaryRoutingFormat';
 import { RoutingAreaTooLargeError } from './dynamicRoutingProtocol';
 import { createCorridorCellKeys } from './routingGrid';
 import type { RoutedNetworkPath } from './networkRouter';
@@ -94,6 +102,8 @@ describe('DynamicRoutingNetworkEngine', () => {
     moduleMocks.fromSwissTlm.mockImplementation(() => createNetwork());
     moduleMocks.fromPrecomputed.mockReset();
     moduleMocks.fromPrecomputed.mockImplementation(() => createNetwork());
+    moduleMocks.fromBinary.mockReset();
+    moduleMocks.fromBinary.mockImplementation(() => createNetwork());
   });
 
   it('retries with the wider corridor and reuses cells loaded by the first attempt', async () => {
@@ -157,6 +167,42 @@ describe('DynamicRoutingNetworkEngine', () => {
     ]);
   });
 
+  it('keeps a shared cell request alive when only one consumer is cancelled', async () => {
+    let resolveFetch: ((data: SwissTlmNetworkData) => void) | undefined;
+    let providerSignal: AbortSignal | undefined;
+    moduleMocks.fetchSwissTlmNetworkData.mockImplementation(
+      (_extent: unknown, signal: AbortSignal) => {
+        providerSignal = signal;
+        return new Promise<SwissTlmNetworkData>((resolve, reject) => {
+          resolveFetch = resolve;
+          signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      },
+    );
+    const engine = new DynamicRoutingNetworkEngine();
+    const coordinate: Coordinate = [1_200, 1_200];
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+    const first = engine.snap(coordinate, firstController.signal);
+    const second = engine.snap(coordinate, secondController.signal);
+
+    await vi.waitFor(() => {
+      expect(moduleMocks.fetchSwissTlmNetworkData).toHaveBeenCalledTimes(1);
+    });
+
+    firstController.abort();
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' });
+    expect(providerSignal?.aborted).toBe(false);
+
+    resolveFetch?.(EMPTY_NETWORK_DATA);
+    await expect(second).resolves.toEqual(coordinate);
+    expect(moduleMocks.fetchSwissTlmNetworkData).toHaveBeenCalledTimes(1);
+  });
+
   it('uses an injected static cell loader instead of GeoAdmin', async () => {
     const cellDataLoader = vi.fn().mockResolvedValue(EMPTY_NETWORK_DATA);
     const engine = new DynamicRoutingNetworkEngine({ cellDataLoader });
@@ -200,12 +246,59 @@ describe('DynamicRoutingNetworkEngine', () => {
     expect(moduleMocks.fetchSwissTlmNetworkData).not.toHaveBeenCalled();
   });
 
+  it('uses binary precomputed cells through the typed-array network', async () => {
+    const graph = {
+      key: '0:0' as const,
+      nodeIds: new Uint32Array(),
+      nodeX: new Int32Array(),
+      nodeY: new Int32Array(),
+      nodeZ: new Int32Array(),
+      edgeIds: new Uint32Array(),
+      edgeStartNodeIds: new Uint32Array(),
+      edgeEndNodeIds: new Uint32Array(),
+      edgeCosts: new Uint32Array(),
+      edgeFlags: new Uint8Array(),
+      globalNodeCount: 1,
+      globalEdgeCount: 1,
+      sourceRoadFeatures: 0,
+      buffer: new ArrayBuffer(PRECOMPUTED_BINARY_HEADER_BYTES),
+    };
+    const precomputedBinaryCellLoader = vi.fn().mockResolvedValue(graph);
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader,
+    });
+    const coordinate: Coordinate = [1_200, 1_200];
+
+    await engine.snap(coordinate, new AbortController().signal);
+
+    expect(precomputedBinaryCellLoader).toHaveBeenCalledWith(
+      '0:0',
+      expect.any(AbortSignal),
+    );
+    expect(moduleMocks.fromBinary).toHaveBeenCalledWith(
+      expect.any(Array),
+      [graph],
+    );
+    expect(moduleMocks.fromPrecomputed).not.toHaveBeenCalled();
+    expect(moduleMocks.fromSwissTlm).not.toHaveBeenCalled();
+  });
+
   it('rejects simultaneous geometry and precomputed loaders', () => {
     expect(
       () =>
         new DynamicRoutingNetworkEngine({
           cellDataLoader: vi.fn(),
           precomputedCellLoader: vi.fn(),
+        }),
+    ).toThrow('mutually exclusive');
+  });
+
+  it('rejects simultaneous JSON and binary precomputed loaders', () => {
+    expect(
+      () =>
+        new DynamicRoutingNetworkEngine({
+          precomputedCellLoader: vi.fn(),
+          precomputedBinaryCellLoader: vi.fn(),
         }),
     ).toThrow('mutually exclusive');
   });

@@ -9,8 +9,11 @@ import type { Coordinate } from 'ol/coordinate.js';
 import {
   NoWalkableNetworkError,
   RoutingNetwork,
+  type RoutableNetwork,
   type RoutedNetworkPath,
 } from './networkRouter';
+import { BinaryRoutingNetwork } from './binaryRoutingNetwork';
+import type { PrecomputedBinaryRoutingCell } from './precomputedBinaryRoutingFormat';
 import type { PrecomputedRoutingGraphData } from './precomputedRoutingGraph';
 import {
   combinedExtent,
@@ -68,15 +71,26 @@ interface LoadedPrecomputedCell {
   graph: PrecomputedRoutingGraphData;
 }
 
+/** Completed typed-array graph cell retained for the page session. */
+interface LoadedBinaryPrecomputedCell {
+  /** Discriminator used before constructing the compact corridor network. */
+  kind: 'precomputed-binary';
+  /** Zero-copy typed views over one independently loadable binary cell. */
+  graph: PrecomputedBinaryRoutingCell;
+}
+
 /** Either provider representation accepted by the session cache. */
-type LoadedCell = LoadedGeometryCell | LoadedPrecomputedCell;
+type LoadedCell =
+  | LoadedGeometryCell
+  | LoadedPrecomputedCell
+  | LoadedBinaryPrecomputedCell;
 
 /** Cached graph built for one exact set of cell keys. */
 interface CachedNetwork {
   /** Sorted cell-key signature used for exact cache lookup. */
   key: string;
   /** Immutable graph built from those cells. */
-  network: RoutingNetwork;
+  network: RoutableNetwork;
   /** Conservative retained-size estimate used for byte-budget eviction. */
   estimatedBytes: number;
 }
@@ -103,8 +117,12 @@ interface LoadedCellResult {
 interface PendingCell {
   /** Promise resolving to the completed cell. */
   promise: Promise<LoadedCell>;
-  /** Signal that owns the request, used to reject reuse after cancellation. */
-  signal: AbortSignal;
+  /** Cell-owned controller, independent from any one route operation. */
+  controller: AbortController;
+  /** Number of callers still waiting for this shared request. */
+  consumers: number;
+  /** Whether the provider promise has completed. */
+  settled: boolean;
 }
 
 /** Session callbacks emitted by the worker-owned routing engine. */
@@ -134,6 +152,14 @@ export interface DynamicRoutingNetworkEngineOptions {
     key: CellKey,
     signal: AbortSignal,
   ) => Promise<PrecomputedRoutingGraphData>;
+  /**
+   * Optional loader for compact binary graph cells with global integer IDs.
+   * It is mutually exclusive with both geometry and JSON precomputed loaders.
+   */
+  precomputedBinaryCellLoader?: (
+    key: CellKey,
+    signal: AbortSignal,
+  ) => Promise<PrecomputedBinaryRoutingCell>;
 }
 
 /**
@@ -208,17 +234,28 @@ function estimatePrecomputedCellBytes(data: PrecomputedRoutingGraphData): number
   return data.nodes.length * 112 + data.segments.length * 144;
 }
 
-/** Returns the conservative cache weight for either provider representation. */
+/** Returns the exact ArrayBuffer size retained by one binary graph cell. */
+function estimateBinaryPrecomputedCellBytes(
+  data: PrecomputedBinaryRoutingCell,
+): number {
+  return data.buffer.byteLength;
+}
+
+/** Returns the conservative cache weight for any provider representation. */
 function estimateLoadedCellBytes(cell: LoadedCell): number {
-  return cell.kind === 'geometry'
-    ? estimateGeometryCellBytes(cell.data)
-    : estimatePrecomputedCellBytes(cell.graph);
+  if (cell.kind === 'geometry') {
+    return estimateGeometryCellBytes(cell.data);
+  }
+
+  return cell.kind === 'precomputed'
+    ? estimatePrecomputedCellBytes(cell.graph)
+    : estimateBinaryPrecomputedCellBytes(cell.graph);
 }
 
 /**
  * Session-scoped dynamic loader for swissTLM3D routing graphs.
  *
- * Completed cells remain cached for the page lifetime. Each route segment first
+ * Completed cells are retained by a byte-bounded LRU. Each route segment first
  * uses a narrow corridor and retries once with a wider corridor when the graph
  * is disconnected. Combined graphs are cached by their exact cell set.
  */
@@ -249,9 +286,15 @@ export class DynamicRoutingNetworkEngine {
   private conflictingProviderIdReported = false;
 
   constructor(options: DynamicRoutingNetworkEngineOptions = {}) {
-    if (options.cellDataLoader && options.precomputedCellLoader) {
+    const configuredLoaders = [
+      options.cellDataLoader,
+      options.precomputedCellLoader,
+      options.precomputedBinaryCellLoader,
+    ].filter(Boolean).length;
+
+    if (configuredLoaders > 1) {
       throw new Error(
-        'Geometry and precomputed routing cell loaders are mutually exclusive.',
+        'Geometry, JSON precomputed, and binary precomputed cell loaders are mutually exclusive.',
       );
     }
 
@@ -444,7 +487,7 @@ export class DynamicRoutingNetworkEngine {
   private async getNetwork(
     cellKeys: Set<CellKey>,
     signal: AbortSignal,
-  ): Promise<RoutingNetwork> {
+  ): Promise<RoutableNetwork> {
     if (cellKeys.size > MAX_CELLS_PER_OPERATION) {
       throw new RoutingAreaTooLargeError();
     }
@@ -499,9 +542,21 @@ export class DynamicRoutingNetworkEngine {
 
     const coveredCellKeys = new Set(coveredResults.map((result) => result.key));
     const cells = coveredResults.map((result) => result.cell);
-    let network: RoutingNetwork;
+    let network: RoutableNetwork;
 
-    if (this.options.precomputedCellLoader) {
+    if (this.options.precomputedBinaryCellLoader) {
+      const binaryCells = cells.map((cell) => {
+        if (cell.kind !== 'precomputed-binary') {
+          throw new Error('Routing cell provider returned mixed representations.');
+        }
+
+        return cell.graph;
+      });
+      network = BinaryRoutingNetwork.fromCells(
+        combinedExtent(coveredCellKeys),
+        binaryCells,
+      );
+    } else if (this.options.precomputedCellLoader) {
       const fragments = cells.map((cell) => {
         if (cell.kind !== 'precomputed') {
           throw new Error('Routing cell provider returned mixed representations.');
@@ -558,18 +613,91 @@ export class DynamicRoutingNetworkEngine {
     return network;
   }
 
+  /** Returns a consistent AbortError for one cancelled consumer. */
+  private abortReason(signal: AbortSignal): unknown {
+    return signal.reason ?? new DOMException('Aborted', 'AbortError');
+  }
+
   /**
-   * Returns a completed cell or shares an active request for the same key.
-   * Aborted requests are removed so a later route operation can retry cleanly.
+   * Attaches one caller to a cell-owned request without allowing that caller to
+   * cancel work still required by another route operation.
+   */
+  private consumePendingCell(
+    pending: PendingCell,
+    signal: AbortSignal,
+  ): Promise<LoadedCell> {
+    if (signal.aborted) {
+      return Promise.reject(this.abortReason(signal));
+    }
+
+    pending.consumers += 1;
+
+    return new Promise<LoadedCell>((resolve, reject) => {
+      let active = true;
+
+      const release = (): void => {
+        pending.consumers -= 1;
+        if (
+          pending.consumers === 0 &&
+          !pending.settled &&
+          !pending.controller.signal.aborted
+        ) {
+          pending.controller.abort();
+        }
+      };
+      const cleanup = (): void => {
+        signal.removeEventListener('abort', onAbort);
+      };
+      const onAbort = (): void => {
+        if (!active) {
+          return;
+        }
+        active = false;
+        cleanup();
+        release();
+        reject(this.abortReason(signal));
+      };
+
+      signal.addEventListener('abort', onAbort, { once: true });
+      pending.promise.then(
+        (cell) => {
+          if (!active) {
+            return;
+          }
+          active = false;
+          cleanup();
+          release();
+          resolve(cell);
+        },
+        (error) => {
+          if (!active) {
+            return;
+          }
+          active = false;
+          cleanup();
+          release();
+          reject(error);
+        },
+      );
+    });
+  }
+
+  /**
+   * Returns a completed cell or shares a cell-owned active request for the same
+   * key. The provider request is cancelled only after every consumer leaves.
    * @param key - Stable routing-cell identifier.
-   * @param signal - Abort signal that owns a newly created provider request.
-   * @returns Completed cell or the shared in-flight promise.
+   * @param signal - Abort signal owned by this consumer only.
+   * @returns Completed cell or the shared in-flight result.
    * @throws {Error} Propagates provider request and parsing failures.
    */
   private loadCell(
     key: CellKey,
     signal: AbortSignal,
   ): Promise<LoadedCell> {
+    if (signal.aborted) {
+      return Promise.reject(this.abortReason(signal));
+    }
+
     const loadedEntry = this.loadedCells.get(key);
 
     if (loadedEntry) {
@@ -580,31 +708,43 @@ export class DynamicRoutingNetworkEngine {
       return Promise.resolve(loadedEntry.cell);
     }
 
-    // Sharing a live promise prevents duplicate API traffic when neighbouring graph builds overlap.
-    const pendingCell = this.pendingCells.get(key);
+    const existingPending = this.pendingCells.get(key);
 
-    if (pendingCell && !pendingCell.signal.aborted) {
-      return pendingCell.promise;
+    if (existingPending && !existingPending.controller.signal.aborted) {
+      return this.consumePendingCell(existingPending, signal);
     }
 
-    if (pendingCell) {
+    if (existingPending) {
       this.pendingCells.delete(key);
     }
 
     const extent = extentForCellKey(key);
-    let promise: Promise<LoadedCell>;
-
-    const cellPromise: Promise<LoadedCell> = this.options.precomputedCellLoader
+    const controller = new AbortController();
+    const pending: PendingCell = {
+      promise: Promise.resolve(undefined as never),
+      controller,
+      consumers: 0,
+      settled: false,
+    };
+    const cellPromise: Promise<LoadedCell> = this.options
+      .precomputedBinaryCellLoader
       ? this.options
-          .precomputedCellLoader(key, signal)
-          .then((graph): LoadedPrecomputedCell => ({
-            kind: 'precomputed',
+          .precomputedBinaryCellLoader(key, controller.signal)
+          .then((graph): LoadedBinaryPrecomputedCell => ({
+            kind: 'precomputed-binary',
             graph,
           }))
-      : (
+      : this.options.precomputedCellLoader
+        ? this.options
+            .precomputedCellLoader(key, controller.signal)
+            .then((graph): LoadedPrecomputedCell => ({
+              kind: 'precomputed',
+              graph,
+            }))
+        : (
           this.options.cellDataLoader
-            ? this.options.cellDataLoader(key, signal)
-            : fetchSwissTlmNetworkData(extent, signal, {
+            ? this.options.cellDataLoader(key, controller.signal)
+            : fetchSwissTlmNetworkData(extent, controller.signal, {
                 allowEmpty: true,
                 shouldRequestHikingEnrichment: () =>
                   this.hikingEnrichmentEnabled,
@@ -618,7 +758,7 @@ export class DynamicRoutingNetworkEngine {
           data,
         }));
 
-    promise = cellPromise
+    pending.promise = cellPromise
       .then((cell): LoadedCell => {
         const estimatedBytes = estimateLoadedCellBytes(cell);
         const previous = this.loadedCells.get(key);
@@ -653,13 +793,13 @@ export class DynamicRoutingNetworkEngine {
         return cell;
       })
       .finally(() => {
-        // Only the promise currently registered for this key may clear the pending entry.
-        if (this.pendingCells.get(key)?.promise === promise) {
+        pending.settled = true;
+        if (this.pendingCells.get(key) === pending) {
           this.pendingCells.delete(key);
         }
       });
 
-    this.pendingCells.set(key, { promise, signal });
-    return promise;
+    this.pendingCells.set(key, pending);
+    return this.consumePendingCell(pending, signal);
   }
 }

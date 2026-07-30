@@ -675,16 +675,20 @@ hiking geometry is optional enrichment used to prefer matching edges. If the
 provider rejects the combined request, the Worker switches to roads-only loading
 for the remaining session and emits one non-blocking notice.
 
-For development comparison, the Worker boundary also accepts two static
-providers for a bounded Geneva test region. Geometry cells are reproducibly
+For development comparison, the Worker boundary also accepts three static
+representations for a bounded Geneva test region. Geometry cells are reproducibly
 extracted from the official 2026 swissTLM3D GeoPackage by a versioned Python
 script and carry normalized road attributes plus a direct hiking flag. A second
-provider carries nodes and final-cost walkable segments produced offline by the
-same pure TypeScript compiler and geometry-cell validator used at runtime. Both
-use the production 2.4 km grid, corridor policy, snapping, and A*. The graph
-provider still builds corridor-specific adjacency and snapping indexes but skips
-source-feature merging, walkability classification, cost calculation, and
-node/segment compilation.
+provider carries nodes and final-cost walkable segments produced
+offline by the same pure TypeScript compiler and geometry-cell validator used at
+runtime. A third representation assigns deterministic global integer node and
+edge IDs and stores fixed-point columns in versioned binary cells protected by
+CRC32 and semantic coordinate/cost validation. All use the production
+2.4 km grid, corridor policy, snapping, and A*. The JSON graph provider still
+builds object adjacency and snapping indexes; the binary provider assembles CSR
+adjacency and typed-array indexes while preserving the reference cell overlap.
+It reuses generation-marked A* work arrays, applies deterministic snapping ties,
+and uses explicit Brotli cells when native browser decompression is available.
 
 `routingConfig.ts` activates experiments only in Vite development mode, so LAN
 addresses remain testable while a production bundle always selects GeoAdmin.
@@ -701,8 +705,10 @@ validation work, see [ROUTING.md](ROUTING.md).
 
 Network loading, optional source-geometry compilation, corridor graph joining,
 snapping, and A* stay outside the React/OpenLayers thread. The map remains
-interactive while routing work runs. Precomputed graph cells remove the optional
-compilation stage but preserve the Worker boundary for indexing and search.
+interactive while routing work runs. JSON precomputed cells remove source
+compilation; binary precomputed cells additionally replace string-key and
+per-node object assembly with global integer IDs, typed arrays, and CSR, while
+preserving the Worker boundary for indexing and search.
 
 ### 8.2 Bounded work
 
@@ -716,20 +722,21 @@ Provider activity is constrained by:
 - recursive subdivision only when provider result limits require it;
 - one wider-corridor retry rather than unbounded expansion.
 
-The two static Geneva experiments follow the same corridor and cell-count
+The three static Geneva representations follow the same corridor and cell-count
 bounds, but replace recursive identify requests with one file request per
 non-empty cell. Empty cells are resolved from the manifest without a request.
 Out-of-region halo cells are ignored when a corridor still contains covered
 cells; a completely out-of-region footprint remains an explicit coverage error.
-The precomputed variant also avoids runtime interpretation of source road
-attributes.
+Both precomputed variants avoid runtime interpretation of source road
+attributes; the binary variant also performs numeric rather than string-based
+cross-cell joining.
 
 ### 8.3 Session caches
 
 The routing Worker keeps:
 
 - a least-recently-used raw-cell cache with an approximate 64 MiB byte budget;
-- reusable in-flight cell requests;
+- reusable cell-owned in-flight requests with independent consumer cancellation;
 - at most two exact-corridor graphs, additionally bounded by an approximate
   128 MiB retained-size budget.
 
@@ -886,9 +893,9 @@ appearance. They cover:
 - one global elevation-profile sampling budget across independent segments;
 - the 15 km network-section boundary and pre-Worker rejection across route edits;
 - routing-grid footprints;
-- static Geneva geometry and precomputed-graph manifests, bounded coverage,
-  compact parsing, direct hiking classification, shared-compiler equivalence,
-  and global node/segment joining;
+- static Geneva geometry, JSON graph, and binary graph manifests, bounded
+  coverage, compact and strict parsing, direct hiking classification,
+  shared-compiler equivalence, numeric global-ID joining, and typed-array A*;
 - Worker request correlation, typed errors, cancellation, and disposal;
 - dynamic routing engine caching, retry, fallback, and provider errors.
 

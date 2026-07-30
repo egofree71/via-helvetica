@@ -11,6 +11,9 @@ import {
   shouldUseHikingEnrichment,
 } from './routingConfig';
 import { fetchPrecomputedGenevaRoutingCell } from './precomputedRoutingData';
+import {
+  fetchPrecomputedBinaryGenevaRoutingCell,
+} from './precomputedBinaryRoutingData';
 import { fetchStaticGenevaRoutingCell } from './staticRoutingData';
 import type {
   RoutingWorkerRequest,
@@ -48,12 +51,20 @@ const engine = new DynamicRoutingNetworkEngine({
     routingDataSource === 'precomputed-geneva'
       ? fetchPrecomputedGenevaRoutingCell
       : undefined,
+  precomputedBinaryCellLoader:
+    routingDataSource === 'precomputed-binary-geneva'
+      ? fetchPrecomputedBinaryGenevaRoutingCell
+      : undefined,
 });
 
 if (routingDataSource === 'static-geneva') {
   console.info('[Via Helvetica] Routing with static Geneva geometry cells.');
 } else if (routingDataSource === 'precomputed-geneva') {
   console.info('[Via Helvetica] Routing with precomputed Geneva graph cells.');
+} else if (routingDataSource === 'precomputed-binary-geneva') {
+  console.info(
+    '[Via Helvetica] Routing with precomputed binary Geneva graph cells.',
+  );
 }
 
 /** Converts unknown failures into structured-clone-safe error data. */

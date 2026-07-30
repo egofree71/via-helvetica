@@ -94,6 +94,12 @@ const HIKING_MATCH_DISTANCE_METRES = 8;
  */
 export const MIN_ROUTING_COST_FACTOR = 0.45;
 /**
+ * Defensive upper bound for every finite routing factor emitted by the current
+ * pedestrian cost model. Binary-cell validation uses this value to reject
+ * corrupted or stale costs before they enter A*.
+ */
+export const MAX_ROUTING_COST_FACTOR = 4.5;
+/**
  * Spatial-index bucket width in metres. Larger buckets reduce index overhead
  * but increase exact candidate comparisons during hiking matching.
  */
