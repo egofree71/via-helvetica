@@ -15,13 +15,14 @@ The required graph comes from the official
 the cost of matching graph edges. If that optional layer cannot be obtained, the
 Worker continues in roads-only mode and reports one non-blocking session notice.
 
-Two development-only Geneva providers can instead load 2.4 km static files
-generated from the official 2026 swissTLM3D GeoPackage. The first carries
-normalized road geometry and a direct hiking designation. The second uses the
-same pure TypeScript compiler as live routing to store globally mergeable nodes
-and final-cost walkable segments before the browser receives them. Production
-bundles remain forced to the GeoAdmin provider and exclude generated datasets
-from the deployment artifact.
+A bounded Geneva provider can instead load versioned 2.4 km binary graph
+cells generated from the official 2026 swissTLM3D GeoPackage. Local development
+uses git-ignored files by default; setting `VITE_ROUTING_DATA_BASE_URL` activates
+a remote root in either development or production. The Worker retries one binary
+provider failure, then switches the complete session to an independent GeoAdmin
+engine. Binary and GeoAdmin cells are never mixed in one graph. Production
+without the explicit environment variable remains on GeoAdmin, and generated
+local datasets stay excluded from the deployment artifact.
 
 This subsystem is intentionally bounded and experimental. It does not download
 a national dataset, does not operate a backend, and has not yet been validated
@@ -67,7 +68,8 @@ The current implementation does not provide:
 flowchart LR
     Editor[useEditableRoute and routeEditing] --> Facade[DynamicRoutingNetworkLoader]
     Facade <--> Worker[dynamicRoutingWorker]
-    Worker --> Engine[DynamicRoutingNetworkEngine]
+    Worker --> Session[DynamicRoutingProviderSession]
+    Session --> Engine[DynamicRoutingNetworkEngine]
     Engine --> Grid[routingGrid]
     Engine --> Provider[GeoAdmin or binary graph cells]
     Engine --> Router[RoutingNetwork]
@@ -94,10 +96,13 @@ It owns no routing cells, graph, or OpenLayers state.
 
 ### 2.2 Worker entry
 
-`src/routing/dynamicRoutingWorker.ts` owns one session-scoped
-`DynamicRoutingNetworkEngine`. It maps protocol operations to engine methods,
-creates a per-request abort controller, serializes errors, and posts independent
-session notices.
+`src/routing/dynamicRoutingWorker.ts` owns a
+`DynamicRoutingProviderSession` containing independent binary and GeoAdmin
+`DynamicRoutingNetworkEngine` instances when remote or local binary data is
+enabled. It maps protocol operations to the active provider, creates a
+per-request abort controller, serializes errors, and posts independent session
+notices. A permanent provider transition disposes binary requests and caches
+before repeating the complete operation on GeoAdmin.
 
 Synchronous graph construction may finish after a late cancellation, but it no
 longer blocks the map thread and its obsolete response is ignored by the
@@ -222,12 +227,13 @@ browsers fall back to the raw `.bin` path. A future static host must therefore
 serve `.bin.br` as the stored Brotli payload rather than transparently applying a
 second content encoding.
 
-Both manifests declare the same bounded test rectangle. An unlisted cell inside
-that rectangle is valid empty coverage. When a requested corridor overlaps the
+The manifest declares the bounded test rectangle. An unlisted cell inside that
+rectangle is valid empty coverage. When a requested corridor overlaps the
 boundary, out-of-region halo cells are ignored while covered cells still build the
-network; a request whose complete footprint is outside the rectangle remains an
-explicit coverage error. Preprocessed binary data is never mixed with GeoAdmin, so comparisons remain
-attributable to the selected provider.
+network. A request whose complete footprint is outside the rectangle triggers the
+same session-level GeoAdmin fallback as an unavailable, missing, or invalid binary
+response. The binary loader retries once before that transition. The fallback
+engine owns separate cells and graphs, so no operation combines representations.
 
 ### 3.4 Informational overlays are separate
 
@@ -404,25 +410,72 @@ The Worker emits one structured session notice. The main-thread facade retains
 it and replays it to a later subscriber when necessary, which protects the
 notice across React Strict Mode development setup/cleanup cycles.
 
-### 6.3 Local manual test switch
+### 6.3 Provider selection and remote-data testing
 
-`src/routing/routingConfig.ts` exposes two development-only choices:
+`src/routing/routingConfig.ts` resolves provider choice in this order:
 
-```ts
-LOCAL_ROUTING_DEVELOPMENT_CONFIG.dataSource
-LOCAL_ROUTING_DEVELOPMENT_CONFIG.useHikingEnrichment
+1. a non-empty `VITE_ROUTING_DATA_BASE_URL` activates the remote Geneva binary
+   provider in development or production;
+2. without that variable, Vite development uses
+   `LOCAL_ROUTING_DEVELOPMENT_CONFIG` for local binary/GeoAdmin comparison;
+3. production without an explicit remote URL uses GeoAdmin.
+
+The URL must point to the versioned directory containing `manifest.json`, for
+example:
+
+```text
+https://pub-example.r2.dev/swisstlm3d-2026/format-v2/geneva
 ```
 
-`dataSource: 'precomputed-binary-geneva'` loads typed-array graph cells, while
-`'geo-admin'` restores the production request strategy for comparison. With
-GeoAdmin selected, setting
-`useHikingEnrichment` to `false` starts the Worker in roads-only mode and emits
-the same normal notice when the first routing operation begins.
+Copy `.env.example` to the git-ignored `.env.local` for a local remote-data test.
+The GitHub Pages workflow also forwards the optional repository variable named
+`VITE_ROUTING_DATA_BASE_URL` into the Vite build. The binary loader normalizes
+the root, accepts only root-relative or HTTP(S) URLs without credentials, query,
+or fragment, and resolves all cell paths from validated relative manifest
+templates.
 
-The choices activate only in a Vite development bundle
-(`import.meta.env.DEV`), including when the page is opened through a LAN address.
-Production bundles always resolve to `dataSource: 'geo-admin'` with hiking
-enrichment enabled. These switches do not affect the rendered hiking map overlay.
+With local GeoAdmin selected, setting `useHikingEnrichment` to `false` starts the
+Worker in roads-only mode and emits the normal notice when the first routing
+operation begins. This setting does not affect the rendered hiking map overlay.
+
+### 6.4 Session-level binary fallback
+
+A remote manifest or cell is attempted twice, with a short cancellable delay.
+Coverage errors, persistent network responses, Brotli failures, CRC or semantic
+validation failures then activate a one-way Worker-session transition:
+
+1. abandon and dispose the binary engine;
+2. emit `precomputed-routing-unavailable` once;
+3. repeat the complete snap or route operation with a separate GeoAdmin engine;
+4. keep all later operations on GeoAdmin.
+
+Caller cancellation and `RoutingAreaTooLargeError` do not change providers. If a
+concurrent binary operation finishes after another request has switched the
+session, its result is discarded and the operation is repeated on GeoAdmin.
+
+### 6.5 Remote dataset publication
+
+The Geneva validation dataset is public static data, not an authenticated API.
+Its versioned root contains `manifest.json`, raw `.bin` cells, and explicit
+`.bin.br` payloads. The application receives only that public root through
+`VITE_ROUTING_DATA_BASE_URL`; no bucket credential or write token is exposed to
+the browser or stored in the repository.
+
+Publish one immutable dataset version in this order:
+
+1. upload every `.bin` and `.bin.br` cell below the versioned `cells/` prefix;
+2. verify object counts and representative downloads;
+3. upload `manifest.json` last;
+4. never replace objects under an already published versioned root;
+5. use a new root when the source dataset, format, or cost model changes.
+
+The object store must allow cross-origin `GET` requests from the application.
+During the bounded Geneva experiment, the R2 development URL may use a public
+read-only CORS policy. A production publication should use a stable custom
+domain and an explicit cache policy for immutable versioned cells. The Worker
+still validates every payload by CRC32 and semantic checks, so CDN or browser
+cache corruption activates the normal session-level GeoAdmin fallback rather
+than entering the routing graph.
 
 ## 7. Worker protocol and lifecycle
 
@@ -712,6 +765,7 @@ request has been cancelled or replaced.
 | `null` from local snap | Empty graph or no nearby segment | Place first waypoint freely |
 | `null` after both corridors | Normal missing coverage or connectivity | Store that section as straight |
 | Hiking enrichment unavailable | Optional provider capability rejected | Continue roads-only and show one notice |
+| Precomputed routing unavailable | Remote/local binary coverage or provider failed after retry | Dispose binary state, repeat the complete operation on GeoAdmin, and show one notice |
 | `RoutingAreaTooLargeError` | Cell safety limit exceeded | Preserve route and ask for intermediate waypoints |
 | Required-road truncation | Provider cap remains after maximum subdivision | Preserve route and report error |
 | Timeout or transient failure after retry | Provider unavailable | Preserve route and report error |

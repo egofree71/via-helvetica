@@ -80,8 +80,11 @@ npm run generate:geneva-geometry-cells -- "C:\data\SWISSTLM3D_2026_LV95_LN02.gpk
 npm run generate:precomputed-binary-geneva
 ```
 
-Detailed format, validation, and deployment notes are kept in
-[Browser routing](docs/ROUTING.md).
+To test a versioned remote dataset, copy `.env.example` to `.env.local`, set
+`VITE_ROUTING_DATA_BASE_URL` to the directory containing `manifest.json`, and
+restart Vite. A production build uses GeoAdmin unless that variable is supplied
+explicitly. Detailed format, fallback, validation, and deployment notes are kept
+in [Browser routing](docs/ROUTING.md).
 
 ## Basic usage
 

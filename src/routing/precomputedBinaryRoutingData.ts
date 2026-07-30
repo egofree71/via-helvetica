@@ -30,10 +30,11 @@ import {
 } from './precomputedRoutingGraph';
 import { extentForCellKey, type CellKey } from './routingGrid';
 import { RoutingCoverageError } from './routingCoverage';
+import {
+  LOCAL_PRECOMPUTED_BINARY_ROUTING_BASE_URL,
+  normalizeRoutingDataBaseUrl,
+} from './routingConfig';
 
-/** Root URL copied unchanged by Vite from the development public directory. */
-const PRECOMPUTED_BINARY_ROUTING_ROOT =
-  '/routing-data/geneva-precomputed-binary';
 /** Exact grid size shared by corridor selection and all Geneva experiments. */
 const EXPECTED_CELL_SIZE_METRES = 2_400;
 /** Cost-model revision embedded in every compatible manifest. */
@@ -46,38 +47,68 @@ const EXPECTED_COST_MODEL_VERSION = 1;
 const COST_FACTOR_VALIDATION_MIN_LENGTH_METRES = 1;
 /** Maximum plausible cost for a sub-metre source edge. */
 const MAX_SHORT_EDGE_COST = 5;
+/** One retry absorbs a transient network, cache, or partial-response failure. */
+const BINARY_PROVIDER_MAX_ATTEMPTS = 2;
+/** Small retry delay in milliseconds; long backoff would make GeoAdmin fallback feel broken. */
+const BINARY_PROVIDER_RETRY_DELAY_MILLISECONDS = 150;
 
 /** Validated manifest describing the bounded binary-data experiment. */
 interface PrecomputedBinaryRoutingManifest {
+  /** Binary contract version accepted by the current Worker. */
   version: number;
+  /** Coordinate reference system shared by the map and routing graph. */
   projection: string;
+  /** Width and height in metres of one routing-grid cell. */
   cellSizeMetres: number;
+  /** Complete LV95 extraction rectangle covered by the manifest. */
   extent: [number, number, number, number];
+  /** In-region cells that contain at least one graph edge. */
   nonEmptyCellKeys: Set<CellKey>;
+  /** Dataset-wide upper bound used to validate global node IDs. */
   globalNodeCount: number;
+  /** Dataset-wide upper bound used to validate global edge IDs. */
   globalEdgeCount: number;
+  /** Validated relative path template for raw binary cells. */
   cellPathTemplate: string;
+  /** Optional validated relative path template for explicit Brotli payloads. */
   precompressedCellPathTemplate: string | null;
 }
 
 /** Untrusted JSON representation of the binary graph manifest. */
 interface PrecomputedBinaryRoutingManifestPayload {
+  /** Untrusted binary contract version. */
   version?: unknown;
+  /** Untrusted format discriminator. */
   format?: unknown;
+  /** Untrusted coordinate reference system name. */
   projection?: unknown;
+  /** Untrusted routing-grid cell size in metres. */
   cellSizeMetres?: unknown;
+  /** Untrusted generated LV95 extent. */
   extent?: unknown;
+  /** Untrusted list of non-empty routing-grid keys. */
   nonEmptyCellKeys?: unknown;
+  /** Untrusted fixed header size in bytes. */
   headerBytes?: unknown;
+  /** Untrusted XY fixed-point units per metre. */
   coordinateScalePerMetre?: unknown;
+  /** Untrusted elevation fixed-point units per metre. */
   elevationScalePerMetre?: unknown;
+  /** Untrusted edge-cost fixed-point units per cost unit. */
   costScalePerUnit?: unknown;
+  /** Untrusted dataset-wide node count. */
   globalNodeCount?: unknown;
+  /** Untrusted dataset-wide edge count. */
   globalEdgeCount?: unknown;
+  /** Untrusted relative raw-cell path template. */
   cellPathTemplate?: unknown;
+  /** Untrusted relative precompressed-cell path template. */
   precompressedCellPathTemplate?: unknown;
+  /** Untrusted payload-integrity algorithm name. */
   payloadChecksum?: unknown;
+  /** Untrusted coordinate-validation margin in metres. */
   coordinateValidationMarginMetres?: unknown;
+  /** Untrusted pedestrian cost-model revision. */
   costModelVersion?: unknown;
 }
 
@@ -97,8 +128,25 @@ export class PrecomputedBinaryRoutingCoverageError extends RoutingCoverageError 
   }
 }
 
-let manifestPromise: Promise<PrecomputedBinaryRoutingManifest> | null = null;
-let brotliDecompressionSupported: boolean | null = null;
+/** Mutable state isolated per local or remote binary-data root. */
+interface PrecomputedBinaryRoutingProviderState {
+  /** Shared manifest request for this provider instance. */
+  manifestPromise: Promise<PrecomputedBinaryRoutingManifest> | null;
+  /** Cached native Brotli capability for this Worker runtime. */
+  brotliDecompressionSupported: boolean | null;
+}
+
+/**
+ * Loads and validates one compact graph cell for the session routing engine.
+ * @param key - Routing-grid key requested by the corridor builder.
+ * @param signal - Caller cancellation propagated to manifest and cell requests.
+ * @returns A validated cell backed by its downloaded binary buffer.
+ * @throws {Error} For provider, compatibility, integrity, or coverage failures.
+ */
+export type PrecomputedBinaryRoutingCellLoader = (
+  key: CellKey,
+  signal: AbortSignal,
+) => Promise<PrecomputedBinaryRoutingCell>;
 
 /** Validates a finite four-number extent. */
 function readExtent(value: unknown): [number, number, number, number] | null {
@@ -141,13 +189,22 @@ function cellPath(template: string, key: CellKey): string {
     .replace('{row}', row);
 }
 
-/** Loads and validates the manifest shared by all binary cells. */
-async function loadManifest(): Promise<PrecomputedBinaryRoutingManifest> {
-  if (manifestPromise) {
-    return manifestPromise;
+/**
+ * Loads and validates the manifest shared by one binary provider instance.
+ * @param baseUrl - Normalized dataset root containing `manifest.json`.
+ * @param state - Provider-local cache for the single in-flight manifest request.
+ * @returns The validated dataset contract used by subsequent cell requests.
+ * @throws {Error} When delivery fails or any contract field is incompatible.
+ */
+async function loadManifest(
+  baseUrl: string,
+  state: PrecomputedBinaryRoutingProviderState,
+): Promise<PrecomputedBinaryRoutingManifest> {
+  if (state.manifestPromise) {
+    return state.manifestPromise;
   }
 
-  manifestPromise = fetch(`${PRECOMPUTED_BINARY_ROUTING_ROOT}/manifest.json`)
+  state.manifestPromise = fetch(`${baseUrl}/manifest.json`)
     .then(async (response) => {
       if (!response.ok) {
         throw new Error(
@@ -222,14 +279,20 @@ async function loadManifest(): Promise<PrecomputedBinaryRoutingManifest> {
       };
     })
     .catch((error) => {
-      manifestPromise = null;
+      state.manifestPromise = null;
       throw error;
     });
 
-  return manifestPromise;
+  return state.manifestPromise;
 }
 
-/** Returns whether a complete routing cell lies inside the generated region. */
+/**
+ * Checks complete-cell coverage rather than point overlap so a boundary halo
+ * cannot silently claim data that was never generated.
+ * @param manifest - Validated bounded dataset contract.
+ * @param key - Routing-grid key selected for the current corridor.
+ * @returns `true` only when the complete cell lies inside the generated extent.
+ */
 function manifestContainsCell(
   manifest: PrecomputedBinaryRoutingManifest,
   key: CellKey,
@@ -245,7 +308,12 @@ function manifestContainsCell(
   );
 }
 
-/** Returns the empty in-region cell used for known gaps in the extraction. */
+/**
+ * Creates the empty in-region cell used for known gaps in the extraction.
+ * @param key - Covered cell absent from the manifest's non-empty list.
+ * @param manifest - Dataset-wide counts copied into the empty cell contract.
+ * @returns A valid zero-node, zero-edge cell that requires no network request.
+ */
 function emptyCell(
   key: CellKey,
   manifest: PrecomputedBinaryRoutingManifest,
@@ -269,7 +337,13 @@ function emptyCell(
   };
 }
 
-/** Returns a dataset extent expanded for complete source features at its edge. */
+/**
+ * Expands the validation extent because source geometries are assigned whole to
+ * intersecting cells and may legitimately continue beyond the extraction edge.
+ * @param expectedKey - Cell being decoded when no dataset extent is available.
+ * @param datasetExtent - Complete generated extent from the validated manifest.
+ * @returns LV95 bounds enlarged by the binary contract's safety margin.
+ */
 function coordinateValidationExtent(
   expectedKey: CellKey,
   datasetExtent?: Extent,
@@ -286,6 +360,11 @@ function coordinateValidationExtent(
 /**
  * Validates unique bounded IDs while retaining a typed binary-search lookup.
  * Sorting indexes avoids the object-heavy `Set<number>` cost on every cell.
+ * @param ids - Global IDs stored by one binary column.
+ * @param globalCount - Exclusive dataset-wide upper bound for those IDs.
+ * @param label - Diagnostic label included in validation failures.
+ * @returns A local-index lookup backed only by typed arrays.
+ * @throws {Error} When an ID is duplicated or outside the global range.
  */
 function validateIdLookup(
   ids: Uint32Array,
@@ -332,7 +411,14 @@ function validateIdLookup(
   };
 }
 
-/** Returns whether one fixed-point node lies in plausible geographic bounds. */
+/**
+ * Checks whether one fixed-point node lies in plausible geographic bounds.
+ * @param x - Quantized LV95 X value.
+ * @param y - Quantized LV95 Y value.
+ * @param z - Quantized elevation or the explicit no-elevation sentinel.
+ * @param allowedExtent - Dataset bounds enlarged for complete edge geometries.
+ * @returns Whether all present coordinate components satisfy the contract.
+ */
 function coordinateIsValid(
   x: number,
   y: number,
@@ -369,7 +455,15 @@ function coordinateIsValid(
   );
 }
 
-/** Rejects costs that cannot plausibly come from the current pedestrian model. */
+/**
+ * Rejects costs that cannot plausibly come from the current pedestrian model.
+ * @param costValue - Quantized edge cost stored in the cell.
+ * @param startX - Quantized LV95 X of the first endpoint.
+ * @param startY - Quantized LV95 Y of the first endpoint.
+ * @param endX - Quantized LV95 X of the second endpoint.
+ * @param endY - Quantized LV95 Y of the second endpoint.
+ * @returns Whether the decoded cost is consistent with edge length and model bounds.
+ */
 function edgeCostIsValid(
   costValue: number,
   startX: number,
@@ -552,10 +646,51 @@ export function readPrecomputedBinaryRoutingCell(
   };
 }
 
-/** Returns a native Brotli stream when the current browser exposes one. */
-function createBrotliDecompressionStream(): DecompressionStream | null {
+/** Returns whether an error represents cancellation owned by the caller. */
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException || error instanceof Error) &&
+    error.name === 'AbortError'
+  );
+}
+
+/**
+ * Waits before the single provider retry while remaining immediately cancellable.
+ * @param signal - Caller cancellation that must interrupt the retry delay.
+ * @returns A promise resolved after the short delay.
+ * @throws {DOMException} When the caller aborts before or during the delay.
+ */
+function waitForProviderRetry(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.reject(
+      signal.reason ?? new DOMException('Aborted', 'AbortError'),
+    );
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, BINARY_PROVIDER_RETRY_DELAY_MILLISECONDS);
+    const onAbort = (): void => {
+      clearTimeout(timeoutId);
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Creates a native Brotli stream when the current browser exposes one.
+ * @param state - Provider-local capability cache avoiding repeated exceptions.
+ * @returns A decompression stream, or `null` when Brotli is unavailable.
+ */
+function createBrotliDecompressionStream(
+  state: PrecomputedBinaryRoutingProviderState,
+): DecompressionStream | null {
   if (
-    brotliDecompressionSupported === false ||
+    state.brotliDecompressionSupported === false ||
     typeof DecompressionStream === 'undefined'
   ) {
     return null;
@@ -563,29 +698,36 @@ function createBrotliDecompressionStream(): DecompressionStream | null {
 
   try {
     const stream = new DecompressionStream('brotli' as never);
-    brotliDecompressionSupported = true;
+    state.brotliDecompressionSupported = true;
     return stream;
   } catch {
-    brotliDecompressionSupported = false;
+    state.brotliDecompressionSupported = false;
     return null;
   }
 }
 
-/** Downloads and decodes a precompressed cell when native Brotli is available. */
+/**
+ * Downloads and decodes a precompressed cell when native Brotli is available.
+ * @param baseUrl - Normalized dataset root.
+ * @param state - Provider-local Brotli capability state.
+ * @param relativePath - Validated manifest path ending in `.bin.br`.
+ * @param signal - Caller cancellation propagated to `fetch`.
+ * @returns The decompressed buffer, or `null` to request the raw fallback.
+ * @throws {Error} For non-404 HTTP failures or unusable response bodies.
+ */
 async function fetchBrotliCell(
+  baseUrl: string,
+  state: PrecomputedBinaryRoutingProviderState,
   relativePath: string,
   signal: AbortSignal,
 ): Promise<ArrayBuffer | null> {
-  const decompressor = createBrotliDecompressionStream();
+  const decompressor = createBrotliDecompressionStream(state);
 
   if (!decompressor) {
     return null;
   }
 
-  const response = await fetch(
-    `${PRECOMPUTED_BINARY_ROUTING_ROOT}/${relativePath}`,
-    { signal },
-  );
+  const response = await fetch(`${baseUrl}/${relativePath}`, { signal });
 
   if (response.status === 404) {
     return null;
@@ -600,16 +742,22 @@ async function fetchBrotliCell(
   return new Response(response.body.pipeThrough(decompressor)).arrayBuffer();
 }
 
-/** Downloads the uncompressed binary fallback for browsers without Brotli streams. */
+/**
+ * Downloads the uncompressed fallback for browsers without Brotli streams.
+ * @param baseUrl - Normalized dataset root.
+ * @param relativePath - Validated manifest path ending in `.bin`.
+ * @param key - Cell key included in actionable delivery errors.
+ * @param signal - Caller cancellation propagated to `fetch`.
+ * @returns The complete binary response body.
+ * @throws {Error} When the cell is missing or the request fails.
+ */
 async function fetchUncompressedCell(
+  baseUrl: string,
   relativePath: string,
   key: CellKey,
   signal: AbortSignal,
 ): Promise<ArrayBuffer> {
-  const response = await fetch(
-    `${PRECOMPUTED_BINARY_ROUTING_ROOT}/${relativePath}`,
-    { signal },
-  );
+  const response = await fetch(`${baseUrl}/${relativePath}`, { signal });
 
   if (response.status === 404) {
     throw new Error(`Precomputed binary routing cell ${key} is missing.`);
@@ -625,18 +773,21 @@ async function fetchUncompressedCell(
 }
 
 /**
- * Loads one binary Geneva graph cell.
- * @param key - Exact 2.4 km routing-grid key requested by the engine.
- * @param signal - Abort signal owned by the current routing operation.
- * @returns Validated typed-array graph data; an unlisted in-region cell is empty.
- * @throws {PrecomputedBinaryRoutingCoverageError} Outside the generated region.
- * @throws {Error} When installed files are missing, malformed, or unavailable.
+ * Loads and validates one cell without applying retry policy.
+ * @param baseUrl - Normalized dataset root.
+ * @param state - Provider-local manifest and Brotli state.
+ * @param key - Routing-grid key requested by the corridor builder.
+ * @param signal - Caller cancellation propagated through all network work.
+ * @returns A validated compact graph cell, including known empty coverage.
+ * @throws {Error} For coverage, delivery, integrity, or manifest mismatches.
  */
-export async function fetchPrecomputedBinaryGenevaRoutingCell(
+async function fetchPrecomputedBinaryRoutingCellOnce(
+  baseUrl: string,
+  state: PrecomputedBinaryRoutingProviderState,
   key: CellKey,
   signal: AbortSignal,
 ): Promise<PrecomputedBinaryRoutingCell> {
-  const manifest = await loadManifest();
+  const manifest = await loadManifest(baseUrl, state);
 
   if (!manifestContainsCell(manifest, key)) {
     throw new PrecomputedBinaryRoutingCoverageError();
@@ -648,6 +799,8 @@ export async function fetchPrecomputedBinaryGenevaRoutingCell(
 
   const compressedBuffer = manifest.precompressedCellPathTemplate
     ? await fetchBrotliCell(
+        baseUrl,
+        state,
         cellPath(manifest.precompressedCellPathTemplate, key),
         signal,
       )
@@ -655,6 +808,7 @@ export async function fetchPrecomputedBinaryGenevaRoutingCell(
   const buffer =
     compressedBuffer ??
     (await fetchUncompressedCell(
+      baseUrl,
       cellPath(manifest.cellPathTemplate, key),
       key,
       signal,
@@ -672,3 +826,64 @@ export async function fetchPrecomputedBinaryGenevaRoutingCell(
 
   return cell;
 }
+
+/**
+ * Creates an isolated binary-cell loader for one local or remote dataset root.
+ * @param rawBaseUrl - Directory containing `manifest.json` and its relative cells.
+ * @returns A session-scoped loader with a shared manifest and one retry.
+ * @throws {Error} When the base URL is empty or unsafe.
+ */
+export function createPrecomputedBinaryGenevaRoutingCellLoader(
+  rawBaseUrl: string,
+): PrecomputedBinaryRoutingCellLoader {
+  const baseUrl = normalizeRoutingDataBaseUrl(rawBaseUrl);
+
+  if (!baseUrl) {
+    throw new Error('Precomputed binary routing requires a data base URL.');
+  }
+
+  const state: PrecomputedBinaryRoutingProviderState = {
+    manifestPromise: null,
+    brotliDecompressionSupported: null,
+  };
+
+  return async (key, signal) => {
+    for (let attempt = 1; attempt <= BINARY_PROVIDER_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        return await fetchPrecomputedBinaryRoutingCellOnce(
+          baseUrl,
+          state,
+          key,
+          signal,
+        );
+      } catch (error) {
+        if (
+          signal.aborted ||
+          isAbortError(error) ||
+          error instanceof PrecomputedBinaryRoutingCoverageError ||
+          attempt === BINARY_PROVIDER_MAX_ATTEMPTS
+        ) {
+          throw error;
+        }
+
+        // A failed manifest or corrupted cached response is re-fetched rather
+        // than pinning the first failure for the full Worker session.
+        state.manifestPromise = null;
+        console.warn(
+          `[Via Helvetica] Retrying precomputed routing cell ${key} after a provider failure.`,
+          error,
+        );
+        await waitForProviderRetry(signal);
+      }
+    }
+
+    throw new Error('Precomputed binary routing retry loop terminated unexpectedly.');
+  };
+}
+
+/** Default local-development loader retained for direct module tests. */
+export const fetchPrecomputedBinaryGenevaRoutingCell =
+  createPrecomputedBinaryGenevaRoutingCellLoader(
+    LOCAL_PRECOMPUTED_BINARY_ROUTING_BASE_URL,
+  );
+

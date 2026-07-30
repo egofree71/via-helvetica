@@ -6,12 +6,13 @@
  * cross back to React.
  */
 import { DynamicRoutingNetworkEngine } from './dynamicRoutingEngine';
+import { DynamicRoutingProviderSession } from './dynamicRoutingProviderSession';
 import {
-  resolveRoutingDataSource,
+  resolveRoutingConfiguration,
   shouldUseHikingEnrichment,
 } from './routingConfig';
 import {
-  fetchPrecomputedBinaryGenevaRoutingCell,
+  createPrecomputedBinaryGenevaRoutingCellLoader,
 } from './precomputedBinaryRoutingData';
 import type {
   RoutingWorkerRequest,
@@ -20,7 +21,9 @@ import type {
   SerializedRoutingWorkerError,
 } from './dynamicRoutingProtocol';
 
+/** Typed global scope used to exchange only protocol messages with the UI. */
 const workerScope = self as unknown as DedicatedWorkerGlobalScope;
+/** Per-request cancellation kept separate from provider-session ownership. */
 const requestControllers = new Map<number, AbortController>();
 
 /** Posts one non-blocking session notice to the main-thread route controller. */
@@ -32,25 +35,48 @@ function postNotice(notice: RoutingWorkerNotice): void {
   workerScope.postMessage(response);
 }
 
-const routingDataSource = resolveRoutingDataSource(import.meta.env.DEV);
-
-const engine = new DynamicRoutingNetworkEngine({
-  initialHikingEnrichmentEnabled:
-    routingDataSource === 'geo-admin'
-      ? shouldUseHikingEnrichment(import.meta.env.DEV)
-      : true,
+const routingConfiguration = resolveRoutingConfiguration(
+  import.meta.env.DEV,
+  import.meta.env.VITE_ROUTING_DATA_BASE_URL,
+);
+const geoAdminEngine = new DynamicRoutingNetworkEngine({
+  initialHikingEnrichmentEnabled: shouldUseHikingEnrichment(
+    import.meta.env.DEV,
+  ),
   onHikingEnrichmentUnavailable: () =>
     postNotice('hiking-enrichment-unavailable'),
-  precomputedBinaryCellLoader:
-    routingDataSource === 'precomputed-binary-geneva'
-      ? fetchPrecomputedBinaryGenevaRoutingCell
-      : undefined,
+});
+const binaryEngine =
+  routingConfiguration.dataSource === 'precomputed-binary-geneva' &&
+  routingConfiguration.precomputedBinaryBaseUrl
+    ? new DynamicRoutingNetworkEngine({
+        precomputedBinaryCellLoader:
+          createPrecomputedBinaryGenevaRoutingCellLoader(
+            routingConfiguration.precomputedBinaryBaseUrl,
+          ),
+      })
+    : undefined;
+const routingSession = new DynamicRoutingProviderSession({
+  primaryEngine: binaryEngine,
+  fallbackEngine: geoAdminEngine,
+  onFallbackActivated: (error) => {
+    console.warn(
+      '[Via Helvetica] Precomputed routing became unavailable; switching this Worker session to GeoAdmin.',
+      error,
+    );
+    postNotice('precomputed-routing-unavailable');
+  },
 });
 
-if (routingDataSource === 'precomputed-binary-geneva') {
+if (binaryEngine && routingConfiguration.precomputedBinaryBaseUrl) {
+  const location = routingConfiguration.usesRemoteBinaryData
+    ? 'remote'
+    : 'local';
   console.info(
-    '[Via Helvetica] Routing with precomputed binary Geneva graph cells.',
+    `[Via Helvetica] Routing with ${location} precomputed binary Geneva graph cells from ${routingConfiguration.precomputedBinaryBaseUrl}.`,
   );
+} else {
+  console.info('[Via Helvetica] Routing with GeoAdmin swissTLM3D cells.');
 }
 
 /** Converts unknown failures into structured-clone-safe error data. */
@@ -108,13 +134,13 @@ workerScope.addEventListener(
           case 'snap':
             postSuccess(
               request.requestId,
-              await engine.snap(request.coordinate, controller.signal),
+              await routingSession.snap(request.coordinate, controller.signal),
             );
             break;
           case 'route':
             postSuccess(
               request.requestId,
-              await engine.route(
+              await routingSession.route(
                 request.startCoordinate,
                 request.endCoordinate,
                 controller.signal,

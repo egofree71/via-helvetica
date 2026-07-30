@@ -86,7 +86,11 @@ export interface RoutingWorkerErrorResponse {
 }
 
 /** Non-blocking routing notices emitted independently from one request result. */
-export type RoutingWorkerNotice = 'hiking-enrichment-unavailable';
+export type RoutingWorkerNotice =
+  /** Optional hiking geometry was rejected; GeoAdmin continues roads-only. */
+  | 'hiking-enrichment-unavailable'
+  /** Binary delivery or coverage failed; the complete session uses GeoAdmin. */
+  | 'precomputed-routing-unavailable';
 
 /** Session notice posted when the worker changes its provider strategy. */
 export interface RoutingWorkerNoticeResponse {

@@ -2,7 +2,7 @@
  * Business context: protects the compact binary graph-cell contract before
  * untrusted static responses enter the Worker routing cache.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PRECOMPUTED_BINARY_CHECKSUM,
   PRECOMPUTED_BINARY_COORDINATE_MARGIN_METRES,
@@ -129,6 +129,10 @@ describe('precomputed binary Geneva routing cells', () => {
     vi.unstubAllGlobals();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('returns zero-copy typed views for a valid binary cell', async () => {
     vi.stubGlobal('DecompressionStream', undefined);
     const fetchMock = vi
@@ -219,6 +223,55 @@ describe('precomputed binary Geneva routing cells', () => {
       ),
     ).rejects.toBeInstanceOf(PrecomputedBinaryRoutingCoverageError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+
+  it('loads a manifest and cell from an explicit remote dataset root', async () => {
+    vi.stubGlobal('DecompressionStream', undefined);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(MANIFEST))
+      .mockResolvedValueOnce(binaryCellResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    const { createPrecomputedBinaryGenevaRoutingCellLoader } = await import(
+      './precomputedBinaryRoutingData'
+    );
+    const loader = createPrecomputedBinaryGenevaRoutingCellLoader(
+      'https://routing-data.example.test/swisstlm3d-2026/format-v2/geneva/',
+    );
+
+    await loader('1041:465', new AbortController().signal);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'https://routing-data.example.test/swisstlm3d-2026/format-v2/geneva/manifest.json',
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      'https://routing-data.example.test/swisstlm3d-2026/format-v2/geneva/cells/1041_465.bin',
+    );
+  });
+
+  it('retries one transient manifest failure before returning the cell', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('DecompressionStream', undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({}, 503))
+      .mockResolvedValueOnce(jsonResponse(MANIFEST))
+      .mockResolvedValueOnce(binaryCellResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    const { createPrecomputedBinaryGenevaRoutingCellLoader } = await import(
+      './precomputedBinaryRoutingData'
+    );
+    const loader = createPrecomputedBinaryGenevaRoutingCellLoader(
+      'https://routing-data.example.test/geneva',
+    );
+    const result = loader('1041:465', new AbortController().signal);
+
+    await vi.runAllTimersAsync();
+
+    await expect(result).resolves.toMatchObject({ key: '1041:465' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('rejects payload corruption before typed arrays enter the cache', async () => {

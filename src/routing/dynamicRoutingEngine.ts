@@ -248,6 +248,8 @@ export class DynamicRoutingNetworkEngine {
   private hikingEnrichmentEnabled: boolean;
   /** Session callbacks and initial provider policy. */
   private readonly options: DynamicRoutingNetworkEngineOptions;
+  /** Prevents abandoned providers from accepting or retaining new work. */
+  private disposed = false;
   /** Prevents repeated UI notices after roads-only mode has been reported. */
   private hikingEnrichmentUnavailableReported = false;
   /** Avoids repeating provider diagnostics for every loaded GeoAdmin cell. */
@@ -270,6 +272,35 @@ export class DynamicRoutingNetworkEngine {
     this.options = options;
     this.hikingEnrichmentEnabled =
       options.initialHikingEnrichmentEnabled ?? true;
+  }
+
+  /**
+   * Releases provider requests and cached graphs when a whole routing provider
+   * is abandoned for the remainder of the Worker session.
+   */
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+
+    for (const pending of this.pendingCells.values()) {
+      pending.controller.abort();
+    }
+
+    this.pendingCells.clear();
+    this.loadedCells.clear();
+    this.loadedCellCacheBytes = 0;
+    this.networkCache.splice(0);
+    this.networkCacheBytes = 0;
+  }
+
+  /** Rejects work that belongs to a provider already abandoned by the session. */
+  private ensureActive(): void {
+    if (this.disposed) {
+      throw new DOMException('Routing provider disposed', 'AbortError');
+    }
   }
 
   /** Reports roads-only mode after a routing request has started. */
@@ -333,6 +364,8 @@ export class DynamicRoutingNetworkEngine {
     coordinate: Coordinate,
     signal: AbortSignal,
   ): Promise<Coordinate | null> {
+    this.ensureActive();
+
     if (!this.hikingEnrichmentEnabled) {
       // Emitting after the first operation arrives avoids losing the local-test
       // notice while the Worker module is still starting up.
@@ -370,6 +403,8 @@ export class DynamicRoutingNetworkEngine {
     endCoordinate: Coordinate,
     signal: AbortSignal,
   ): Promise<RoutedNetworkPath | null> {
+    this.ensureActive();
+
     if (!this.hikingEnrichmentEnabled) {
       // A route request can be the first Worker operation after local startup.
       this.reportHikingEnrichmentUnavailable();
@@ -583,6 +618,8 @@ export class DynamicRoutingNetworkEngine {
     pending: PendingCell,
     signal: AbortSignal,
   ): Promise<LoadedCell> {
+    this.ensureActive();
+
     if (signal.aborted) {
       return Promise.reject(this.abortReason(signal));
     }
@@ -710,6 +747,10 @@ export class DynamicRoutingNetworkEngine {
 
     pending.promise = cellPromise
       .then((cell): LoadedCell => {
+        if (this.disposed) {
+          return cell;
+        }
+
         const estimatedBytes = estimateLoadedCellBytes(cell);
         const previous = this.loadedCells.get(key);
 

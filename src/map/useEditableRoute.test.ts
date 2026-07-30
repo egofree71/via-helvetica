@@ -10,6 +10,10 @@ import type { Coordinate } from 'ol/coordinate.js';
 import type { RouteState } from './routeState';
 import { useEditableRoute, type EditableRouteController } from './useEditableRoute';
 
+type RoutingNotice =
+  | 'hiking-enrichment-unavailable'
+  | 'precomputed-routing-unavailable';
+
 interface CapturedRouteInteractions {
   onAppendEndpoint: (
     expectedState: RouteState,
@@ -21,7 +25,7 @@ const loaderState = vi.hoisted(() => ({
   instances: [] as Array<{
     disposed: boolean;
     routeCalls: number;
-    emit: (notice: 'hiking-enrichment-unavailable') => void;
+    emit: (notice: RoutingNotice) => void;
   }>,
 }));
 
@@ -38,7 +42,7 @@ vi.mock('../routing/dynamicRoutingNetwork', () => {
 
   class DynamicRoutingNetworkLoader {
     private readonly listeners = new Set<
-      (notice: 'hiking-enrichment-unavailable') => void
+      (notice: RoutingNotice) => void
     >();
     disposed = false;
     routeCalls = 0;
@@ -48,13 +52,13 @@ vi.mock('../routing/dynamicRoutingNetwork', () => {
     }
 
     subscribeToNotices(
-      listener: (notice: 'hiking-enrichment-unavailable') => void,
+      listener: (notice: RoutingNotice) => void,
     ): () => void {
       this.listeners.add(listener);
       return () => this.listeners.delete(listener);
     }
 
-    emit(notice: 'hiking-enrichment-unavailable'): void {
+    emit(notice: RoutingNotice): void {
       for (const listener of this.listeners) {
         listener(notice);
       }
@@ -105,6 +109,10 @@ function Harness() {
     t: (key, parameters) => {
       if (key === 'route.hikingEnrichmentUnavailable') {
         return 'Roads-only routing warning';
+      }
+
+      if (key === 'route.precomputedRoutingUnavailable') {
+        return 'GeoAdmin routing fallback warning';
       }
 
       if (key === 'route.sectionTooLong') {
@@ -163,6 +171,21 @@ describe('useEditableRoute orchestration', () => {
     });
 
     expect(container.textContent).toBe('Roads-only routing warning|false');
+  });
+
+
+  it('shows the session fallback notice from the active Worker', async () => {
+    await act(async () => {
+      root?.render(createElement(Harness));
+    });
+
+    await act(async () => {
+      loaderState.instances[0].emit('precomputed-routing-unavailable');
+    });
+
+    expect(container.textContent).toBe(
+      'GeoAdmin routing fallback warning|false',
+    );
   });
 
   it('rejects an overlong appended section before pending state or Worker routing', async () => {

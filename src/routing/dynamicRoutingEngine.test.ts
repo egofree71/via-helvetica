@@ -390,6 +390,36 @@ describe('DynamicRoutingNetworkEngine', () => {
     expect(moduleMocks.fetchSwissTlmNetworkData).toHaveBeenCalledTimes(2);
   });
 
+
+  it('aborts pending cells and rejects new work after provider disposal', async () => {
+    moduleMocks.fetchSwissTlmNetworkData.mockImplementationOnce(
+      (_extent: unknown, signal: AbortSignal) =>
+        new Promise<SwissTlmNetworkData>((_resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        }),
+    );
+    const engine = new DynamicRoutingNetworkEngine();
+    const pendingSnap = engine.snap(
+      [1_200, 1_200],
+      new AbortController().signal,
+    );
+
+    await vi.waitFor(() => {
+      expect(moduleMocks.fetchSwissTlmNetworkData).toHaveBeenCalledTimes(1);
+    });
+
+    engine.dispose();
+
+    await expect(pendingSnap).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(
+      engine.snap([1_200, 1_200], new AbortController().signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('promotes cache hits and evicts the least-recently used graph', async () => {
     const engine = new DynamicRoutingNetworkEngine();
     const signal = new AbortController().signal;

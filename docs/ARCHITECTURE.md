@@ -118,6 +118,7 @@ flowchart LR
     UI --> Elevation[GeoAdmin elevation profile]
     UI --> Timetable[transport.opendata.ch]
     Worker --> Identify
+    Worker --> RoutingData[Versioned binary routing cells]
 
     UI --> FileAPI[Browser File API]
     UI --> Geolocation[Browser Geolocation API]
@@ -137,6 +138,7 @@ flowchart LR
 | GeoAdmin HTML popup | Localized closure and military metadata | Popup reports a local error without changing route state |
 | GeoAdmin WMS | Closure, detour, and military danger portrayals | Overlay failure does not block map use |
 | GeoAdmin elevation profile | Elevation, ascent, descent, and walking-time samples | Distance remains available; altitude-dependent metrics become unavailable |
+| Versioned static routing storage | Optional precomputed Geneva graph cells used by the Worker | Worker retries once, then switches the complete session to GeoAdmin |
 | Federal Office of Transport data | Passenger-stop geometry and attributes | Optional stop layer may be incomplete or unavailable |
 | transport.opendata.ch | On-demand departure board | Stop remains visible even when departures fail |
 | Browser APIs | Local GPX, geolocation, fullscreen | Capability-specific failure only |
@@ -675,8 +677,10 @@ hiking geometry is optional enrichment used to prefer matching edges. If the
 provider rejects the combined request, the Worker switches to roads-only loading
 for the remaining session and emits one non-blocking notice.
 
-For development comparison, the Worker can load a bounded precomputed binary
-graph for Geneva instead of GeoAdmin. Offline geometry cells are reproducibly
+For development comparison or an explicitly configured remote deployment, the
+Worker can load a bounded precomputed binary graph for Geneva before falling back
+to GeoAdmin for the complete session when binary coverage or delivery fails.
+Offline geometry cells are reproducibly
 extracted from the official 2026 swissTLM3D GeoPackage by a versioned Python
 script and carry normalized road attributes plus a direct hiking flag, but they
 are no longer a browser provider. The binary generator runs the same pure
@@ -689,13 +693,17 @@ preserving the geometry-cell overlap, reuses generation-marked A* work arrays,
 applies deterministic snapping ties, and uses explicit Brotli cells when native
 browser decompression is available.
 
-`routingConfig.ts` activates experiments only in Vite development mode, so LAN
-addresses remain testable while a production bundle always selects GeoAdmin.
-Generated routing data is git-ignored. Offline geometry lives under
-`.routing-work/`, outside Vite's public tree, while browser-ready binary cells stay
-under `public/routing-data/` for local development. `vite.config.ts` excludes that
-public routing directory when copying ordinary assets into `dist`, preventing
-bounded datasets from entering GitHub Pages accidentally.
+`routingConfig.ts` uses `VITE_ROUTING_DATA_BASE_URL` to activate a versioned
+remote binary root explicitly in development or production. Without it, local
+Vite development retains the manual comparison switch and production selects
+GeoAdmin. `DynamicRoutingProviderSession` keeps binary and GeoAdmin engines
+independent, retries the binary loader once, and performs a one-way session
+fallback without mixing graph representations. Generated routing data is
+git-ignored. Offline geometry lives under `.routing-work/`, outside Vite's public
+tree, while browser-ready binary cells stay under `public/routing-data/` for local
+development. `vite.config.ts` excludes that public routing directory when copying
+ordinary assets into `dist`, preventing bounded datasets from entering GitHub
+Pages accidentally.
 
 For the complete design, tuning values, failure semantics, tests, and unresolved
 validation work, see [ROUTING.md](ROUTING.md).
@@ -951,6 +959,12 @@ dispatch. It:
 4. runs `npm run build`;
 5. uploads `dist/` as a Pages artifact;
 6. deploys to the `github-pages` environment.
+
+The build accepts the optional GitHub repository variable
+`VITE_ROUTING_DATA_BASE_URL`. When present, it embeds only the public versioned
+dataset root; routing objects remain in external static object storage and do
+not enter the Pages artifact. When absent, production keeps GeoAdmin as the
+initial provider.
 
 The custom domain serves the application at the root, so `vite.config.ts` uses:
 
