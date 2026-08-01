@@ -1,7 +1,7 @@
 /**
- * Business context: configures the localized static application and ensures
- * developer-only routing datasets can be served by Vite without ever entering
- * the production GitHub Pages artifact.
+ * Business context: configures the localized static application while keeping
+ * offline routing-data workspaces outside Vite's runtime and production asset
+ * graph. National source, intermediate, and release files are external data.
  */
 import { cp, mkdir, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -14,8 +14,8 @@ const EXPERIMENTAL_ROUTING_DIRECTORY = 'routing-data';
 
 /**
  * Copies normal public assets after a production build while deliberately
- * excluding generated routing experiments. Development keeps Vite's standard
- * public directory so `/routing-data/...` remains available for local tests.
+ * excluding any legacy routing experiment left below `public/`. National routing
+ * releases are external and are loaded through their configured public URL.
  */
 function copyProductionPublicAssets(): Plugin {
   return {
@@ -47,9 +47,24 @@ export default defineConfig(({ command }) => ({
    * Root-relative production assets keep https://viahelvetica.ch/ deployable.
    */
   base: '/',
-  // Static routing experiments remain available only to the development server.
+  // Static routing experiments remain available only as a legacy local fallback.
   publicDir: command === 'serve' ? 'public' : false,
   plugins: [react(), copyProductionPublicAssets()],
+  server: {
+    /*
+     * These paths should remain empty because national datasets live outside
+     * the repository. Ignoring them is a safeguard against accidental legacy
+     * generation blocking Vite startup or hot-module replacement.
+     */
+    watch: {
+      ignored: [
+        '**/.routing-work/**',
+        '**/.routing-release/**',
+        '**/.tmp-precomputed-binary-routing-compiler/**',
+        '**/public/routing-data/**',
+      ],
+    },
+  },
   build: {
     rolldownOptions: {
       // Each generated HTML file keeps its directory in dist for GitHub Pages.

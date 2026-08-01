@@ -158,7 +158,7 @@ export function readStaticRoutingRoad(
       importance: readAttribute(values, 3),
     },
     // The 2026 national GeoPackage's Wanderweg field matched the separate
-    // hiking package exactly in the Geneva extraction.
+    // hiking package exactly in the validated geometry extraction.
     isHikingTrail: payload.h === 1,
   };
 }

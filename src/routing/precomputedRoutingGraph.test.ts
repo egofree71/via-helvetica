@@ -8,6 +8,8 @@ import {
   compilePrecomputedRoutingGraph,
   MAX_ROUTING_COST_FACTOR,
   MIN_ROUTING_COST_FACTOR,
+  NODE_HORIZONTAL_PRECISION_METRES,
+  NODE_VERTICAL_PRECISION_METRES,
 } from './precomputedRoutingGraph';
 
 describe('compilePrecomputedRoutingGraph', () => {
@@ -37,6 +39,35 @@ describe('compilePrecomputedRoutingGraph', () => {
         isHikingTrail: true,
       }),
     ]);
+  });
+
+  it('keeps the cheapest interpretation of a quantized duplicate edge', () => {
+    const graph = compilePrecomputedRoutingGraph({
+      roads: [
+        {
+          id: 'ordinary-road',
+          lines: [[[0.1, 0.1, 400], [10.1, 0.1, 400]]],
+          attributes: { objectType: 9 },
+          isHikingTrail: false,
+        },
+        {
+          id: 'preferred-path',
+          lines: [[[0.2, 0.2, 400.5], [10.15, 0.2, 400.5]]],
+          attributes: { objectType: 16 },
+          isHikingTrail: false,
+        },
+      ],
+      hikingTrails: [],
+    });
+
+    expect(graph.nodes).toHaveLength(2);
+    expect(graph.segments).toHaveLength(1);
+    expect(graph.segments[0].cost).toBeCloseTo(8.955, 6);
+  });
+
+  it('exports the node-identity precision used by the national merge', () => {
+    expect(NODE_HORIZONTAL_PRECISION_METRES).toBe(0.5);
+    expect(NODE_VERTICAL_PRECISION_METRES).toBe(2);
   });
 
   it('keeps equal horizontal endpoints separate at different elevations', () => {

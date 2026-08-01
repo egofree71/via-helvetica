@@ -12,8 +12,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate:geneva-geometry-cells": "python scripts/generate-geneva-geometry-cells.py",
-    "generate:precomputed-binary-geneva": "node scripts/generate-precomputed-binary-geneva-graph.mjs"
+    "generate:routing-geometry": "python scripts/generate-routing-geometry-cells.py",
+    "generate:precomputed-binary-routing": "node scripts/generate-precomputed-binary-routing-graph.mjs",
+    "verify:precomputed-binary-routing": "node scripts/verify-routing-dataset.mjs",
+    "verify:published-routing": "node scripts/verify-published-routing-dataset.mjs"
   },
   "dependencies": {
     "ol": "^10.9.0",

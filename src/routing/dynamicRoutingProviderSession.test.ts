@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Coordinate } from 'ol/coordinate.js';
 import type { RoutedNetworkPath } from './networkRouter';
 import { RoutingAreaTooLargeError } from './dynamicRoutingProtocol';
+import { RoutingCoverageError } from './routingCoverage';
 import {
   DynamicRoutingProviderSession,
   type RoutingProviderEngine,
@@ -93,6 +94,35 @@ describe('DynamicRoutingProviderSession', () => {
       name: 'AbortError',
     });
     expect(fallback.snap).not.toHaveBeenCalled();
+    expect(onFallbackActivated).not.toHaveBeenCalled();
+  });
+
+  it('uses GeoAdmin only for the current coverage miss', async () => {
+    const primary = createEngine({
+      snap: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new RoutingCoverageError('TestCoverageError', 'Outside coverage'),
+        )
+        .mockResolvedValueOnce([5, 6] as Coordinate),
+    });
+    const fallback = createEngine({
+      snap: vi.fn().mockResolvedValue([3, 4] as Coordinate),
+    });
+    const onFallbackActivated = vi.fn();
+    const session = new DynamicRoutingProviderSession({
+      primaryEngine: primary,
+      fallbackEngine: fallback,
+      onFallbackActivated,
+    });
+    const signal = new AbortController().signal;
+
+    await expect(session.snap([0, 0], signal)).resolves.toEqual([3, 4]);
+    await expect(session.snap([1, 1], signal)).resolves.toEqual([5, 6]);
+
+    expect(primary.snap).toHaveBeenCalledTimes(2);
+    expect(fallback.snap).toHaveBeenCalledTimes(1);
+    expect(primary.dispose).not.toHaveBeenCalled();
     expect(onFallbackActivated).not.toHaveBeenCalled();
   });
 

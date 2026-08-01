@@ -1,0 +1,16 @@
+{
+  "scope": "ch",
+  "sourceGeoPackage": "C:/ViaHelveticaData/source/SWISSTLM3D_2026_LV95_LN02.gpkg",
+  "geometryRoot": "C:/ViaHelveticaData/work/ch-geometry",
+  "binaryReleaseRoot": "C:/ViaHelveticaData/releases/swisstlm3d-2026/format-v3/ch",
+  "buildDatabasePath": "C:/ViaHelveticaData/work/precomputed-binary-routing-build.sqlite",
+  "publication": {
+    "remote": "r2",
+    "bucket": "via-helvetica-routing-data",
+    "prefix": "swisstlm3d-2026/format-v3/ch",
+    "expectedCellCount": 7529,
+    "publicBaseUrl": "https://pub-REPLACE.r2.dev/swisstlm3d-2026/format-v3/ch",
+    "publicOrigin": "https://viahelvetica.ch",
+    "publicSampleCount": 50
+  }
+}

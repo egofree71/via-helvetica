@@ -1,6 +1,6 @@
 /**
  * Business context: defines the versioned binary contract shared by the
- * offline Geneva graph generator and the browser Worker. Columnar typed-array
+ * offline binary graph generator and the browser Worker. Columnar typed-array
  * sections preserve global integer node identity and final edge costs without
  * JSON parsing or per-node JavaScript objects.
  */
@@ -9,14 +9,20 @@ import type { CellKey } from './routingGrid';
 /** Four-byte ASCII signature at the start of every binary graph cell. */
 export const PRECOMPUTED_BINARY_MAGIC = 'VHRG';
 /** Current binary-cell contract version. */
-export const PRECOMPUTED_BINARY_FORMAT_VERSION = 2;
+export const PRECOMPUTED_BINARY_FORMAT_VERSION = 3;
 /** Manifest format identifier for compatibility checks. */
 export const PRECOMPUTED_BINARY_FORMAT =
   'via-helvetica-precomputed-binary-routing-graph';
 /** Fixed header length in bytes; all typed-array sections begin on 4-byte boundaries. */
-export const PRECOMPUTED_BINARY_HEADER_BYTES = 68;
+export const PRECOMPUTED_BINARY_HEADER_BYTES = 104;
+/** Byte offset of the generator revision in the v3 header. */
+export const PRECOMPUTED_BINARY_GENERATOR_VERSION_OFFSET = 64;
+/** Byte offset of the 32-byte dataset build identifier in the v3 header. */
+export const PRECOMPUTED_BINARY_DATASET_BUILD_ID_OFFSET = 68;
+/** Byte length of the binary SHA-256 dataset build identifier. */
+export const PRECOMPUTED_BINARY_DATASET_BUILD_ID_BYTES = 32;
 /** Byte offset of the CRC32 covering every byte after the fixed header. */
-export const PRECOMPUTED_BINARY_PAYLOAD_CRC32_OFFSET = 64;
+export const PRECOMPUTED_BINARY_PAYLOAD_CRC32_OFFSET = 100;
 /** Manifest identifier for the payload-integrity algorithm. */
 export const PRECOMPUTED_BINARY_CHECKSUM = 'crc32';
 /** Number of stored horizontal integer units per metre (centimetres). */
@@ -28,21 +34,33 @@ export const PRECOMPUTED_BINARY_COST_SCALE = 10_000;
 /** Signed 32-bit sentinel used when a source node has no elevation. */
 export const PRECOMPUTED_BINARY_NO_ELEVATION = -2_147_483_648;
 /**
- * Horizontal allowance around the generated dataset extent in metres. Full
- * swissTLM3D features are retained across cell boundaries, so a referenced
- * endpoint may lie outside the extraction rectangle by less than one cell.
+ * Horizontal allowance around a referenced cell in metres. It complements the
+ * declared dataset extent for bounded extracts whose complete, unclipped source
+ * features continue beyond the exact extraction boundary.
  */
-export const PRECOMPUTED_BINARY_COORDINATE_MARGIN_METRES = 2_400;
+export const PRECOMPUTED_BINARY_COORDINATE_MARGIN_METRES = 6_000;
 /** Lowest plausible swissTLM3D elevation accepted by the defensive parser. */
 export const PRECOMPUTED_BINARY_MIN_ELEVATION_METRES = -1_000;
 /** Highest plausible swissTLM3D elevation accepted by the defensive parser. */
 export const PRECOMPUTED_BINARY_MAX_ELEVATION_METRES = 10_000;
 
+/** Dataset identity fields repeated in every v3 cell header. */
+export interface PrecomputedBinaryDatasetIdentity {
+  /** Offline generator revision expected by the manifest. */
+  generatorVersion: number;
+  /** Lowercase SHA-256 identifying one complete generated release. */
+  datasetBuildId: string;
+  /** Dataset-wide exclusive upper bound for global node IDs. */
+  globalNodeCount: number;
+  /** Dataset-wide exclusive upper bound for global edge IDs. */
+  globalEdgeCount: number;
+}
+
 /** Typed views over one validated, independently loadable graph cell. */
 export interface PrecomputedBinaryRoutingCell {
   /** Routing-grid key encoded by the file header. */
   key: CellKey;
-  /** Globally stable node identifiers in reference-cell insertion order. */
+  /** Globally stable node identifiers in strictly increasing order. */
   nodeIds: Uint32Array;
   /** Absolute EPSG:2056 easting values quantized to centimetres. */
   nodeX: Int32Array;
@@ -50,7 +68,7 @@ export interface PrecomputedBinaryRoutingCell {
   nodeY: Int32Array;
   /** Elevations in decimetres, or `PRECOMPUTED_BINARY_NO_ELEVATION`. */
   nodeZ: Int32Array;
-  /** Globally stable edge identifiers in reference-cell insertion order. */
+  /** Globally stable edge identifiers in strictly increasing order. */
   edgeIds: Uint32Array;
   /** Global identifier of each edge's first endpoint. */
   edgeStartNodeIds: Uint32Array;
@@ -182,6 +200,28 @@ export function precomputedBinaryCrc32(
     crc = CRC32_TABLE[(crc ^ bytes[index]) & 0xff] ^ (crc >>> 8);
   }
   return (crc ^ 0xffffffff) >>> 0;
+}
+
+/** Returns a lowercase hexadecimal build ID from the 32 header bytes. */
+export function precomputedBinaryBuildIdToHex(bytes: Uint8Array): string {
+  if (bytes.length !== PRECOMPUTED_BINARY_DATASET_BUILD_ID_BYTES) {
+    throw new RangeError('Precomputed binary dataset build ID has an invalid length.');
+  }
+
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+/** Parses a lowercase or uppercase 64-character SHA-256 build ID. */
+export function precomputedBinaryBuildIdFromHex(value: string): Uint8Array {
+  if (!/^[0-9a-f]{64}$/i.test(value)) {
+    throw new Error('Precomputed binary dataset build ID is invalid.');
+  }
+
+  const bytes = new Uint8Array(PRECOMPUTED_BINARY_DATASET_BUILD_ID_BYTES);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
 }
 
 /** Returns whether typed arrays use the little-endian order required by the format. */

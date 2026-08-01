@@ -1,6 +1,6 @@
 /**
  * Business context: protects typed-array graph assembly, numeric cross-cell
- * deduplication, snapping, and A* independently from generated Geneva files.
+ * deduplication, snapping, and A* independently from generated national files.
  */
 import { describe, expect, it } from 'vitest';
 import { BinaryRoutingNetwork } from './binaryRoutingNetwork';
@@ -102,36 +102,41 @@ describe('BinaryRoutingNetwork', () => {
     ).toThrow('global node coordinate');
   });
 
-  it('uses geometry as a deterministic tie-breaker for equidistant segments', () => {
-    const nodes = [0, 1, 2, 3];
-    const nodeX = [0, 10_000, 0, 10_000];
-    const nodeY = [-100, -100, 100, 100];
-    const firstOrder = cell(
+  it('uses geometry as a deterministic tie-breaker across cell load orders', () => {
+    const lower = cell(
       '0:0',
-      nodes,
-      nodeX,
       [0, 1],
-      [0, 2],
-      [1, 3],
-      { nodeY, globalNodeCount: 4, globalEdgeCount: 2 },
+      [0, 10_000],
+      [0],
+      [0],
+      [1],
+      {
+        nodeY: [-100, -100],
+        globalNodeCount: 4,
+        globalEdgeCount: 2,
+      },
     );
-    const reverseOrder = cell(
-      '0:0',
-      nodes,
-      nodeX,
-      [1, 0],
-      [2, 0],
-      [3, 1],
-      { nodeY, globalNodeCount: 4, globalEdgeCount: 2 },
+    const upper = cell(
+      '1:0',
+      [2, 3],
+      [0, 10_000],
+      [1],
+      [2],
+      [3],
+      {
+        nodeY: [100, 100],
+        globalNodeCount: 4,
+        globalEdgeCount: 2,
+      },
     );
 
     const firstNetwork = BinaryRoutingNetwork.fromCells(
       [-10, -10, 110, 10],
-      [firstOrder],
+      [lower, upper],
     );
     const reverseNetwork = BinaryRoutingNetwork.fromCells(
       [-10, -10, 110, 10],
-      [reverseOrder],
+      [upper, lower],
     );
 
     expect(firstNetwork.snap([50, 0])?.slice(0, 2)).toEqual([50, -1]);
@@ -157,6 +162,33 @@ describe('BinaryRoutingNetwork', () => {
     expect(network.route([1, 0], [99, 0])).not.toBeNull();
   });
 
+  it('indexes a long diagonal by crossed buckets instead of its envelope', () => {
+    const diagonal = cell(
+      '0:0',
+      [0, 1],
+      [0, 220_000],
+      [0],
+      [0],
+      [1],
+      {
+        nodeY: [0, 180_000],
+        globalNodeCount: 2,
+        globalEdgeCount: 1,
+      },
+    );
+
+    const network = BinaryRoutingNetwork.fromCells(
+      [-300, -300, 2_500, 2_100],
+      [diagonal],
+    );
+    const snapped = network.snap([1_100, 900]);
+
+    // The old 9 x 8 envelope occupied 72 buckets and exceeded the former
+    // safety limit even though the line itself crosses only a short sequence.
+    expect(snapped?.[0]).toBeCloseTo(1_100, 5);
+    expect(snapped?.[1]).toBeCloseTo(900, 5);
+  });
+
   it('rejects an edge that would explode the snapping spatial index', () => {
     const corrupt = cell(
       '0:0',
@@ -175,5 +207,4 @@ describe('BinaryRoutingNetwork', () => {
       ),
     ).toThrow('implausible spatial extent');
   });
-
 });

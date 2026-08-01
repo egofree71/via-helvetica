@@ -71,20 +71,25 @@ http://localhost:5173/
 
 ## Offline routing-data generation
 
-The Geneva binary-routing experiment has two local, git-ignored stages.
-Geometry build inputs are written outside `public/`, while only browser-ready
-binary cells are served by Vite during development:
+National swissTLM3D sources, geometry cells, SQLite work files, and binary
+releases live outside the repository. Copy
+`routing-data.config.example.json` to the git-ignored
+`routing-data.config.local.json`, set the external paths, then run:
 
 ```bash
-npm run generate:geneva-geometry-cells -- "C:\data\SWISSTLM3D_2026_LV95_LN02.gpkg"
-npm run generate:precomputed-binary-geneva
+npm run generate:routing-geometry
+npm run generate:precomputed-binary-routing
+npm run verify:precomputed-binary-routing
 ```
 
-To test a versioned remote dataset, copy `.env.example` to `.env.local`, set
-`VITE_ROUTING_DATA_BASE_URL` to the directory containing `manifest.json`, and
-restart Vite. A production build uses GeoAdmin unless that variable is supplied
-explicitly. Detailed format, fallback, validation, and deployment notes are kept
-in [Browser routing](docs/ROUTING.md).
+The local release retains raw and Brotli cells for complete verification. R2
+publication uploads only `.bin.br`, checksum-checks the remote objects, and
+publishes `manifest.json` last. To use a published release, set
+`VITE_ROUTING_DATA_BASE_URL` in `.env.local` and restart Vite.
+
+The complete import, generation, script inventory, migration, and publication
+workflow is documented in
+[Routing data pipeline](docs/ROUTING_DATA_PIPELINE.md).
 
 ## Basic usage
 
@@ -196,6 +201,8 @@ are documented in [Browser routing](docs/ROUTING.md).
 - [Browser routing](docs/ROUTING.md): bounded swissTLM3D loading, Worker
   protocol, cell and graph caches, hiking enrichment, snapping, A*, fallback
   semantics, tests, and validation scope.
+- [Routing data pipeline](docs/ROUTING_DATA_PIPELINE.md): external local-data
+  layout, GeoPackage import, binary generation, verification, and R2 publication.
 
 ## Regression tests
 
@@ -255,8 +262,9 @@ npm run build
 ```
 
 Keep user-facing text available in French, German, Italian, and English.
-Application-wide design belongs in `docs/ARCHITECTURE.md`; routing-specific
-design belongs in `docs/ROUTING.md`; `README.md` should stay concise and
+Application-wide design belongs in `docs/ARCHITECTURE.md`; runtime routing
+design belongs in `docs/ROUTING.md`; offline routing-data maintenance belongs in
+`docs/ROUTING_DATA_PIPELINE.md`; `README.md` should stay concise and
 user-oriented.
 
 ## Author

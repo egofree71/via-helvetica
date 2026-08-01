@@ -89,7 +89,7 @@ export interface RoutingWorkerErrorResponse {
 export type RoutingWorkerNotice =
   /** Optional hiking geometry was rejected; GeoAdmin continues roads-only. */
   | 'hiking-enrichment-unavailable'
-  /** Binary delivery or coverage failed; the complete session uses GeoAdmin. */
+  /** Binary delivery or integrity failed; the complete session uses GeoAdmin. */
   | 'precomputed-routing-unavailable';
 
 /** Session notice posted when the worker changes its provider strategy. */

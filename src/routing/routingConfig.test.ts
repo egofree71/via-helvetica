@@ -5,20 +5,29 @@
 import { describe, expect, it } from 'vitest';
 import {
   LOCAL_PRECOMPUTED_BINARY_ROUTING_BASE_URL,
+  LOCAL_ROUTING_DEVELOPMENT_CONFIG,
   normalizeRoutingDataBaseUrl,
   resolveRoutingConfiguration,
   shouldUseHikingEnrichment,
 } from './routingConfig';
 
 const LOCAL_CONFIG = {
-  dataSource: 'precomputed-binary-geneva' as const,
+  dataSource: 'precomputed-binary' as const,
   useHikingEnrichment: false,
 };
 
 describe('routing configuration', () => {
+  it('uses GeoAdmin by default when no remote release is configured', () => {
+    expect(resolveRoutingConfiguration(true, undefined)).toEqual({
+      dataSource: 'geo-admin',
+      usesRemoteBinaryData: false,
+    });
+    expect(LOCAL_ROUTING_DEVELOPMENT_CONFIG.dataSource).toBe('geo-admin');
+  });
+
   it('uses local binary cells in Vite development without an environment URL', () => {
     expect(resolveRoutingConfiguration(true, undefined, LOCAL_CONFIG)).toEqual({
-      dataSource: 'precomputed-binary-geneva',
+      dataSource: 'precomputed-binary',
       precomputedBinaryBaseUrl: LOCAL_PRECOMPUTED_BINARY_ROUTING_BASE_URL,
       usesRemoteBinaryData: false,
     });
@@ -39,18 +48,18 @@ describe('routing configuration', () => {
 
   it('activates a configured remote binary root in development and production', () => {
     const remote =
-      'https://routing-data.example.test/swisstlm3d-2026/format-v2/geneva/';
+      'https://routing-data.example.test/swisstlm3d-2026/format-v3/ch/';
 
     expect(resolveRoutingConfiguration(true, remote, LOCAL_CONFIG)).toEqual({
-      dataSource: 'precomputed-binary-geneva',
+      dataSource: 'precomputed-binary',
       precomputedBinaryBaseUrl:
-        'https://routing-data.example.test/swisstlm3d-2026/format-v2/geneva',
+        'https://routing-data.example.test/swisstlm3d-2026/format-v3/ch',
       usesRemoteBinaryData: true,
     });
     expect(resolveRoutingConfiguration(false, remote, LOCAL_CONFIG)).toEqual({
-      dataSource: 'precomputed-binary-geneva',
+      dataSource: 'precomputed-binary',
       precomputedBinaryBaseUrl:
-        'https://routing-data.example.test/swisstlm3d-2026/format-v2/geneva',
+        'https://routing-data.example.test/swisstlm3d-2026/format-v3/ch',
       usesRemoteBinaryData: true,
     });
   });

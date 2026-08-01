@@ -8,6 +8,7 @@ dist/
 .env
 .env.*
 !.env.example
+/routing-data.config.local.json
 
 # Logs
 *.log
@@ -28,8 +29,10 @@ Thumbs.db
 /en/
 /releases/
 
-# Generated local routing data and compiler workspaces
+# Generated local routing data and legacy compiler workspaces
+# National datasets belong outside the repository; these entries are safeguards.
 /.routing-work/
+/.routing-release/
 /public/routing-data/
 /.tmp-precomputed-binary-routing-compiler/
 

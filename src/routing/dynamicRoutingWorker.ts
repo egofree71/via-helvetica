@@ -12,7 +12,7 @@ import {
   shouldUseHikingEnrichment,
 } from './routingConfig';
 import {
-  createPrecomputedBinaryGenevaRoutingCellLoader,
+  createPrecomputedBinaryRoutingCellLoader,
 } from './precomputedBinaryRoutingData';
 import type {
   RoutingWorkerRequest,
@@ -47,11 +47,11 @@ const geoAdminEngine = new DynamicRoutingNetworkEngine({
     postNotice('hiking-enrichment-unavailable'),
 });
 const binaryEngine =
-  routingConfiguration.dataSource === 'precomputed-binary-geneva' &&
+  routingConfiguration.dataSource === 'precomputed-binary' &&
   routingConfiguration.precomputedBinaryBaseUrl
     ? new DynamicRoutingNetworkEngine({
         precomputedBinaryCellLoader:
-          createPrecomputedBinaryGenevaRoutingCellLoader(
+          createPrecomputedBinaryRoutingCellLoader(
             routingConfiguration.precomputedBinaryBaseUrl,
           ),
       })
@@ -73,7 +73,7 @@ if (binaryEngine && routingConfiguration.precomputedBinaryBaseUrl) {
     ? 'remote'
     : 'local';
   console.info(
-    `[Via Helvetica] Routing with ${location} precomputed binary Geneva graph cells from ${routingConfiguration.precomputedBinaryBaseUrl}.`,
+    `[Via Helvetica] Routing with ${location} precomputed binary Swiss graph cells from ${routingConfiguration.precomputedBinaryBaseUrl}.`,
   );
 } else {
   console.info('[Via Helvetica] Routing with GeoAdmin swissTLM3D cells.');

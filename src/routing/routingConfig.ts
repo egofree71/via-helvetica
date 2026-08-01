@@ -8,11 +8,11 @@
 /** Routing-data providers available to the dedicated Worker. */
 export type RoutingDataSource =
   | 'geo-admin'
-  | 'precomputed-binary-geneva';
+  | 'precomputed-binary';
 
-/** Local Vite path containing generated Geneva binary cells. */
+/** Legacy local Vite path used only for focused binary-provider experiments. */
 export const LOCAL_PRECOMPUTED_BINARY_ROUTING_BASE_URL =
-  '/routing-data/geneva-precomputed-binary';
+  '/routing-data/ch-precomputed-binary';
 
 /** Development-only routing choices used while Vite serves source files. */
 export interface LocalRoutingDevelopmentConfig {
@@ -36,11 +36,12 @@ export interface ResolvedRoutingConfiguration {
 }
 
 /**
- * Manually editable development configuration.
- * Restart the Vite development server after changing either value.
+ * Manually editable development fallback. GeoAdmin is the safe default because
+ * national binary releases now live outside the repository and are activated by
+ * `VITE_ROUTING_DATA_BASE_URL`. Restart Vite after changing either value.
  */
 export const LOCAL_ROUTING_DEVELOPMENT_CONFIG: LocalRoutingDevelopmentConfig = {
-  dataSource: 'precomputed-binary-geneva',
+  dataSource: 'geo-admin',
   useHikingEnrichment: true,
 };
 
@@ -118,7 +119,7 @@ export function resolveRoutingConfiguration(
 
   if (remoteBaseUrl) {
     return {
-      dataSource: 'precomputed-binary-geneva',
+      dataSource: 'precomputed-binary',
       precomputedBinaryBaseUrl: remoteBaseUrl,
       usesRemoteBinaryData: true,
     };
@@ -126,7 +127,7 @@ export function resolveRoutingConfiguration(
 
   const dataSource = isDevelopment ? localConfig.dataSource : 'geo-admin';
 
-  if (dataSource === 'precomputed-binary-geneva') {
+  if (dataSource === 'precomputed-binary') {
     return {
       dataSource,
       precomputedBinaryBaseUrl: LOCAL_PRECOMPUTED_BINARY_ROUTING_BASE_URL,

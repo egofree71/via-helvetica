@@ -1,12 +1,14 @@
 /**
  * Business context: keeps one routing provider coherent for a Worker session.
  * Precomputed cells are the preferred provider when configured, but any
- * persistent binary-data or coverage failure switches the complete session to
- * a separate GeoAdmin engine instead of mixing representations in one graph.
+ * persistent binary-data failure switches the complete session to a separate
+ * GeoAdmin engine instead of mixing representations in one graph. Expected
+ * geographic coverage misses use GeoAdmin only for the current operation.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import type { RoutedNetworkPath } from './networkRouter';
 import { RoutingAreaTooLargeError } from './dynamicRoutingProtocol';
+import { isRoutingCoverageError } from './routingCoverage';
 
 /** Minimal engine contract shared by binary and GeoAdmin implementations. */
 export interface RoutingProviderEngine {
@@ -48,8 +50,9 @@ function callerCancelled(signal: AbortSignal): boolean {
  * cannot leak across providers.
  *
  * A failing binary operation is retried by the binary loader before reaching
- * this class. Remaining failures activate GeoAdmin once, dispose binary caches,
- * and repeat the complete snap or route operation on the fallback engine.
+ * this class. Coverage misses use GeoAdmin for one operation without changing
+ * provider ownership. Remaining failures activate GeoAdmin once, dispose binary
+ * caches, and repeat the complete operation on the fallback engine.
  */
 export class DynamicRoutingProviderSession {
   /** Preferred engine until the first permanent provider failure. */
@@ -139,6 +142,13 @@ export class DynamicRoutingProviderSession {
 
       if (error instanceof RoutingAreaTooLargeError) {
         throw error;
+      }
+
+      // Coverage misses are expected near national borders. GeoAdmin may still
+      // resolve the current operation, but the binary engine remains preferred
+      // for subsequent in-region work in the same Worker session.
+      if (isRoutingCoverageError(error)) {
+        return operation(this.fallbackEngine);
       }
 
       this.primaryEngine = null;

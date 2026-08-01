@@ -7,9 +7,7 @@
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import type { Extent } from 'ol/extent.js';
-import {
-  MIN_ROUTING_COST_FACTOR,
-} from './precomputedRoutingGraph';
+import { MIN_ROUTING_COST_FACTOR } from './precomputedRoutingGraph';
 import {
   PRECOMPUTED_BINARY_COST_SCALE,
   PRECOMPUTED_BINARY_NO_ELEVATION,
@@ -31,8 +29,12 @@ import {
   shouldReplaceSnapCandidate,
 } from './routingConstants';
 
-/** Maximum spatial buckets one source edge may occupy before data is rejected. */
-const MAX_SPATIAL_BUCKETS_PER_EDGE = 64;
+/**
+ * Maximum 250 m buckets one edge may actually cross before data is rejected.
+ * This still permits unusually long swissTLM3D segments while preventing a
+ * corrupt endpoint from growing the snapping index across a national extent.
+ */
+const MAX_SPATIAL_BUCKETS_PER_EDGE = 512;
 /** Approximate retained overhead per spatial-index bucket in bytes. */
 const ESTIMATED_SPATIAL_BUCKET_OVERHEAD_BYTES = 64;
 
@@ -137,6 +139,117 @@ function spatialBucketKey(column: number, row: number): number {
   return column * 100_000 + row;
 }
 
+/** Adds one edge to one mutable spatial-index bucket. */
+function addEdgeToSpatialBucket(
+  buckets: Map<number, number[]>,
+  column: number,
+  row: number,
+  edgeId: number,
+): void {
+  const key = spatialBucketKey(column, row);
+  const bucket = buckets.get(key);
+
+  if (bucket) {
+    bucket.push(edgeId);
+  } else {
+    buckets.set(key, [edgeId]);
+  }
+}
+
+/**
+ * Indexes an edge only in grid buckets touched by its line segment.
+ *
+ * A bounding-box fill grows with width multiplied by height and can therefore
+ * reject a valid long diagonal or retain many buckets the edge never reaches.
+ * Grid traversal keeps both validation and memory proportional to edge length.
+ * Corner crossings include both adjacent buckets so future snap-distance
+ * changes cannot create a gap exactly on a grid boundary.
+ */
+function indexEdgeAlongSpatialGrid(
+  buckets: Map<number, number[]>,
+  edgeId: number,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+): void {
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+  const stepColumn = Math.sign(deltaX);
+  const stepRow = Math.sign(deltaY);
+  let column = Math.floor(startX / ROUTING_SPATIAL_GRID_SIZE_METRES);
+  let row = Math.floor(startY / ROUTING_SPATIAL_GRID_SIZE_METRES);
+  const endColumn = Math.floor(endX / ROUTING_SPATIAL_GRID_SIZE_METRES);
+  const endRow = Math.floor(endY / ROUTING_SPATIAL_GRID_SIZE_METRES);
+  const columnDistance =
+    stepColumn === 0
+      ? Number.POSITIVE_INFINITY
+      : ROUTING_SPATIAL_GRID_SIZE_METRES / Math.abs(deltaX);
+  const rowDistance =
+    stepRow === 0
+      ? Number.POSITIVE_INFINITY
+      : ROUTING_SPATIAL_GRID_SIZE_METRES / Math.abs(deltaY);
+  const firstColumnBoundary =
+    (stepColumn > 0 ? column + 1 : column) *
+    ROUTING_SPATIAL_GRID_SIZE_METRES;
+  const firstRowBoundary =
+    (stepRow > 0 ? row + 1 : row) * ROUTING_SPATIAL_GRID_SIZE_METRES;
+  let nextColumnCrossing =
+    stepColumn === 0
+      ? Number.POSITIVE_INFINITY
+      : (firstColumnBoundary - startX) / deltaX;
+  let nextRowCrossing =
+    stepRow === 0
+      ? Number.POSITIVE_INFINITY
+      : (firstRowBoundary - startY) / deltaY;
+  let indexedBucketCount = 0;
+
+  const indexBucket = (bucketColumn: number, bucketRow: number): void => {
+    indexedBucketCount += 1;
+
+    // A corrupt endpoint can otherwise expand one edge across thousands of
+    // buckets and exhaust the Worker heap before routing even starts.
+    if (indexedBucketCount > MAX_SPATIAL_BUCKETS_PER_EDGE) {
+      throw new Error(
+        'Precomputed binary graph edge spans an implausible spatial extent.',
+      );
+    }
+
+    addEdgeToSpatialBucket(buckets, bucketColumn, bucketRow, edgeId);
+  };
+
+  indexBucket(column, row);
+
+  while (column !== endColumn || row !== endRow) {
+    if (nextColumnCrossing < nextRowCrossing) {
+      column += stepColumn;
+      nextColumnCrossing += columnDistance;
+      indexBucket(column, row);
+      continue;
+    }
+
+    if (nextRowCrossing < nextColumnCrossing) {
+      row += stepRow;
+      nextRowCrossing += rowDistance;
+      indexBucket(column, row);
+      continue;
+    }
+
+    const nextColumn = column + stepColumn;
+    const nextRow = row + stepRow;
+
+    // A line passing exactly through a corner touches both side buckets before
+    // entering the diagonal bucket. Retaining them makes the index a supercover.
+    indexBucket(nextColumn, row);
+    indexBucket(column, nextRow);
+    column = nextColumn;
+    row = nextRow;
+    nextColumnCrossing += columnDistance;
+    nextRowCrossing += rowDistance;
+    indexBucket(column, row);
+  }
+}
+
 /** Horizontal squared distance in square metres. */
 function coordinateDistanceSquared(
   firstX: number,
@@ -167,6 +280,130 @@ function appendCoordinate(
   ) {
     coordinates.push(coordinate);
   }
+}
+
+/**
+ * K-way merge cursor for cell columns already sorted by global ID. The heap
+ * stores only cell indexes, so national corridor assembly avoids one
+ * JavaScript Map entry or short-lived object per node and edge reference.
+ */
+class SortedCellIdCursorHeap {
+  private readonly entries: number[] = [];
+  private readonly positions: Uint32Array;
+
+  constructor(private readonly columns: Uint32Array[]) {
+    this.positions = new Uint32Array(columns.length);
+    for (let cellIndex = 0; cellIndex < columns.length; cellIndex += 1) {
+      if (columns[cellIndex].length > 0) {
+        this.push(cellIndex);
+      }
+    }
+  }
+
+  get size(): number {
+    return this.entries.length;
+  }
+
+  /** Returns the current record index before the caller advances this cell. */
+  currentRecordIndex(cellIndex: number): number {
+    return this.positions[cellIndex];
+  }
+
+  /** Removes the cell whose current record has the lowest global ID. */
+  pop(): number | undefined {
+    if (this.entries.length === 0) {
+      return undefined;
+    }
+
+    const first = this.entries[0];
+    const last = this.entries.pop();
+    if (last === undefined || this.entries.length === 0) {
+      return first;
+    }
+
+    let index = 0;
+    while (true) {
+      const leftIndex = index * 2 + 1;
+      if (leftIndex >= this.entries.length) {
+        break;
+      }
+
+      const rightIndex = leftIndex + 1;
+      let childIndex = leftIndex;
+      if (
+        rightIndex < this.entries.length &&
+        this.precedes(this.entries[rightIndex], this.entries[leftIndex])
+      ) {
+        childIndex = rightIndex;
+      }
+
+      if (!this.precedes(this.entries[childIndex], last)) {
+        break;
+      }
+
+      this.entries[index] = this.entries[childIndex];
+      index = childIndex;
+    }
+
+    this.entries[index] = last;
+    return first;
+  }
+
+  /** Advances one cell and re-adds it while records remain. */
+  advance(cellIndex: number): void {
+    this.positions[cellIndex] += 1;
+    if (this.positions[cellIndex] < this.columns[cellIndex].length) {
+      this.push(cellIndex);
+    }
+  }
+
+  private push(cellIndex: number): void {
+    let index = this.entries.length;
+    while (index > 0) {
+      const parentIndex = Math.floor((index - 1) / 2);
+      const parent = this.entries[parentIndex];
+      if (!this.precedes(cellIndex, parent)) {
+        break;
+      }
+      this.entries[index] = parent;
+      index = parentIndex;
+    }
+    this.entries[index] = cellIndex;
+  }
+
+  private precedes(leftCellIndex: number, rightCellIndex: number): boolean {
+    const leftId =
+      this.columns[leftCellIndex][this.positions[leftCellIndex]];
+    const rightId =
+      this.columns[rightCellIndex][this.positions[rightCellIndex]];
+    return leftId < rightId ||
+      (leftId === rightId && leftCellIndex < rightCellIndex);
+  }
+}
+
+/** Finds one global ID in the compact sorted node-ID prefix. */
+function findSortedGlobalId(
+  ids: Uint32Array,
+  count: number,
+  globalId: number,
+): number {
+  let low = 0;
+  let high = count - 1;
+
+  while (low <= high) {
+    const middle = (low + high) >>> 1;
+    const candidate = ids[middle];
+    if (candidate === globalId) {
+      return middle;
+    }
+    if (candidate < globalId) {
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  return -1;
 }
 
 /**
@@ -275,138 +512,133 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
       (total, cell) => total + cell.nodeIds.length,
       0,
     );
-    // A Geneva corridor covers a meaningful fraction of the experimental ID
-    // range, so a dense lookup is faster. A national dataset would make that
-    // range sparse for one corridor; the Map fallback avoids allocating tens
-    // of millions of unused entries on memory-constrained devices.
-    const useDenseNodeIndex = globalNodeCount <= maximumNodeReferences * 4;
-    const denseNodeIndex = useDenseNodeIndex
-      ? new Int32Array(globalNodeCount)
-      : null;
-    denseNodeIndex?.fill(-1);
-    const sparseNodeIndex = useDenseNodeIndex
-      ? null
-      : new Map<number, number>();
-    const getLocalNodeId = (globalId: number): number =>
-      denseNodeIndex
-        ? denseNodeIndex[globalId]
-        : (sparseNodeIndex?.get(globalId) ?? -1);
-    const setLocalNodeId = (globalId: number, localId: number): void => {
-      if (denseNodeIndex) {
-        denseNodeIndex[globalId] = localId;
-      } else {
-        sparseNodeIndex?.set(globalId, localId);
-      }
-    };
+    const temporaryGlobalNodeIds = new Uint32Array(maximumNodeReferences);
     const temporaryNodeX = new Int32Array(maximumNodeReferences);
     const temporaryNodeY = new Int32Array(maximumNodeReferences);
     const temporaryNodeZ = new Int32Array(maximumNodeReferences);
+    const nodeHeap = new SortedCellIdCursorHeap(
+      cells.map((cell) => cell.nodeIds),
+    );
     let nodeCount = 0;
+    let previousGlobalNodeId = -1;
     let sourceRoadFeatures = 0;
 
     for (const cell of cells) {
       sourceRoadFeatures += cell.sourceRoadFeatures;
+    }
 
-      for (let index = 0; index < cell.nodeIds.length; index += 1) {
-        const globalId = cell.nodeIds[index];
-        const existingLocalId = getLocalNodeId(globalId);
+    while (nodeHeap.size > 0) {
+      const cellIndex = nodeHeap.pop();
+      if (cellIndex === undefined) {
+        break;
+      }
+      const cell = cells[cellIndex];
+      const recordIndex = nodeHeap.currentRecordIndex(cellIndex);
+      const globalId = cell.nodeIds[recordIndex];
 
-        if (existingLocalId >= 0) {
-          if (
-            temporaryNodeX[existingLocalId] !== cell.nodeX[index] ||
-            temporaryNodeY[existingLocalId] !== cell.nodeY[index] ||
-            temporaryNodeZ[existingLocalId] !== cell.nodeZ[index]
-          ) {
-            throw new Error(
-              'Precomputed binary cells disagree on a global node coordinate.',
-            );
-          }
-          continue;
+      if (globalId >= globalNodeCount || globalId < previousGlobalNodeId) {
+        throw new Error(
+          'Precomputed binary graph contains invalid or unsorted node IDs.',
+        );
+      }
+
+      if (globalId === previousGlobalNodeId) {
+        const existingLocalId = nodeCount - 1;
+        if (
+          temporaryNodeX[existingLocalId] !== cell.nodeX[recordIndex] ||
+          temporaryNodeY[existingLocalId] !== cell.nodeY[recordIndex] ||
+          temporaryNodeZ[existingLocalId] !== cell.nodeZ[recordIndex]
+        ) {
+          throw new Error(
+            'Precomputed binary cells disagree on a global node coordinate.',
+          );
         }
-
-        setLocalNodeId(globalId, nodeCount);
-        temporaryNodeX[nodeCount] = cell.nodeX[index];
-        temporaryNodeY[nodeCount] = cell.nodeY[index];
-        temporaryNodeZ[nodeCount] = cell.nodeZ[index];
+      } else {
+        temporaryGlobalNodeIds[nodeCount] = globalId;
+        temporaryNodeX[nodeCount] = cell.nodeX[recordIndex];
+        temporaryNodeY[nodeCount] = cell.nodeY[recordIndex];
+        temporaryNodeZ[nodeCount] = cell.nodeZ[recordIndex];
+        previousGlobalNodeId = globalId;
         nodeCount += 1;
       }
+
+      nodeHeap.advance(cellIndex);
     }
 
     const maximumEdgeReferences = cells.reduce(
       (total, cell) => total + cell.edgeIds.length,
       0,
     );
-    const useDenseEdgeIndex = globalEdgeCount <= maximumEdgeReferences * 4;
-    const denseEdgeIndex = useDenseEdgeIndex
-      ? new Int32Array(globalEdgeCount)
-      : null;
-    denseEdgeIndex?.fill(-1);
-    const sparseEdgeIndex = useDenseEdgeIndex
-      ? null
-      : new Map<number, number>();
-    const getLocalEdgeId = (globalId: number): number =>
-      denseEdgeIndex
-        ? denseEdgeIndex[globalId]
-        : (sparseEdgeIndex?.get(globalId) ?? -1);
-    const setLocalEdgeId = (globalId: number, localId: number): void => {
-      if (denseEdgeIndex) {
-        denseEdgeIndex[globalId] = localId;
-      } else {
-        sparseEdgeIndex?.set(globalId, localId);
-      }
-    };
     const temporarySegmentStartNodes = new Uint32Array(maximumEdgeReferences);
     const temporarySegmentEndNodes = new Uint32Array(maximumEdgeReferences);
     const temporarySegmentCosts = new Uint32Array(maximumEdgeReferences);
     const temporarySegmentFlags = new Uint8Array(maximumEdgeReferences);
+    const edgeHeap = new SortedCellIdCursorHeap(
+      cells.map((cell) => cell.edgeIds),
+    );
     let edgeCount = 0;
+    let previousGlobalEdgeId = -1;
 
-    for (const cell of cells) {
-      for (let index = 0; index < cell.edgeIds.length; index += 1) {
-        const globalEdgeId = cell.edgeIds[index];
-        const startNodeId = getLocalNodeId(cell.edgeStartNodeIds[index]);
-        const endNodeId = getLocalNodeId(cell.edgeEndNodeIds[index]);
-        const cost = cell.edgeCosts[index];
-        const flags = cell.edgeFlags[index];
+    while (edgeHeap.size > 0) {
+      const cellIndex = edgeHeap.pop();
+      if (cellIndex === undefined) {
+        break;
+      }
+      const cell = cells[cellIndex];
+      const recordIndex = edgeHeap.currentRecordIndex(cellIndex);
+      const globalEdgeId = cell.edgeIds[recordIndex];
+      const startNodeId = findSortedGlobalId(
+        temporaryGlobalNodeIds,
+        nodeCount,
+        cell.edgeStartNodeIds[recordIndex],
+      );
+      const endNodeId = findSortedGlobalId(
+        temporaryGlobalNodeIds,
+        nodeCount,
+        cell.edgeEndNodeIds[recordIndex],
+      );
+      const cost = cell.edgeCosts[recordIndex];
+      const flags = cell.edgeFlags[recordIndex];
+
+      if (
+        globalEdgeId >= globalEdgeCount ||
+        globalEdgeId < previousGlobalEdgeId ||
+        startNodeId < 0 ||
+        endNodeId < 0 ||
+        startNodeId === endNodeId ||
+        cost === 0 ||
+        flags > 1
+      ) {
+        throw new Error('Precomputed binary graph contains an invalid edge.');
+      }
+
+      if (globalEdgeId === previousGlobalEdgeId) {
+        const existingLocalEdge = edgeCount - 1;
+        const existingStart = temporarySegmentStartNodes[existingLocalEdge];
+        const existingEnd = temporarySegmentEndNodes[existingLocalEdge];
+        const sameEndpoints =
+          (existingStart === startNodeId && existingEnd === endNodeId) ||
+          (existingStart === endNodeId && existingEnd === startNodeId);
 
         if (
-          startNodeId < 0 ||
-          endNodeId < 0 ||
-          startNodeId === endNodeId ||
-          cost === 0 ||
-          flags > 1
+          !sameEndpoints ||
+          temporarySegmentCosts[existingLocalEdge] !== cost ||
+          temporarySegmentFlags[existingLocalEdge] !== flags
         ) {
-          throw new Error('Precomputed binary graph contains an invalid edge.');
+          throw new Error(
+            'Precomputed binary cells disagree on a global edge.',
+          );
         }
-
-        const existingLocalEdge = getLocalEdgeId(globalEdgeId);
-
-        if (existingLocalEdge >= 0) {
-          const existingStart = temporarySegmentStartNodes[existingLocalEdge];
-          const existingEnd = temporarySegmentEndNodes[existingLocalEdge];
-          const sameEndpoints =
-            (existingStart === startNodeId && existingEnd === endNodeId) ||
-            (existingStart === endNodeId && existingEnd === startNodeId);
-
-          if (
-            !sameEndpoints ||
-            temporarySegmentCosts[existingLocalEdge] !== cost ||
-            temporarySegmentFlags[existingLocalEdge] !== flags
-          ) {
-            throw new Error(
-              'Precomputed binary cells disagree on a global edge.',
-            );
-          }
-          continue;
-        }
-
-        setLocalEdgeId(globalEdgeId, edgeCount);
+      } else {
         temporarySegmentStartNodes[edgeCount] = startNodeId;
         temporarySegmentEndNodes[edgeCount] = endNodeId;
         temporarySegmentCosts[edgeCount] = cost;
         temporarySegmentFlags[edgeCount] = flags;
+        previousGlobalEdgeId = globalEdgeId;
         edgeCount += 1;
       }
+
+      edgeHeap.advance(cellIndex);
     }
 
     if (edgeCount === 0) {
@@ -456,41 +688,15 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
       const startY = nodeY[startNodeId] / PRECOMPUTED_BINARY_XY_SCALE;
       const endX = nodeX[endNodeId] / PRECOMPUTED_BINARY_XY_SCALE;
       const endY = nodeY[endNodeId] / PRECOMPUTED_BINARY_XY_SCALE;
-      const minColumn = Math.floor(
-        Math.min(startX, endX) / ROUTING_SPATIAL_GRID_SIZE_METRES,
-      );
-      const maxColumn = Math.floor(
-        Math.max(startX, endX) / ROUTING_SPATIAL_GRID_SIZE_METRES,
-      );
-      const minRow = Math.floor(
-        Math.min(startY, endY) / ROUTING_SPATIAL_GRID_SIZE_METRES,
-      );
-      const maxRow = Math.floor(
-        Math.max(startY, endY) / ROUTING_SPATIAL_GRID_SIZE_METRES,
-      );
-      const bucketCount =
-        (maxColumn - minColumn + 1) * (maxRow - minRow + 1);
 
-      // A corrupt endpoint can otherwise expand one edge across millions of
-      // buckets and exhaust the Worker heap before routing even starts.
-      if (bucketCount > MAX_SPATIAL_BUCKETS_PER_EDGE) {
-        throw new Error(
-          'Precomputed binary graph edge spans an implausible spatial extent.',
-        );
-      }
-
-      for (let column = minColumn; column <= maxColumn; column += 1) {
-        for (let row = minRow; row <= maxRow; row += 1) {
-          const key = spatialBucketKey(column, row);
-          const bucket = mutableBuckets.get(key);
-
-          if (bucket) {
-            bucket.push(edgeId);
-          } else {
-            mutableBuckets.set(key, [edgeId]);
-          }
-        }
-      }
+      indexEdgeAlongSpatialGrid(
+        mutableBuckets,
+        edgeId,
+        startX,
+        startY,
+        endX,
+        endY,
+      );
     }
 
     const segmentBuckets = new Map<number, Uint32Array>();

@@ -1,7 +1,7 @@
 /**
  * Business context: compiles normalized swissTLM3D roads into a portable
  * pedestrian graph before browser routing begins. The same pure compiler is
- * used by `RoutingNetwork.fromSwissTlm()` and by the offline Geneva generator,
+ * used by `RoutingNetwork.fromSwissTlm()` and by the offline binary graph generator,
  * so walkability, hiking preference, 3D node identity, and duplicate-edge
  * policy cannot drift between live and precomputed data sources.
  */
@@ -77,12 +77,12 @@ export interface PrecomputedRoutingGraphData {
  * Horizontal precision in metres used to merge near-identical vertices.
  * Lowering it preserves more source detail but increases graph size.
  */
-const NODE_HORIZONTAL_PRECISION_METRES = 0.5;
+export const NODE_HORIZONTAL_PRECISION_METRES = 0.5;
 /**
  * Vertical precision in metres included in node identity. It keeps a bridge or
  * tunnel disconnected from a road that only crosses it in plan view.
  */
-const NODE_VERTICAL_PRECISION_METRES = 2;
+export const NODE_VERTICAL_PRECISION_METRES = 2;
 /**
  * Maximum road-to-hiking distance in metres for geometric enrichment when the
  * road source does not already carry a hiking classification.

@@ -7,16 +7,22 @@ import {
   PRECOMPUTED_BINARY_CHECKSUM,
   PRECOMPUTED_BINARY_COORDINATE_MARGIN_METRES,
   PRECOMPUTED_BINARY_COST_SCALE,
+  PRECOMPUTED_BINARY_DATASET_BUILD_ID_OFFSET,
   PRECOMPUTED_BINARY_FORMAT,
   PRECOMPUTED_BINARY_FORMAT_VERSION,
+  PRECOMPUTED_BINARY_GENERATOR_VERSION_OFFSET,
   PRECOMPUTED_BINARY_HEADER_BYTES,
   PRECOMPUTED_BINARY_MAGIC,
   PRECOMPUTED_BINARY_PAYLOAD_CRC32_OFFSET,
   PRECOMPUTED_BINARY_XY_SCALE,
   PRECOMPUTED_BINARY_Z_SCALE,
+  precomputedBinaryBuildIdFromHex,
   precomputedBinaryCrc32,
   precomputedBinaryLayout,
 } from './precomputedBinaryRoutingFormat';
+
+const GENERATOR_VERSION = 4;
+const DATASET_BUILD_ID = '11'.repeat(32);
 
 const MANIFEST = {
   version: PRECOMPUTED_BINARY_FORMAT_VERSION,
@@ -25,7 +31,7 @@ const MANIFEST = {
   cellSizeMetres: 2_400,
   extent: [2_476_800, 1_101_600, 2_522_400, 1_142_400],
   cellPathTemplate: 'cells/{column}_{row}.bin',
-  precompressedCellPathTemplate: 'cells/{column}_{row}.bin.br',
+  nonEmptyCellCount: 1,
   nonEmptyCellKeys: ['1041:465'],
   headerBytes: PRECOMPUTED_BINARY_HEADER_BYTES,
   coordinateScalePerMetre: PRECOMPUTED_BINARY_XY_SCALE,
@@ -35,6 +41,8 @@ const MANIFEST = {
   coordinateValidationMarginMetres:
     PRECOMPUTED_BINARY_COORDINATE_MARGIN_METRES,
   costModelVersion: 1,
+  generatorVersion: GENERATOR_VERSION,
+  datasetBuildId: DATASET_BUILD_ID,
   globalNodeCount: 3,
   globalEdgeCount: 2,
 };
@@ -71,6 +79,15 @@ function binaryCellBuffer(): ArrayBuffer {
   view.setUint32(52, layout.byteLength, true);
   view.setUint32(56, 3, true);
   view.setUint32(60, 2, true);
+  view.setUint32(
+    PRECOMPUTED_BINARY_GENERATOR_VERSION_OFFSET,
+    GENERATOR_VERSION,
+    true,
+  );
+  bytes.set(
+    precomputedBinaryBuildIdFromHex(DATASET_BUILD_ID),
+    PRECOMPUTED_BINARY_DATASET_BUILD_ID_OFFSET,
+  );
 
   new Uint32Array(buffer, layout.nodeIdsOffset, 2).set([0, 1]);
   new Int32Array(buffer, layout.nodeXOffset, 2).set([
@@ -111,19 +128,7 @@ function binaryCellResponse(buffer = binaryCellBuffer()): Response {
   });
 }
 
-/** Pass-through stream used to exercise explicit `.bin.br` retrieval. */
-class PassThroughDecompressionStream {
-  readonly readable: ReadableStream<Uint8Array>;
-  readonly writable: WritableStream<Uint8Array>;
-
-  constructor() {
-    const stream = new TransformStream<Uint8Array, Uint8Array>();
-    this.readable = stream.readable;
-    this.writable = stream.writable;
-  }
-}
-
-describe('precomputed binary Geneva routing cells', () => {
+describe('precomputed binary routing cells', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.unstubAllGlobals();
@@ -134,17 +139,16 @@ describe('precomputed binary Geneva routing cells', () => {
   });
 
   it('returns zero-copy typed views for a valid binary cell', async () => {
-    vi.stubGlobal('DecompressionStream', undefined);
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse(MANIFEST))
       .mockResolvedValueOnce(binaryCellResponse());
     vi.stubGlobal('fetch', fetchMock);
-    const { fetchPrecomputedBinaryGenevaRoutingCell } = await import(
+    const { fetchPrecomputedBinaryRoutingCell } = await import(
       './precomputedBinaryRoutingData'
     );
 
-    const cell = await fetchPrecomputedBinaryGenevaRoutingCell(
+    const cell = await fetchPrecomputedBinaryRoutingCell(
       '1041:465',
       new AbortController().signal,
     );
@@ -160,23 +164,44 @@ describe('precomputed binary Geneva routing cells', () => {
     expect(fetchMock.mock.calls[1]?.[0]).toContain('/cells/1041_465.bin');
   });
 
-  it('uses the precompressed cell when native Brotli streams are available', async () => {
-    vi.stubGlobal(
-      'DecompressionStream',
-      PassThroughDecompressionStream as unknown as typeof DecompressionStream,
+  it('rejects a published .bin.br path without HTTP Brotli metadata', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...MANIFEST,
+        cellPathTemplate: 'cells/{column}_{row}.bin.br',
+      }),
     );
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse(MANIFEST))
-      // The pass-through test stream treats the valid binary fixture as if it
-      // were the decompressed output of the installed `.bin.br` file.
-      .mockResolvedValueOnce(binaryCellResponse());
     vi.stubGlobal('fetch', fetchMock);
-    const { fetchPrecomputedBinaryGenevaRoutingCell } = await import(
+    const { fetchPrecomputedBinaryRoutingCell } = await import(
       './precomputedBinaryRoutingData'
     );
 
-    await fetchPrecomputedBinaryGenevaRoutingCell(
+    await expect(
+      fetchPrecomputedBinaryRoutingCell(
+        '1041:465',
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('manifest is invalid or incompatible');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts transport-decoded bytes from the published .bin.br path', async () => {
+    const publishedManifest = {
+      ...MANIFEST,
+      cellPathTemplate: 'cells/{column}_{row}.bin.br',
+      deliveryEncoding: 'br',
+    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(publishedManifest))
+      // Fetch transparently removes HTTP Content-Encoding before arrayBuffer().
+      .mockResolvedValueOnce(binaryCellResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    const { fetchPrecomputedBinaryRoutingCell } = await import(
+      './precomputedBinaryRoutingData'
+    );
+
+    await fetchPrecomputedBinaryRoutingCell(
       '1041:465',
       new AbortController().signal,
     );
@@ -190,11 +215,11 @@ describe('precomputed binary Geneva routing cells', () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse(MANIFEST));
     vi.stubGlobal('fetch', fetchMock);
-    const { fetchPrecomputedBinaryGenevaRoutingCell } = await import(
+    const { fetchPrecomputedBinaryRoutingCell } = await import(
       './precomputedBinaryRoutingData'
     );
 
-    const cell = await fetchPrecomputedBinaryGenevaRoutingCell(
+    const cell = await fetchPrecomputedBinaryRoutingCell(
       '1032:459',
       new AbortController().signal,
     );
@@ -206,18 +231,18 @@ describe('precomputed binary Geneva routing cells', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects cells outside the declared experiment before a cell request', async () => {
+  it('rejects cells outside the declared dataset before a cell request', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse(MANIFEST));
     vi.stubGlobal('fetch', fetchMock);
     const {
-      fetchPrecomputedBinaryGenevaRoutingCell,
+      fetchPrecomputedBinaryRoutingCell,
       PrecomputedBinaryRoutingCoverageError,
     } = await import('./precomputedBinaryRoutingData');
 
     await expect(
-      fetchPrecomputedBinaryGenevaRoutingCell(
+      fetchPrecomputedBinaryRoutingCell(
         '1000:400',
         new AbortController().signal,
       ),
@@ -225,34 +250,31 @@ describe('precomputed binary Geneva routing cells', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-
   it('loads a manifest and cell from an explicit remote dataset root', async () => {
-    vi.stubGlobal('DecompressionStream', undefined);
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse(MANIFEST))
       .mockResolvedValueOnce(binaryCellResponse());
     vi.stubGlobal('fetch', fetchMock);
-    const { createPrecomputedBinaryGenevaRoutingCellLoader } = await import(
+    const { createPrecomputedBinaryRoutingCellLoader } = await import(
       './precomputedBinaryRoutingData'
     );
-    const loader = createPrecomputedBinaryGenevaRoutingCellLoader(
-      'https://routing-data.example.test/swisstlm3d-2026/format-v2/geneva/',
+    const loader = createPrecomputedBinaryRoutingCellLoader(
+      'https://routing-data.example.test/swisstlm3d-2026/format-v3/ch/',
     );
 
     await loader('1041:465', new AbortController().signal);
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      'https://routing-data.example.test/swisstlm3d-2026/format-v2/geneva/manifest.json',
+      'https://routing-data.example.test/swisstlm3d-2026/format-v3/ch/manifest.json',
     );
     expect(fetchMock.mock.calls[1]?.[0]).toBe(
-      'https://routing-data.example.test/swisstlm3d-2026/format-v2/geneva/cells/1041_465.bin',
+      'https://routing-data.example.test/swisstlm3d-2026/format-v3/ch/cells/1041_465.bin',
     );
   });
 
   it('retries one transient manifest failure before returning the cell', async () => {
     vi.useFakeTimers();
-    vi.stubGlobal('DecompressionStream', undefined);
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -260,11 +282,11 @@ describe('precomputed binary Geneva routing cells', () => {
       .mockResolvedValueOnce(jsonResponse(MANIFEST))
       .mockResolvedValueOnce(binaryCellResponse());
     vi.stubGlobal('fetch', fetchMock);
-    const { createPrecomputedBinaryGenevaRoutingCellLoader } = await import(
+    const { createPrecomputedBinaryRoutingCellLoader } = await import(
       './precomputedBinaryRoutingData'
     );
-    const loader = createPrecomputedBinaryGenevaRoutingCellLoader(
-      'https://routing-data.example.test/geneva',
+    const loader = createPrecomputedBinaryRoutingCellLoader(
+      'https://routing-data.example.test/ch',
     );
     const result = loader('1041:465', new AbortController().signal);
 
@@ -287,6 +309,23 @@ describe('precomputed binary Geneva routing cells', () => {
     ).toThrow('invalid or incompatible');
   });
 
+  it('accepts an unclipped source feature elsewhere in the dataset extent', async () => {
+    const buffer = binaryCellBuffer();
+    const layout = precomputedBinaryLayout(2, 1);
+    new Int32Array(buffer, layout.nodeXOffset, 2).set([
+      252_000_000,
+      252_010_000,
+    ]);
+    refreshChecksum(buffer);
+    const { readPrecomputedBinaryRoutingCell } = await import(
+      './precomputedBinaryRoutingData'
+    );
+
+    expect(() =>
+      readPrecomputedBinaryRoutingCell(buffer, '1041:465', MANIFEST.extent),
+    ).not.toThrow();
+  });
+
   it('rejects a checksummed coordinate far outside the generated region', async () => {
     const buffer = binaryCellBuffer();
     const layout = precomputedBinaryLayout(2, 1);
@@ -299,6 +338,63 @@ describe('precomputed binary Geneva routing cells', () => {
     expect(() =>
       readPrecomputedBinaryRoutingCell(buffer, '1041:465', MANIFEST.extent),
     ).toThrow('invalid coordinate');
+  });
+
+  it('rejects a cell from another dataset build', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ ...MANIFEST, datasetBuildId: '22'.repeat(32) }),
+      )
+      .mockResolvedValueOnce(binaryCellResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    const { fetchPrecomputedBinaryRoutingCell } = await import(
+      './precomputedBinaryRoutingData'
+    );
+
+    await expect(
+      fetchPrecomputedBinaryRoutingCell(
+        '1041:465',
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('invalid or incompatible');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects unsorted global IDs required by the v3 format', async () => {
+    const buffer = binaryCellBuffer();
+    const layout = precomputedBinaryLayout(2, 1);
+    new Uint32Array(buffer, layout.nodeIdsOffset, 2).set([1, 0]);
+    refreshChecksum(buffer);
+    const { readPrecomputedBinaryRoutingCell } = await import(
+      './precomputedBinaryRoutingData'
+    );
+
+    expect(() =>
+      readPrecomputedBinaryRoutingCell(buffer, '1041:465'),
+    ).toThrow('unsorted node IDs');
+  });
+
+  it('accepts a minimum-cost edge after shared-node canonicalization', async () => {
+    const buffer = binaryCellBuffer();
+    const layout = precomputedBinaryLayout(2, 1);
+    new Int32Array(buffer, layout.nodeXOffset, 2).set([
+      249_900_000,
+      249_900_081,
+    ]);
+    new Int32Array(buffer, layout.nodeYOffset, 2).set([
+      111_700_000,
+      111_699_941,
+    ]);
+    new Uint32Array(buffer, layout.edgeCostOffset, 1)[0] = 4_499;
+    refreshChecksum(buffer);
+    const { readPrecomputedBinaryRoutingCell } = await import(
+      './precomputedBinaryRoutingData'
+    );
+
+    expect(() =>
+      readPrecomputedBinaryRoutingCell(buffer, '1041:465', MANIFEST.extent),
+    ).not.toThrow();
   });
 
   it('rejects an implausible checksummed edge cost', async () => {
