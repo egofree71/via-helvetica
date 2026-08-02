@@ -80,7 +80,7 @@ describe('ReleaseNotesDialog', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders four compact French highlights and the localized history link', async () => {
+  it('renders two compact French highlights and the localized history link', async () => {
     const onClose = vi.fn();
 
     await act(async () => {
@@ -98,10 +98,10 @@ describe('ReleaseNotesDialog', () => {
 
     expect(
       container.querySelectorAll('.release-notes-list > li'),
-    ).toHaveLength(4);
-    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.1.0');
-    expect(container.textContent).toContain('Recherche par coordonnées :');
-    expect(container.textContent).not.toContain('Améliorations générales :');
+    ).toHaveLength(2);
+    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.2.0');
+    expect(container.textContent).toContain('Création d’itinéraires plus rapide :');
+    expect(container.textContent).not.toContain('Informations d’utilisation clarifiées :');
     expect(document.activeElement).toBe(
       container.querySelector('#release-notes-dialog-title'),
     );

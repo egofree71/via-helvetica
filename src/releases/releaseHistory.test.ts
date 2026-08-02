@@ -33,13 +33,11 @@ function createStorage() {
 describe('release history', () => {
   it('provides the same current release structure in every language', () => {
     const expectedItemIds = [
-      'switzerlandMobility',
-      'coordinateSearch',
-      'layerOpacity',
-      'distantWaypoints',
-      'generalImprovements',
+      'fasterRouteCreation',
+      'elevationProfile',
+      'usageInformation',
     ];
-    const expectedDialogItemIds = expectedItemIds.slice(0, 4);
+    const expectedDialogItemIds = expectedItemIds.slice(0, 2);
 
     for (const language of SUPPORTED_LANGUAGES) {
       const release = getCurrentRelease(language);
@@ -61,7 +59,7 @@ describe('release history', () => {
       .toBe(CURRENT_RELEASE_VERSION);
   });
 
-  it('shows the current release once to a returning pre-1.1.0 visitor', () => {
+  it('shows the current release once to a returning visitor without an acknowledgement', () => {
     const storage = createStorage();
     storage.setItem('via-helvetica-language', 'fr');
 
@@ -74,7 +72,7 @@ describe('release history', () => {
 
   it('shows the dialog again when the stored version is older', () => {
     const storage = createStorage();
-    storage.setItem('via-helvetica-last-seen-release', '1.0.0');
+    storage.setItem('via-helvetica-last-seen-release', '1.1.0');
 
     expect(shouldShowCurrentRelease(storage)).toBe(true);
   });

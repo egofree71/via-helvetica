@@ -1,9 +1,9 @@
 {
-  "currentVersion": "1.1.0",
+  "currentVersion": "1.2.0",
   "locales": {
     "fr": {
       "dialog": {
-        "title": "Nouveautés de Via Helvetica 1.1.0",
+        "title": "Nouveautés de Via Helvetica 1.2.0",
         "historyLink": "Voir l’historique complet",
         "historyLinkNewTabLabel": "s’ouvre dans un nouvel onglet"
       },
@@ -18,6 +18,34 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.2.0",
+          "summary": "Cette version rend la création d’itinéraires plus rapide et améliore la lisibilité du profil d’altitude.",
+          "items": [
+            {
+              "id": "fasterRouteCreation",
+              "title": "Création d’itinéraires plus rapide :",
+              "description": "L’ajout et le recalcul des segments sont désormais plus réactifs.",
+              "details": [
+                "Le routage s’appuie désormais sur des données précalculées pour l’ensemble de la Suisse, chargées à la demande autour de l’itinéraire.",
+                "Les services GeoAdmin restent disponibles comme solution de secours lorsque les données précalculées ne peuvent pas être utilisées."
+              ]
+            },
+            {
+              "id": "elevationProfile",
+              "title": "Profil d’altitude amélioré :",
+              "description": "L’échelle verticale s’adapte mieux au relief et à la longueur de l’itinéraire.",
+              "details": []
+            },
+            {
+              "id": "usageInformation",
+              "title": "Informations d’utilisation clarifiées :",
+              "description": "La fenêtre « À propos » précise désormais que les itinéraires et les données cartographiques sont fournis à titre indicatif et doivent être adaptés aux conditions rencontrées.",
+              "details": [],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.1.0",
           "summary": "Cette version ajoute la sélection d’itinéraires SuisseMobile, la recherche par coordonnées et plusieurs améliorations de l’interface.",
@@ -70,7 +98,7 @@
     },
     "de": {
       "dialog": {
-        "title": "Neu in Via Helvetica 1.1.0",
+        "title": "Neu in Via Helvetica 1.2.0",
         "historyLink": "Vollständigen Versionsverlauf anzeigen",
         "historyLinkNewTabLabel": "öffnet in einem neuen Tab"
       },
@@ -85,6 +113,34 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.2.0",
+          "summary": "Diese Version beschleunigt die Routenerstellung und verbessert die Lesbarkeit des Höhenprofils.",
+          "items": [
+            {
+              "id": "fasterRouteCreation",
+              "title": "Schnellere Routenerstellung:",
+              "description": "Das Hinzufügen und Neuberechnen von Routenabschnitten ist jetzt schneller.",
+              "details": [
+                "Das Routing nutzt nun vorberechnete Daten für die ganze Schweiz, die bei Bedarf rund um die Route geladen werden.",
+                "Die GeoAdmin-Dienste bleiben als Ausweichlösung verfügbar, wenn die vorberechneten Daten nicht verwendet werden können."
+              ]
+            },
+            {
+              "id": "elevationProfile",
+              "title": "Verbessertes Höhenprofil:",
+              "description": "Die vertikale Skala passt sich besser an das Gelände und die Länge der Route an.",
+              "details": []
+            },
+            {
+              "id": "usageInformation",
+              "title": "Präzisierte Nutzungshinweise:",
+              "description": "Im Fenster «Über Via Helvetica» wird nun deutlicher darauf hingewiesen, dass Routen und Kartendaten nur zur Orientierung dienen und an die tatsächlichen Bedingungen angepasst werden müssen.",
+              "details": [],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.1.0",
           "summary": "Diese Version ergänzt die Auswahl von SchweizMobil-Routen, die Koordinatensuche und mehrere Verbesserungen der Benutzeroberfläche.",
@@ -137,7 +193,7 @@
     },
     "it": {
       "dialog": {
-        "title": "Novità di Via Helvetica 1.1.0",
+        "title": "Novità di Via Helvetica 1.2.0",
         "historyLink": "Vedi la cronologia completa",
         "historyLinkNewTabLabel": "si apre in una nuova scheda"
       },
@@ -152,6 +208,34 @@
         "versionLabel": "Versione"
       },
       "releases": [
+        {
+          "version": "1.2.0",
+          "summary": "Questa versione rende più rapida la creazione degli itinerari e migliora la leggibilità del profilo altimetrico.",
+          "items": [
+            {
+              "id": "fasterRouteCreation",
+              "title": "Creazione di itinerari più rapida:",
+              "description": "L’aggiunta e il ricalcolo dei segmenti sono ora più rapidi.",
+              "details": [
+                "Il calcolo degli itinerari utilizza ora dati precalcolati per tutta la Svizzera, caricati su richiesta attorno al percorso.",
+                "I servizi GeoAdmin restano disponibili come soluzione di riserva quando i dati precalcolati non possono essere utilizzati."
+              ]
+            },
+            {
+              "id": "elevationProfile",
+              "title": "Profilo altimetrico migliorato:",
+              "description": "La scala verticale si adatta meglio al rilievo e alla lunghezza dell’itinerario.",
+              "details": []
+            },
+            {
+              "id": "usageInformation",
+              "title": "Informazioni d’uso chiarite:",
+              "description": "La finestra «Informazioni» precisa ora che gli itinerari e i dati cartografici sono forniti a titolo indicativo e devono essere adattati alle condizioni incontrate.",
+              "details": [],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.1.0",
           "summary": "Questa versione aggiunge la selezione degli itinerari SvizzeraMobile, la ricerca per coordinate e diversi miglioramenti dell’interfaccia.",
@@ -204,7 +288,7 @@
     },
     "en": {
       "dialog": {
-        "title": "What’s new in Via Helvetica 1.1.0",
+        "title": "What’s new in Via Helvetica 1.2.0",
         "historyLink": "View full release history",
         "historyLinkNewTabLabel": "opens in a new tab"
       },
@@ -219,6 +303,34 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.2.0",
+          "summary": "This release makes route creation faster and improves the readability of the elevation profile.",
+          "items": [
+            {
+              "id": "fasterRouteCreation",
+              "title": "Faster route creation:",
+              "description": "Adding and recalculating route sections is now more responsive.",
+              "details": [
+                "Routing now uses precomputed data for all of Switzerland, loaded on demand around the route.",
+                "GeoAdmin services remain available as a fallback when the precomputed data cannot be used."
+              ]
+            },
+            {
+              "id": "elevationProfile",
+              "title": "Improved elevation profile:",
+              "description": "The vertical scale now adapts better to the terrain and route length.",
+              "details": []
+            },
+            {
+              "id": "usageInformation",
+              "title": "Clearer usage information:",
+              "description": "The About dialog now makes it clearer that routes and map data are provided for guidance and must be adapted to the conditions encountered.",
+              "details": [],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.1.0",
           "summary": "This release adds SwitzerlandMobility route selection, coordinate search, and several interface improvements.",
