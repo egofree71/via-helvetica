@@ -1,6 +1,6 @@
 /**
  * Business context: validates a routing release through its public URL after
- * R2 publication. It checks manifest identity, HTTP metadata, optional CORS,
+ * R2 publication. It checks manifest identity, HTTP metadata, required CORS,
  * and an evenly distributed sample whose transport-decoded bytes must match
  * the local raw-cell SHA-256 inventory.
  */
@@ -11,6 +11,36 @@ import {
   extractRoutingDataConfigArgument,
   loadRoutingDataConfig,
 } from './lib/routing-data-config.mjs';
+
+
+/** Normalizes the browser origin whose CORS access must be verified. */
+function normalizeCorsOrigin(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(
+      'Configure publication.publicOrigin or use --origin <origin> so public CORS access is always verified.',
+    );
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    throw new Error('Public CORS origin must be a valid HTTP(S) origin.');
+  }
+
+  if (
+    !['http:', 'https:'].includes(parsed.protocol) ||
+    parsed.username !== '' ||
+    parsed.password !== '' ||
+    parsed.pathname !== '/' ||
+    parsed.search !== '' ||
+    parsed.hash !== ''
+  ) {
+    throw new Error('Public CORS origin must be a valid HTTP(S) origin.');
+  }
+
+  return parsed.origin;
+}
 
 /** Resolves public-verification inputs from CLI overrides or local config. */
 async function parseOptions(argv) {
@@ -64,13 +94,11 @@ async function parseOptions(argv) {
     typeof options.source !== 'string' ||
     options.source.trim() === '' ||
     !Number.isInteger(options.sampleCount) ||
-    options.sampleCount <= 0 ||
-    (options.origin !== null &&
-      (typeof options.origin !== 'string' || options.origin.trim() === ''))
+    options.sampleCount <= 0
   ) {
     throw new Error(
       'Configure datasetId, formatId, scope, dataRoot, and publication.publicRootUrl, or use ' +
-        '--base-url <url> --source <dataset> [--sample-count <count>] [--origin <origin>].',
+        '--base-url <url> --source <dataset> [--sample-count <count>] --origin <origin>.',
     );
   }
 
@@ -78,7 +106,7 @@ async function parseOptions(argv) {
     ...options,
     baseUrl: options.baseUrl.replace(/\/+$/, ''),
     source: resolve(options.source),
-    origin: options.origin?.trim() || null,
+    origin: normalizeCorsOrigin(options.origin),
   };
 }
 
@@ -108,9 +136,6 @@ function selectedKeys(keys, count) {
 }
 
 function assertCors(response, origin, label) {
-  if (!origin) {
-    return;
-  }
   const allowed = response.headers.get('access-control-allow-origin');
   if (allowed !== '*' && allowed !== origin) {
     throw new Error(`${label} does not expose a compatible CORS header.`);
@@ -118,7 +143,7 @@ function assertCors(response, origin, label) {
 }
 
 function requestHeaders(origin) {
-  return origin ? { Origin: origin } : undefined;
+  return { Origin: origin };
 }
 
 /** Waits before retrying a transient public-object-storage response. */

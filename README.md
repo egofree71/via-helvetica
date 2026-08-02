@@ -180,8 +180,9 @@ Wanderwege in *Wanderzeitberechnung, Version 2020.2* (8 June 2020).
 
 For the application-wide design, see the
 [architecture document](docs/ARCHITECTURE.md). Detailed routing data sources,
-cell loading, graph construction, snapping, A*, caching, and fallback behaviour
-are documented in [Browser routing](docs/ROUTING.md).
+cell loading, graph construction, snapping, A*, caching, bounded binary-provider
+retries, and session fallback are documented in
+[Browser routing](docs/ROUTING.md).
 
 ## Known limitations
 
@@ -215,8 +216,8 @@ location-search provider normalization, local WGS 84/LV95 coordinate parsing,
 rendered-layer provider contracts, default opacity and persistence,
 release acknowledgement and localized history content, passenger-stop filtering
 and viewport loading, worker-client messaging, and the
-dynamic routing engine's corridor, cache, cancellation cleanup, retry,
-hiking-enrichment fallback, and
+dynamic routing engine's corridor, cache, cancellation cleanup, bounded
+binary-provider retry, session fallback, hiking-enrichment fallback, and
 straight-fallback behaviour.
 
 Run the test suite with:

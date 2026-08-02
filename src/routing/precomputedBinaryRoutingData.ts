@@ -54,10 +54,14 @@ const EDGE_ENDPOINT_CANONICALIZATION_ALLOWANCE_METRES =
 /** Half one fixed-point cost step, covering the generator's rounding error. */
 const EDGE_COST_QUANTIZATION_ALLOWANCE =
   0.5 / PRECOMPUTED_BINARY_COST_SCALE;
-/** One retry absorbs a transient network, cache, or partial-response failure. */
-const BINARY_PROVIDER_MAX_ATTEMPTS = 2;
-/** Small retry delay in milliseconds; long backoff would make GeoAdmin fallback feel broken. */
-const BINARY_PROVIDER_RETRY_DELAY_MILLISECONDS = 150;
+/**
+ * Two bounded delays absorb brief object-storage failures before the Worker
+ * commits the remaining browser session to GeoAdmin.
+ */
+const BINARY_PROVIDER_RETRY_DELAYS_MILLISECONDS = [300, 1_000] as const;
+/** Initial request plus one attempt after each configured delay. */
+const BINARY_PROVIDER_MAX_ATTEMPTS =
+  BINARY_PROVIDER_RETRY_DELAYS_MILLISECONDS.length + 1;
 
 /** Validated manifest describing the versioned binary-routing dataset. */
 interface PrecomputedBinaryRoutingManifest {
@@ -734,12 +738,16 @@ function isAbortError(error: unknown): boolean {
 }
 
 /**
- * Waits before the single provider retry while remaining immediately cancellable.
+ * Waits before one provider retry while remaining immediately cancellable.
  * @param signal - Caller cancellation that must interrupt the retry delay.
- * @returns A promise resolved after the short delay.
+ * @param delayMilliseconds - Bounded backoff selected for the next attempt.
+ * @returns A promise resolved after the configured delay.
  * @throws {DOMException} When the caller aborts before or during the delay.
  */
-function waitForProviderRetry(signal: AbortSignal): Promise<void> {
+function waitForProviderRetry(
+  signal: AbortSignal,
+  delayMilliseconds: number,
+): Promise<void> {
   if (signal.aborted) {
     return Promise.reject(
       signal.reason ?? new DOMException('Aborted', 'AbortError'),
@@ -750,7 +758,7 @@ function waitForProviderRetry(signal: AbortSignal): Promise<void> {
     const timeoutId = setTimeout(() => {
       signal.removeEventListener('abort', onAbort);
       resolve();
-    }, BINARY_PROVIDER_RETRY_DELAY_MILLISECONDS);
+    }, delayMilliseconds);
     const onAbort = (): void => {
       clearTimeout(timeoutId);
       reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
@@ -840,7 +848,7 @@ async function fetchPrecomputedBinaryRoutingCellOnce(
 /**
  * Creates an isolated binary-cell loader for one local or remote dataset root.
  * @param rawBaseUrl - Directory containing `manifest.json` and its relative cells.
- * @returns A session-scoped loader with a shared manifest and one retry.
+ * @returns A session-scoped loader with a shared manifest and two retries.
  * @throws {Error} When the base URL is empty or unsafe.
  */
 export function createPrecomputedBinaryRoutingCellLoader(
@@ -883,7 +891,10 @@ export function createPrecomputedBinaryRoutingCellLoader(
           `[Via Helvetica] Retrying precomputed routing cell ${key} after a provider failure.`,
           error,
         );
-        await waitForProviderRetry(signal);
+        await waitForProviderRetry(
+          signal,
+          BINARY_PROVIDER_RETRY_DELAYS_MILLISECONDS[attempt - 1],
+        );
       }
     }
 

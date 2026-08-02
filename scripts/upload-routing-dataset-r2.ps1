@@ -160,7 +160,7 @@ if (-not $PSBoundParameters.ContainsKey("PublicBaseUrl")) {
 }
 if (-not $PSBoundParameters.ContainsKey("PublicOrigin")) {
     $ConfiguredPublicOrigin = Get-ConfigProperty -Object $Publication -Name "publicOrigin"
-    $PublicOrigin = if ($ConfiguredPublicOrigin) { [string]$ConfiguredPublicOrigin } else { "https://viahelvetica.ch" }
+    $PublicOrigin = if ($ConfiguredPublicOrigin) { [string]$ConfiguredPublicOrigin } else { "" }
 }
 if (-not $PSBoundParameters.ContainsKey("PublicSampleCount")) {
     $ConfiguredSampleCount = Get-ConfigProperty -Object $Publication -Name "publicSampleCount"
@@ -190,6 +190,23 @@ if ($PublicSampleCount -le 0) {
 }
 if (-not $DryRun -and [string]::IsNullOrWhiteSpace($PublicBaseUrl)) {
     throw "publication.publicRootUrl or PublicBaseUrl is required for a real publication."
+}
+if (-not $DryRun -and [string]::IsNullOrWhiteSpace($PublicOrigin)) {
+    throw "publication.publicOrigin or PublicOrigin is required for a real publication so CORS is always verified."
+}
+if (-not $DryRun) {
+    [System.Uri]$PublicOriginUri = $null
+    if (
+        -not [System.Uri]::TryCreate($PublicOrigin.Trim(), [System.UriKind]::Absolute, [ref]$PublicOriginUri) -or
+        ($PublicOriginUri.Scheme -ne "http" -and $PublicOriginUri.Scheme -ne "https") -or
+        $PublicOriginUri.UserInfo -ne "" -or
+        $PublicOriginUri.AbsolutePath -ne "/" -or
+        $PublicOriginUri.Query -ne "" -or
+        $PublicOriginUri.Fragment -ne ""
+    ) {
+        throw "publication.publicOrigin or PublicOrigin must be an HTTP(S) origin without a path, query, or fragment."
+    }
+    $PublicOrigin = $PublicOriginUri.GetLeftPart([System.UriPartial]::Authority)
 }
 
 $SourcePath = (Resolve-Path -LiteralPath $Source).Path
@@ -242,7 +259,9 @@ try {
         "--header-upload", "Content-Type: application/octet-stream",
         "--header-upload", "Cache-Control: public, max-age=31536000, immutable"
     )
-    $JsonUploadHeaders = @(
+    # Metadata is immutable because the release identity is part of its URL. A
+    # corrected dataset must use a new release path rather than overwrite this one.
+    $ImmutableJsonUploadHeaders = @(
         "--header-upload", "Content-Type: application/json; charset=utf-8",
         "--header-upload", "Cache-Control: public, max-age=31536000, immutable"
     )
@@ -275,7 +294,7 @@ try {
     & rclone copyto `
         "$PublicationMetadataPath/integrity.json" `
         "$Destination/integrity.json" `
-        @JsonUploadHeaders `
+        @ImmutableJsonUploadHeaders `
         @CommonArguments
     if ($LASTEXITCODE -ne 0) {
         throw "Integrity inventory upload failed."
@@ -286,7 +305,7 @@ try {
     & rclone copyto `
         "$PublicationMetadataPath/manifest.json" `
         "$Destination/manifest.json" `
-        @JsonUploadHeaders `
+        @ImmutableJsonUploadHeaders `
         @CommonArguments
     if ($LASTEXITCODE -ne 0) {
         throw "Manifest upload failed."
@@ -298,11 +317,9 @@ try {
             $VerifyPublishedScript,
             "--base-url", $PublicBaseUrl,
             "--source", $SourcePath,
-            "--sample-count", $PublicSampleCount
+            "--sample-count", $PublicSampleCount,
+            "--origin", $PublicOrigin
         )
-        if (-not [string]::IsNullOrWhiteSpace($PublicOrigin)) {
-            $VerifyArguments += @("--origin", $PublicOrigin)
-        }
         & node @VerifyArguments
         if ($LASTEXITCODE -ne 0) {
             throw "Public routing release verification failed."

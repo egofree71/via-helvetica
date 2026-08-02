@@ -140,7 +140,7 @@ flowchart LR
 | GeoAdmin HTML popup | Localized closure and military metadata | Popup reports a local error without changing route state |
 | GeoAdmin WMS | Closure, detour, and military danger portrayals | Overlay failure does not block map use |
 | GeoAdmin elevation profile | Elevation, ascent, descent, and walking-time samples | Distance remains available; altitude-dependent metrics become unavailable |
-| Versioned static routing storage | Optional precomputed Swiss graph cells used by the Worker | Worker retries once; coverage misses use GeoAdmin per operation, while persistent delivery or integrity failures switch the complete session |
+| Versioned static routing storage | Optional precomputed Swiss graph cells used by the Worker | Worker makes up to three attempts with 300 ms and 1,000 ms cancellable delays; coverage misses use GeoAdmin per operation, while persistent delivery or integrity failures switch the complete session |
 | Federal Office of Transport data | Passenger-stop geometry and attributes | Optional stop layer may be incomplete or unavailable |
 | transport.opendata.ch | On-demand departure board | Stop remains visible even when departures fail |
 | Browser APIs | Local GPX, geolocation, fullscreen | Capability-specific failure only |
@@ -706,10 +706,12 @@ encoding so Fetch returns decoded bytes consistently across browsers.
 remote binary root explicitly in development or production. Without it, both
 development and production default to GeoAdmin; development retains a manual
 comparison switch for focused local tests. `DynamicRoutingProviderSession`
-keeps binary and GeoAdmin engines independent, retries the binary loader once,
-uses GeoAdmin transiently for
-coverage misses, and performs a one-way session fallback only for persistent
-binary-provider failures without mixing graph representations.
+keeps binary and GeoAdmin engines independent, gives the binary loader up to
+three attempts with 300 ms and 1,000 ms cancellable delays, uses GeoAdmin
+transiently for coverage misses, and performs a one-way session fallback for
+persistent binary-provider failures without mixing graph representations. Once
+that transition occurs, the Worker does not probe binary storage again during
+the same session.
 
 National source, geometry, SQLite, and binary-release files live outside the
 repository. A git-ignored `routing-data.config.local.json` declares the external
@@ -721,6 +723,11 @@ IDE indexers from traversing thousands of build files, avoids version strings
 being copied inconsistently between paths, and keeps GitHub Pages independent
 of routing-data volume. Legacy in-repository workspaces remain ignored by Git
 and Vite only as a safeguard.
+
+Published release roots are immutable and use long-lived cache metadata for
+cells, integrity metadata, and the manifest. Public verification requires the
+exact browser origin and checks CORS on every sampled object, so changing to a
+custom routing-data domain cannot silently bypass the frontend access contract.
 
 For runtime design, tuning values, failure semantics, tests, and unresolved
 validation work, see [ROUTING.md](ROUTING.md). For the external filesystem,

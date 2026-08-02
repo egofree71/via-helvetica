@@ -273,11 +273,12 @@ describe('precomputed binary routing cells', () => {
     );
   });
 
-  it('retries one transient manifest failure before returning the cell', async () => {
+  it('uses the bounded 300 ms and 1,000 ms retry delays before returning the cell', async () => {
     vi.useFakeTimers();
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const fetchMock = vi
       .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({}, 503))
       .mockResolvedValueOnce(jsonResponse({}, 503))
       .mockResolvedValueOnce(jsonResponse(MANIFEST))
       .mockResolvedValueOnce(binaryCellResponse());
@@ -290,9 +291,44 @@ describe('precomputed binary routing cells', () => {
     );
     const result = loader('1041:465', new AbortController().signal);
 
+    await vi.advanceTimersByTimeAsync(299);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toMatchObject({ key: '1041:465' });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('stops after three provider attempts so the session can switch to GeoAdmin', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({}, 503));
+    vi.stubGlobal('fetch', fetchMock);
+    const { createPrecomputedBinaryRoutingCellLoader } = await import(
+      './precomputedBinaryRoutingData'
+    );
+    const loader = createPrecomputedBinaryRoutingCellLoader(
+      'https://routing-data.example.test/ch',
+    );
+    const result = loader('1041:465', new AbortController().signal);
+    const failure = result.then(
+      () => null,
+      (error: unknown) => error,
+    );
+
     await vi.runAllTimersAsync();
 
-    await expect(result).resolves.toMatchObject({ key: '1041:465' });
+    await expect(failure).resolves.toMatchObject({
+      message: expect.stringContaining('request failed (503)'),
+    });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 

@@ -20,11 +20,12 @@ generated from the official swissTLM3D GeoPackage. The offline pipeline supports
 the complete Swiss road-and-path dataset with disk-backed generation, while all
 large local inputs and outputs live outside the repository. Setting
 `VITE_ROUTING_DATA_BASE_URL` activates a remote root in either development or
-production. The Worker retries one binary provider failure. Expected coverage
-misses use the independent GeoAdmin engine only for that operation, while
-persistent delivery or integrity failures switch the complete session. Binary
-and GeoAdmin cells are never mixed in one graph. Production without the explicit
-environment variable remains on GeoAdmin.
+production. The Worker makes at most three binary-provider attempts, separated
+by cancellable 300 ms and 1,000 ms delays. Expected coverage misses use the
+independent GeoAdmin engine only for that operation, while persistent delivery
+or integrity failures switch the complete session. Binary and GeoAdmin cells are
+never mixed in one graph. Production without the explicit environment variable
+remains on GeoAdmin.
 
 This subsystem is intentionally bounded and experimental. It does not operate
 a project-owned backend, and the new national static dataset still requires
@@ -408,22 +409,28 @@ operation begins. This setting does not affect the rendered hiking map overlay.
 
 ### 6.4 Session-level binary fallback
 
-Transient manifest or cell delivery failures are attempted twice, with a short
-cancellable delay. Deterministic manifest and dataset-build incompatibilities
-fail immediately because a second download cannot make the contract compatible.
-Persistent delivery failures, compatibility failures, CRC failures, or semantic
-validation failures activate a one-way Worker-session transition:
+Transient manifest or cell delivery failures receive at most three attempts.
+The first retry waits 300 ms and the second waits 1,000 ms; both delays remain
+immediately cancellable. Deterministic manifest and dataset-build
+incompatibilities fail immediately because another download cannot make the
+contract compatible. Persistent delivery failures, compatibility failures, CRC
+failures, or semantic validation failures activate a one-way Worker-session
+transition:
 
 1. abandon and dispose the binary engine;
 2. emit `precomputed-routing-unavailable` once;
 3. repeat the complete snap or route operation with a separate GeoAdmin engine;
 4. keep all later operations on GeoAdmin.
 
-A `RoutingCoverageError` is expected near national borders: GeoAdmin handles only
-the current operation and the binary engine remains preferred afterward. Caller
-cancellation and `RoutingAreaTooLargeError` also do not change providers. If a
-concurrent binary operation finishes after another request has switched the
-session, its result is discarded and the operation is repeated on GeoAdmin.
+After this transition the Worker does not probe the binary provider again until
+the page creates a new Worker session, normally after a reload. This avoids
+repeated object-storage delays for every later waypoint during a prolonged
+outage. A `RoutingCoverageError` is expected near national borders: GeoAdmin
+handles only the current operation and the binary engine remains preferred
+afterward. Caller cancellation and `RoutingAreaTooLargeError` also do not change
+providers. If a concurrent binary operation finishes after another request has
+switched the session, its result is discarded and the operation is repeated on
+GeoAdmin.
 
 ### 6.5 Remote dataset publication
 
@@ -438,6 +445,12 @@ metadata is written, and the public URL is sampled for transport decoding,
 headers, CORS, and raw SHA-256 agreement. Persistent publication or integrity
 failures therefore remain outside the runtime graph and trigger the normal
 GeoAdmin fallback only if a bad public release is explicitly configured.
+
+The verifier requires the exact browser origin and fails rather than silently
+skipping CORS validation. Cells, `integrity.json`, and `manifest.json` retain a
+one-year immutable cache because the release identity is part of their URL. A
+corrected release must use a new versioned root instead of overwriting published
+objects.
 
 Commands, rclone setup assumptions, retry behaviour, and the immutable release
 lifecycle are documented in
@@ -783,8 +796,9 @@ contract, invalid-coordinate splitting, numeric attribute normalization, and
 direct hiking classification. The precomputed provider tests protect its
 separate manifest, v3 build identity, strictly ordered compact node and segment
 tables, map-free multi-cell merging, local-index resolution, global node
-identity, HTTP-decoded Brotli delivery, and explicit out-of-coverage behaviour.
-The dataset-verifier fixtures additionally reject key-set mismatches and
+identity, HTTP-decoded Brotli delivery, the three-attempt 300 ms/1,000 ms
+backoff, and explicit out-of-coverage behaviour. The dataset-verifier fixtures
+additionally reject key-set mismatches and
 cross-cell global-node conflicts.
 
 ### 16.3 Worker-client tests

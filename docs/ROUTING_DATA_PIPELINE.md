@@ -74,6 +74,10 @@ Copy `routing-data.config.example.json` to the git-ignored
 }
 ```
 
+`publication.publicOrigin` is required for every real publication and standalone
+public verification. It must be the exact HTTP(S) browser origin allowed to load
+the routing objects, without a path. The dry run does not contact the public URL.
+
 The three release identifiers produce one stable path:
 
 ```text
@@ -285,18 +289,29 @@ The script performs the following order:
    transport decoding, and evenly distributed sample hashes.
 
 `manifest.json` is the release-visibility switch. A failure before that write
-leaves the new release undiscoverable. Published version roots are immutable;
-use a new source-version, format-version, or scope path for a changed release.
+leaves the new release undiscoverable. Cells, integrity metadata, and the
+manifest all use `Cache-Control: public, max-age=31536000, immutable` because the
+release identity is part of their URL. A corrected dataset must use a new
+source-version, format-version, or scope path; published roots are never
+overwritten. A custom Cloudflare domain may compress the JSON transport, but it
+must preserve the immutable cache and CORS contracts verified here.
 
-The public verifier retries bounded transient `404`, `429`, and `5xx` responses.
-This is useful immediately after a large upload to an `r2.dev` development URL,
-but persistent errors still fail the publication.
+The public verifier sends the configured browser `Origin` header and requires a
+matching `Access-Control-Allow-Origin` response on the manifest, integrity
+inventory, and sampled cells. It refuses to run without that origin. It also
+retries bounded transient `404`, `429`, and `5xx` responses. This is useful
+immediately after a large upload to an `r2.dev` development URL, but persistent
+errors still fail the publication.
 
 The public verifier can also be rerun without uploading:
 
 ```powershell
 npm run verify:published-routing
 ```
+
+This command reads `publication.publicOrigin` from the local configuration. When
+using explicit command-line paths instead, pass `--origin https://viahelvetica.ch`
+as well.
 
 ## 8. Application activation
 
