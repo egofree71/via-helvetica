@@ -74,7 +74,10 @@ http://localhost:5173/
 National swissTLM3D sources, geometry cells, SQLite work files, and binary
 releases live outside the repository. Copy
 `routing-data.config.example.json` to the git-ignored
-`routing-data.config.local.json`, set the external paths, then run:
+`routing-data.config.local.json`, then set one dataset identifier, one binary
+format identifier, the scope, the external data root, and the source GeoPackage.
+The scripts derive the local work/release paths and the versioned R2 prefix from
+that release identity. Then run:
 
 ```bash
 npm run generate:routing-geometry

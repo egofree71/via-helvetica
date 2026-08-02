@@ -147,7 +147,7 @@ async function parseDatasetRoot(argv) {
 
   if (typeof root !== 'string' || root.trim() === '') {
     throw new Error(
-      'binaryReleaseRoot must be configured or supplied with --root.',
+      'The release root must be derived from datasetId, formatId, scope, and dataRoot, or supplied with --root.',
     );
   }
 

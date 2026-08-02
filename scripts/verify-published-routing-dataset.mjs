@@ -69,7 +69,7 @@ async function parseOptions(argv) {
       (typeof options.origin !== 'string' || options.origin.trim() === ''))
   ) {
     throw new Error(
-      'Configure binaryReleaseRoot and publication.publicBaseUrl, or use ' +
+      'Configure datasetId, formatId, scope, dataRoot, and publication.publicRootUrl, or use ' +
         '--base-url <url> --source <dataset> [--sample-count <count>] [--origin <origin>].',
     );
   }

@@ -32,8 +32,9 @@ C:\ViaHelveticaData\
     source\
         SWISSTLM3D_2026_LV95_LN02.gpkg
     work\
-        ch-geometry\
-        precomputed-binary-routing-build.sqlite
+        swisstlm3d-2026\
+            ch-geometry\
+            precomputed-binary-routing-build.sqlite
     releases\
         swisstlm3d-2026\
             format-v3\
@@ -54,35 +55,69 @@ production normally load the published release through
 ## 2. Local configuration
 
 Copy `routing-data.config.example.json` to the git-ignored
-`routing-data.config.local.json`, then adjust the paths and public R2 URL:
+`routing-data.config.local.json`, then adjust the source and publication root:
 
 ```json
 {
+  "datasetId": "swisstlm3d-2026",
+  "formatId": "format-v3",
   "scope": "ch",
+  "dataRoot": "C:/ViaHelveticaData",
   "sourceGeoPackage": "C:/ViaHelveticaData/source/SWISSTLM3D_2026_LV95_LN02.gpkg",
-  "geometryRoot": "C:/ViaHelveticaData/work/ch-geometry",
-  "binaryReleaseRoot": "C:/ViaHelveticaData/releases/swisstlm3d-2026/format-v3/ch",
-  "buildDatabasePath": "C:/ViaHelveticaData/work/precomputed-binary-routing-build.sqlite",
   "publication": {
     "remote": "r2",
     "bucket": "via-helvetica-routing-data",
-    "prefix": "swisstlm3d-2026/format-v3/ch",
-    "expectedCellCount": 7529,
-    "publicBaseUrl": "https://pub-example.r2.dev/swisstlm3d-2026/format-v3/ch",
+    "publicRootUrl": "https://pub-example.r2.dev",
     "publicOrigin": "https://viahelvetica.ch",
     "publicSampleCount": 50
   }
 }
 ```
 
-Forward slashes avoid JSON escaping on Windows. Relative paths are resolved
-from the configuration file directory. R2 credentials never belong in this
-file; they remain in the local rclone configuration.
+The three release identifiers produce one stable path:
+
+```text
+swisstlm3d-2026/format-v3/ch
+```
+
+The scripts reuse that path instead of asking for it repeatedly. With the
+example above, the effective values are:
+
+```text
+geometryRoot
+= C:/ViaHelveticaData/work/swisstlm3d-2026/ch-geometry
+
+binaryReleaseRoot
+= C:/ViaHelveticaData/releases/swisstlm3d-2026/format-v3/ch
+
+buildDatabasePath
+= C:/ViaHelveticaData/work/swisstlm3d-2026/precomputed-binary-routing-build.sqlite
+
+publication.prefix
+= swisstlm3d-2026/format-v3/ch
+
+publication.publicBaseUrl
+= https://pub-example.r2.dev/swisstlm3d-2026/format-v3/ch
+```
+
+`datasetId` identifies the official source edition. `formatId` identifies Via
+Helvetica's binary encoding and changes only for an incompatible format change.
+`scope` remains a separate path segment so bounded or national releases can be
+identified consistently.
+
+Forward slashes avoid JSON escaping on Windows. Relative filesystem paths are
+resolved from the configuration file directory. R2 credentials never belong in
+this file; they remain in the local rclone configuration. The upload script
+reads the expected cell count from the verified local `manifest.json`; it is not
+copied into configuration.
 
 Every user-facing pipeline command reads this file automatically. An explicit
-CLI path overrides the corresponding configuration value. A different file can
-be supplied with `--config <path>` for Node/Python scripts or `-Config <path>`
-for the PowerShell publication script.
+CLI path overrides the corresponding derived value. A different file can be
+supplied with `--config <path>` for Node/Python scripts or `-Config <path>` for
+the PowerShell publication script. Former explicit `geometryRoot`,
+`binaryReleaseRoot`, `buildDatabasePath`, `publication.prefix`, and
+`publication.publicBaseUrl` fields remain accepted as advanced overrides during
+migration, but the example deliberately avoids them.
 
 ## 3. Script inventory
 
@@ -208,6 +243,24 @@ the target bucket. Bucket creation permission is not required. The upload script
 passes `--s3-no-check-bucket`, preventing rclone from attempting `CreateBucket`
 with a correctly restricted token.
 
+The non-secret rclone settings are:
+
+```text
+Remote name: r2
+Storage: S3
+Provider: Cloudflare
+Credentials: enter Access Key ID and Secret Access Key manually
+Endpoint: https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+Bucket: via-helvetica-routing-data
+Token permission: Object Read & Write for this bucket only
+no_check_bucket: true
+```
+
+Run `rclone config file` to locate the machine-local `rclone.conf`. That file is
+sensitive because it contains the bucket credentials; keep a private backup
+outside the repository if the environment must be restorable on another PC.
+The repository documents the settings but never stores the keys.
+
 Preview the complete operation without changing R2:
 
 ```powershell
@@ -286,17 +339,19 @@ becoming Git noise, but it is not a substitute for the external layout.
 For a new official swissTLM3D edition:
 
 1. place the new GeoPackage under the external source directory;
-2. update the local configuration paths and versioned R2 prefix;
-3. generate geometry cells;
-4. generate the binary release;
-5. run complete local verification;
-6. compare counts, sizes, parse errors, largest cells, and representative routes
+2. change `datasetId` and `sourceGeoPackage` in the local configuration;
+3. keep `formatId` unchanged unless the binary encoding itself changed;
+4. generate geometry cells;
+5. generate the binary release;
+6. run complete local verification;
+7. compare counts, sizes, parse errors, largest cells, and representative routes
    with the previous release;
-7. run an R2 dry run;
-8. publish the immutable release;
-9. verify contrasting Swiss regions with a test build;
-10. promote the new public root through `VITE_ROUTING_DATA_BASE_URL` only after
-    local testing.
+8. run an R2 dry run;
+9. publish the immutable release; R2 creates the new object-prefix hierarchy
+   automatically;
+10. verify contrasting Swiss regions with a test build;
+11. promote the new derived public root through `VITE_ROUTING_DATA_BASE_URL`
+    only after local testing.
 
 Do not propose a commit until the changed scripts and documentation have been
 tested locally with the external paths.

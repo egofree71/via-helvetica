@@ -59,34 +59,112 @@ elseif ($PSBoundParameters.ContainsKey("Config")) {
     throw "Routing-data configuration not found: $ConfigPath"
 }
 
-$Publication = if ($null -ne $Configuration) { $Configuration.publication } else { $null }
+function Get-ConfigProperty {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+    $Property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $Property) {
+        return $null
+    }
+    return $Property.Value
+}
+
+function Normalize-ReleaseIdentifier {
+    param(
+        [object]$Value,
+        [string]$Name
+    )
+
+    $Text = if ($null -eq $Value) { "" } else { [string]$Value }
+    $Text = $Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        throw "Routing-data configuration field $Name must be a non-empty string."
+    }
+    if ($Text.Contains("/") -or $Text.Contains("\")) {
+        throw "Routing-data configuration field $Name must contain one path segment."
+    }
+    return $Text
+}
+
+function Join-PublicUrl {
+    param(
+        [string]$Root,
+        [string]$ReleasePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Root)) {
+        return ""
+    }
+    return $Root.Trim().TrimEnd("/") + "/" + $ReleasePath.Trim("/")
+}
+
+$Publication = if ($null -ne $Configuration) { Get-ConfigProperty -Object $Configuration -Name "publication" } else { $null }
 $ConfigDirectory = Split-Path -Parent $ConfigPath
+$ReleasePath = ""
+$DerivedBinaryReleaseRoot = ""
+
+$DatasetIdValue = Get-ConfigProperty -Object $Configuration -Name "datasetId"
+$FormatIdValue = Get-ConfigProperty -Object $Configuration -Name "formatId"
+$DataRootValue = Get-ConfigProperty -Object $Configuration -Name "dataRoot"
+$UsesDerivedLayout = $null -ne $DatasetIdValue -or $null -ne $FormatIdValue -or $null -ne $DataRootValue
+
+if ($UsesDerivedLayout) {
+    $DatasetId = Normalize-ReleaseIdentifier -Value $DatasetIdValue -Name "datasetId"
+    $FormatId = Normalize-ReleaseIdentifier -Value $FormatIdValue -Name "formatId"
+    $Scope = Normalize-ReleaseIdentifier -Value (Get-ConfigProperty -Object $Configuration -Name "scope") -Name "scope"
+    if ($null -eq $DataRootValue -or [string]::IsNullOrWhiteSpace([string]$DataRootValue)) {
+        throw "Routing-data configuration field dataRoot is required with datasetId and formatId."
+    }
+
+    $DataRoot = Resolve-ConfigPath -Value ([string]$DataRootValue) -BaseDirectory $ConfigDirectory
+    $ReleasePath = "$DatasetId/$FormatId/$Scope"
+    $DerivedBinaryReleaseRoot = Join-Path $DataRoot ("releases/" + $ReleasePath)
+}
 
 if (-not $PSBoundParameters.ContainsKey("Remote")) {
-    $Remote = if ($null -ne $Publication -and $Publication.remote) { [string]$Publication.remote } else { "r2" }
+    $ConfiguredRemote = Get-ConfigProperty -Object $Publication -Name "remote"
+    $Remote = if ($ConfiguredRemote) { [string]$ConfiguredRemote } else { "r2" }
 }
 if (-not $PSBoundParameters.ContainsKey("Bucket")) {
-    $Bucket = if ($null -ne $Publication -and $Publication.bucket) { [string]$Publication.bucket } else { "via-helvetica-routing-data" }
+    $ConfiguredBucket = Get-ConfigProperty -Object $Publication -Name "bucket"
+    $Bucket = if ($ConfiguredBucket) { [string]$ConfiguredBucket } else { "via-helvetica-routing-data" }
 }
 if (-not $PSBoundParameters.ContainsKey("Prefix")) {
-    $Prefix = if ($null -ne $Publication -and $Publication.prefix) { [string]$Publication.prefix } else { "swisstlm3d-2026/format-v3/ch" }
+    $ConfiguredPrefix = Get-ConfigProperty -Object $Publication -Name "prefix"
+    $Prefix = if ($ConfiguredPrefix) { [string]$ConfiguredPrefix } else { $ReleasePath }
 }
 if (-not $PSBoundParameters.ContainsKey("Source")) {
-    if ($null -ne $Configuration -and $Configuration.binaryReleaseRoot) {
-        $Source = Resolve-ConfigPath -Value ([string]$Configuration.binaryReleaseRoot) -BaseDirectory $ConfigDirectory
+    $ConfiguredSource = Get-ConfigProperty -Object $Configuration -Name "binaryReleaseRoot"
+    if ($ConfiguredSource) {
+        $Source = Resolve-ConfigPath -Value ([string]$ConfiguredSource) -BaseDirectory $ConfigDirectory
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($DerivedBinaryReleaseRoot)) {
+        $Source = [System.IO.Path]::GetFullPath($DerivedBinaryReleaseRoot)
     }
 }
-if (-not $PSBoundParameters.ContainsKey("ExpectedCellCount")) {
-    $ExpectedCellCount = if ($null -ne $Publication -and $Publication.expectedCellCount) { [int]$Publication.expectedCellCount } else { 7529 }
-}
 if (-not $PSBoundParameters.ContainsKey("PublicBaseUrl")) {
-    $PublicBaseUrl = if ($null -ne $Publication -and $Publication.publicBaseUrl) { [string]$Publication.publicBaseUrl } else { "" }
+    $ConfiguredPublicBaseUrl = Get-ConfigProperty -Object $Publication -Name "publicBaseUrl"
+    if ($ConfiguredPublicBaseUrl) {
+        $PublicBaseUrl = [string]$ConfiguredPublicBaseUrl
+    }
+    else {
+        $PublicRootUrl = Get-ConfigProperty -Object $Publication -Name "publicRootUrl"
+        $PublicBaseUrl = Join-PublicUrl -Root ([string]$PublicRootUrl) -ReleasePath $ReleasePath
+    }
 }
 if (-not $PSBoundParameters.ContainsKey("PublicOrigin")) {
-    $PublicOrigin = if ($null -ne $Publication -and $Publication.publicOrigin) { [string]$Publication.publicOrigin } else { "https://viahelvetica.ch" }
+    $ConfiguredPublicOrigin = Get-ConfigProperty -Object $Publication -Name "publicOrigin"
+    $PublicOrigin = if ($ConfiguredPublicOrigin) { [string]$ConfiguredPublicOrigin } else { "https://viahelvetica.ch" }
 }
 if (-not $PSBoundParameters.ContainsKey("PublicSampleCount")) {
-    $PublicSampleCount = if ($null -ne $Publication -and $Publication.publicSampleCount) { [int]$Publication.publicSampleCount } else { 50 }
+    $ConfiguredSampleCount = Get-ConfigProperty -Object $Publication -Name "publicSampleCount"
+    $PublicSampleCount = if ($ConfiguredSampleCount) { [int]$ConfiguredSampleCount } else { 50 }
 }
 
 if (-not (Get-Command rclone -ErrorAction SilentlyContinue)) {
@@ -99,19 +177,19 @@ if ([string]::IsNullOrWhiteSpace($Bucket)) {
     throw "publication.bucket must be configured or supplied with -Bucket."
 }
 if ([string]::IsNullOrWhiteSpace($Prefix)) {
-    throw "publication.prefix must be configured or supplied with -Prefix."
+    throw "datasetId, formatId, and scope must define the publication prefix, or -Prefix must be supplied."
 }
 if ([string]::IsNullOrWhiteSpace($Source)) {
-    throw "binaryReleaseRoot must be configured or supplied with -Source."
+    throw "dataRoot must derive binaryReleaseRoot, or -Source must be supplied."
 }
-if ($ExpectedCellCount -le 0) {
-    throw "ExpectedCellCount must be positive."
+if ($ExpectedCellCount -lt 0) {
+    throw "ExpectedCellCount cannot be negative."
 }
 if ($PublicSampleCount -le 0) {
     throw "PublicSampleCount must be positive."
 }
 if (-not $DryRun -and [string]::IsNullOrWhiteSpace($PublicBaseUrl)) {
-    throw "PublicBaseUrl is required for a real publication so the public release is verified."
+    throw "publication.publicRootUrl or PublicBaseUrl is required for a real publication."
 }
 
 $SourcePath = (Resolve-Path -LiteralPath $Source).Path
@@ -136,7 +214,21 @@ try {
         throw "Local routing release verification failed."
     }
 
-    Write-Host "Preparing publication-only manifest and integrity metadata..."
+    if ($ExpectedCellCount -eq 0) {
+        $ManifestPath = Join-Path $SourcePath "manifest.json"
+        try {
+            $LocalManifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+            $ExpectedCellCount = [int]$LocalManifest.nonEmptyCellCount
+        }
+        catch {
+            throw "Cannot read nonEmptyCellCount from ${ManifestPath}: $_"
+        }
+        if ($ExpectedCellCount -le 0) {
+            throw "Local manifest nonEmptyCellCount must be positive."
+        }
+    }
+
+    Write-Host "Preparing publication-only manifest and integrity metadata for $ExpectedCellCount cells..."
     & node $PreparePublicationScript `
         --source $SourcePath `
         --output $PublicationMetadataPath `

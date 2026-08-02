@@ -712,11 +712,15 @@ coverage misses, and performs a one-way session fallback only for persistent
 binary-provider failures without mixing graph representations.
 
 National source, geometry, SQLite, and binary-release files live outside the
-repository. A git-ignored `routing-data.config.local.json` supplies their local
-paths to the offline scripts; the application runtime never reads that file.
-This boundary prevents Vite and IDE indexers from traversing thousands of build
-files and keeps GitHub Pages independent of routing-data volume. Legacy
-in-repository workspaces remain ignored by Git and Vite only as a safeguard.
+repository. A git-ignored `routing-data.config.local.json` declares the external
+data root, source GeoPackage, dataset identifier, binary-format identifier, and
+scope. Offline scripts derive one immutable release path from those identifiers
+and reuse it for the local release directory, R2 object prefix, and public URL.
+The application runtime never reads that file. This boundary prevents Vite and
+IDE indexers from traversing thousands of build files, avoids version strings
+being copied inconsistently between paths, and keeps GitHub Pages independent
+of routing-data volume. Legacy in-repository workspaces remain ignored by Git
+and Vite only as a safeguard.
 
 For runtime design, tuning values, failure semantics, tests, and unresolved
 validation work, see [ROUTING.md](ROUTING.md). For the external filesystem,

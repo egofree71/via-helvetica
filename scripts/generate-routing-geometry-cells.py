@@ -566,6 +566,30 @@ def generate(
     )
 
 
+def normalize_release_identifier(value: object, field: str) -> str:
+    """Validate one identifier that becomes a filesystem and R2 path segment."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"Routing-data configuration field {field} must be a non-empty string."
+        )
+    normalized = value.strip()
+    if "/" in normalized or "\\" in normalized:
+        raise ValueError(
+            f"Routing-data configuration field {field} must contain one path segment."
+        )
+    return normalized
+
+
+def resolve_configured_path(value: object, base: Path, field: str) -> Path:
+    """Resolve one machine-local path relative to the configuration file."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"Routing-data configuration field {field} must be a path string."
+        )
+    candidate = Path(value.strip())
+    return (candidate if candidate.is_absolute() else base / candidate).resolve()
+
+
 def load_local_config(path: Path, optional: bool) -> dict[str, object]:
     """Read machine-local pipeline paths without making them repository state."""
     resolved = path.resolve()
@@ -587,26 +611,38 @@ def load_local_config(path: Path, optional: bool) -> dict[str, object]:
     if not isinstance(parsed, dict):
         raise ValueError("Routing-data configuration must contain one JSON object.")
 
-    for field in ("sourceGeoPackage", "geometryRoot"):
+    for field in ("sourceGeoPackage", "dataRoot", "geometryRoot"):
         value = parsed.get(field)
-        if value is None:
-            continue
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(
-                f"Routing-data configuration field {field} must be a path string."
-            )
-        candidate = Path(value.strip())
-        parsed[field] = (
-            candidate if candidate.is_absolute() else resolved.parent / candidate
-        ).resolve()
+        if value is not None:
+            parsed[field] = resolve_configured_path(value, resolved.parent, field)
 
-    scope = parsed.get("scope")
-    if scope is not None:
-        if not isinstance(scope, str) or not scope.strip():
+    uses_derived_layout = any(
+        parsed.get(field) is not None for field in ("datasetId", "formatId", "dataRoot")
+    )
+    if uses_derived_layout:
+        dataset_id = normalize_release_identifier(parsed.get("datasetId"), "datasetId")
+        format_id = normalize_release_identifier(parsed.get("formatId"), "formatId")
+        scope = normalize_release_identifier(parsed.get("scope"), "scope")
+        data_root = parsed.get("dataRoot")
+        if not isinstance(data_root, Path):
             raise ValueError(
-                "Routing-data configuration field scope must be a non-empty string."
+                "Routing-data configuration field dataRoot is required with "
+                "datasetId and formatId."
             )
-        parsed["scope"] = scope.strip()
+
+        parsed["datasetId"] = dataset_id
+        parsed["formatId"] = format_id
+        parsed["scope"] = scope
+        parsed["releasePath"] = f"{dataset_id}/{format_id}/{scope}"
+        parsed.setdefault(
+            "geometryRoot",
+            data_root / "work" / dataset_id / f"{scope}-geometry",
+        )
+    else:
+        scope = parsed.get("scope")
+        if scope is not None:
+            parsed["scope"] = normalize_release_identifier(scope, "scope")
+
     return parsed
 
 
@@ -665,8 +701,8 @@ def main() -> int:
         scope = args.scope or config.get("scope") or DEFAULT_SCOPE
         if source_path is None or output_root is None:
             raise ValueError(
-                "sourceGeoPackage and geometryRoot must be configured or supplied "
-                "through the command line."
+                "sourceGeoPackage and the derived geometryRoot must be configured "
+                "or supplied through the command line."
             )
         if not isinstance(scope, str) or not scope.strip():
             raise ValueError("Dataset scope must be a non-empty string.")

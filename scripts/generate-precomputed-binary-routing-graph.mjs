@@ -472,7 +472,7 @@ async function parseOptions(argv) {
   ]) {
     if (typeof value !== 'string' || value.trim() === '') {
       throw new Error(
-        `${field} must be configured in routing-data.config.local.json or supplied on the command line.`,
+        `${field} must be derived from routing-data.config.local.json or supplied on the command line.`,
       );
     }
   }
