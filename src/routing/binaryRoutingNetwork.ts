@@ -28,6 +28,7 @@ import {
   SNAP_DISTANCE_TIE_TOLERANCE_METRES,
   shouldReplaceSnapCandidate,
 } from './routingConstants';
+import { reconstructRouteNodePath } from './routePathReconstruction';
 
 /**
  * Maximum 250 m buckets one edge may actually cross before data is rejected.
@@ -888,15 +889,14 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
       return null;
     }
 
-    const nodePath: number[] = [];
-    let nodeId = bestGoalNodeId;
-
-    while (nodeId >= 0) {
-      nodePath.push(nodeId);
-      nodeId = this.routePreviousNodes[nodeId];
-    }
-
-    nodePath.reverse();
+    const nodePath = reconstructRouteNodePath(
+      bestGoalNodeId,
+      this.nodeX.length,
+      (nodeId) => {
+        const previousNodeId = this.routePreviousNodes[nodeId];
+        return previousNodeId >= 0 ? previousNodeId : undefined;
+      },
+    );
     const coordinates: Coordinate[] = [];
     appendCoordinate(coordinates, startSnap.coordinate);
 

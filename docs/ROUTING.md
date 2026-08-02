@@ -654,8 +654,11 @@ that cannot produce a better route.
 ### 12.3 Reconstruction
 
 The selected graph-node chain is reconstructed backwards through the previous-
-node map, then converted to ordered coordinates. Exact snapped start and end
-connectors are added while avoiding duplicate adjacent coordinates.
+node map, then converted to ordered coordinates. Reconstruction is bounded by
+the assembled graph's node count, so stale or cyclic predecessor state becomes
+an explicit provider error instead of an unbounded Worker loop. Exact snapped
+start and end connectors are added while avoiding duplicate adjacent
+coordinates.
 
 The result contains only structured-clone-safe coordinate arrays and a network
 mode indicator.
@@ -815,7 +818,8 @@ The engine uses mocked provider loaders and graph doubles to protect:
 `networkRouter` and shared-compiler tests cover structured-clone-safe results,
 shared nodes across fragments, duplicate boundary geometry, geometry/precomputed
 route parity, removal of excluded-road orphan nodes, 2D/3D identity separation,
-and the lower-bound invariant required by the A* heuristic.
+the lower-bound invariant required by the A* heuristic, and bounded
+predecessor reconstruction for both graph implementations.
 
 ### 16.6 Manual geographic validation
 

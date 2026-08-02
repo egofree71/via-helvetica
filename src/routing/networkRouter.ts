@@ -20,6 +20,7 @@ import {
   ROUTING_SPATIAL_GRID_SIZE_METRES,
   shouldReplaceSnapCandidate,
 } from './routingConstants';
+import { reconstructRouteNodePath } from './routePathReconstruction';
 import type { SwissTlmNetworkData } from './swissTlmApi';
 
 export { MAX_SNAP_DISTANCE } from './routingConstants';
@@ -114,7 +115,11 @@ export interface RoutedNetworkPath {
 export interface RoutingNetworkStats {
   /** Number of source-road references reported by the selected provider. */
   roadFeatures: number;
-  /** Number of separate hiking-overlay references reported by the provider. */
+  /**
+   * Number of separate hiking-overlay references reported by the provider.
+   * This is zero for binary cells, where hiking classification is encoded on
+   * retained segments rather than delivered as a separate overlay.
+   */
   hikingFeatures: number;
   /** Number of unique 3D graph nodes. */
   nodes: number;
@@ -702,16 +707,11 @@ export class RoutingNetwork {
       return null;
     }
 
-    // Reconstruct the graph-node sequence backwards from the best destination endpoint.
-    const nodePath: number[] = [];
-    let nodeId: number | undefined = bestGoalNodeId;
-
-    while (nodeId !== undefined) {
-      nodePath.push(nodeId);
-      nodeId = previousNodes.get(nodeId);
-    }
-
-    nodePath.reverse();
+    const nodePath = reconstructRouteNodePath(
+      bestGoalNodeId,
+      this.nodes.length,
+      (nodeId) => previousNodes.get(nodeId),
+    );
 
     const coordinates: Coordinate[] = [];
     appendCoordinate(coordinates, startSnap.coordinate);
