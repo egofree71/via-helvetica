@@ -8,6 +8,8 @@ routes in Switzerland with official swisstopo maps and geodata. It stays
 focused on one route at a time and runs entirely in the browser, so the public
 application can remain usable without an account or a project-owned backend.
 
+Built with React, TypeScript, Vite, OpenLayers, and Vitest.
+
 **Live application:** [viahelvetica.ch](https://viahelvetica.ch/)
 
 ![Via Helvetica route-planning interface on official swisstopo maps](docs/images/via-helvetica-overview.png)
@@ -43,8 +45,10 @@ application can remain usable without an account or a project-owned backend.
 
 Via Helvetica deliberately keeps route planning in the browser. Users do not
 need to register, routes are not uploaded to a project-owned server, and static
-hosting keeps recurring operating costs as low as possible. External official
-services still receive the bounded requests required for maps and geodata.
+hosting keeps recurring operating costs as low as possible. Routes are not
+saved locally; the browser stores only interface preferences and release
+acknowledgements. External official services still receive the bounded requests
+required for maps, geodata, elevation, routing fallback, and departures.
 
 The router is an interactive planning aid rather than an autonomous navigation
 system. The official hiking portrayal remains visible on the map, and users can
@@ -68,6 +72,11 @@ Vite then displays the project address, usually:
 ```text
 http://localhost:5173/
 ```
+
+No local routing-data configuration is required for a normal development start:
+GeoAdmin remains available as a fallback. To test the published precomputed
+routing dataset locally, set `VITE_ROUTING_DATA_BASE_URL` in `.env.local`; see
+[Offline routing-data generation](#offline-routing-data-generation).
 
 ## Offline routing-data generation
 
@@ -161,12 +170,15 @@ pressed. Deployed geolocation requires HTTPS.
 Via Helvetica uses official swisstopo backgrounds and swissTLM3D geodata,
 official SwitzerlandMobility hiking routes, hiking-closure and military
 danger-zone layers, Federal Office of Transport stop data, GeoAdmin services,
-and `transport.opendata.ch` departure data.
+and `transport.opendata.ch` departure data. The primary routing provider loads
+precomputed swissTLM3D binary cells on demand from a published national dataset.
+GeoAdmin remains available as a session fallback when that dataset cannot be
+used.
 
 - **swisstopo** provides the official Swiss maps and geodata.
 - **swissTLM3D** is swisstopo's topographic landscape model and supplies the
   road-and-path network used for route snapping.
-- **GeoAdmin** is the federal geodata platform used for maps, bounded routing,
+- **GeoAdmin** is the federal geodata platform used for maps, routing fallback,
   elevation, and map-information requests.
 - **SwitzerlandMobility / ASTRA** provides the national, regional, and local
   hiking-route portrayal plus public route identity and geometry used for route
@@ -193,7 +205,8 @@ retries, and session fallback are documented in
   route calculation.
 - Imported GPX and selected SwitzerlandMobility routes are read-only and replace
   the previous current itinerary.
-- Routes are not persisted locally or remotely.
+- Routes are not persisted locally or remotely. Export the current itinerary
+  as GPX before leaving or reloading the application if you want to keep it.
 - External map, elevation, routing, and timetable services can be temporarily
   unavailable or incomplete.
 

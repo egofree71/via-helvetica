@@ -156,7 +156,8 @@ The Python generator:
 - preserves complete 3D road/path geometries rather than clipping them at cell
   borders;
 - carries the source `wanderwege` classification into the normalized records;
-- assigns each complete feature to every intersecting 2.4 km cell;
+- assigns each complete feature to every 2.4 km cell overlapped by its
+  bounding box;
 - uses a temporary SQLite index so national extraction remains disk-backed;
 - writes the geometry dataset atomically only after successful completion;
 - records source size, SHA-256, parsing counts, extent, and duplication
@@ -186,7 +187,9 @@ npm run generate:precomputed-binary-routing
 ```
 
 National generation requires Node.js 22.5 or later because the build uses
-`node:sqlite`. The initial `Indexed ... geometry cells` phase does not recreate
+`node:sqlite`. Run `npm install` before generation so the script can resolve the
+project TypeScript compiler; otherwise a compatible global `tsc` must be
+available. The initial `Indexed ... geometry cells` phase does not recreate
 the geometry dataset and does not reread the GeoPackage. It reads the existing
 geometry cells, compiles each one with the shared routing rules, and builds the
 disk-backed global node/edge index needed for deterministic cross-cell IDs and
