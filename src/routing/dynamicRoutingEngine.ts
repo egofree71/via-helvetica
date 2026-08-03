@@ -17,10 +17,15 @@ import {
   combinedExtent,
   createCorridorCellKeys,
   createLocalCellKeys,
+  createSegmentEnvelopeCellKeys,
   extentForCellKey,
   type CellKey,
 } from './routingGrid';
 import { RoutingAreaTooLargeError } from './dynamicRoutingProtocol';
+import {
+  initialRouteEnvelopeMarginMetres,
+  ROUTE_ENVELOPE_MARGIN_LADDER_METRES,
+} from './routingConstants';
 import { isRoutingCoverageError } from './routingCoverage';
 import {
   fetchSwissTlmNetworkData,
@@ -390,12 +395,14 @@ export class DynamicRoutingNetworkEngine {
   }
 
   /**
-   * Routes between two waypoints using an on-demand corridor of swissTLM3D cells.
+   * Routes between two waypoints with the active provider's bounded cell policy.
+   * Binary data uses certified metric envelopes before the legacy safety bound;
+   * GeoAdmin keeps the established radius-based corridor retries.
    * @param startCoordinate - Existing route endpoint in EPSG:2056.
    * @param endCoordinate - Newly selected destination in EPSG:2056.
    * @param signal - Abort signal owned by the route-creation session.
-   * @returns A routed path, or `null` when both corridor widths lack usable coverage or connectivity.
-   * @throws {RoutingAreaTooLargeError} If either corridor exceeds the safety limit.
+   * @returns A routed path, or `null` after normal coverage/connectivity misses.
+   * @throws {RoutingAreaTooLargeError} If an attempted footprint exceeds the safety limit.
    * @throws {Error} When provider loading or graph construction fails.
    */
   async route(
@@ -414,12 +421,15 @@ export class DynamicRoutingNetworkEngine {
   }
 
   /**
-   * Executes the shared narrow-corridor and optional wider-retry workflow.
+   * Selects the provider-specific corridor policy without mixing graph models.
+   * Binary cells can prove when a small metric envelope is sufficient, while
+   * GeoAdmin keeps the established radius-1/radius-2 workflow because its
+   * source-feature assignment is not a validated runtime contract.
    * @param startCoordinate - Existing route endpoint in EPSG:2056.
    * @param endCoordinate - Newly selected destination in EPSG:2056.
    * @param signal - Abort signal owned by the caller.
    * @returns Routed path, or `null` after normal coverage/connectivity misses.
-   * @throws {RoutingAreaTooLargeError} If either corridor exceeds the safety limit.
+   * @throws {RoutingAreaTooLargeError} If an attempted footprint exceeds the safety limit.
    * @throws {Error} When provider loading or graph construction fails.
    */
   private async routeInternal(
@@ -427,51 +437,167 @@ export class DynamicRoutingNetworkEngine {
     endCoordinate: Coordinate,
     signal: AbortSignal,
   ): Promise<RoutedNetworkPath | null> {
-    const initialCellKeys = createCorridorCellKeys(
+    return this.options.precomputedBinaryCellLoader
+      ? this.routeWithCertifiedMetricEnvelopes(
+          startCoordinate,
+          endCoordinate,
+          signal,
+        )
+      : this.routeWithLegacyCorridors(startCoordinate, endCoordinate, signal);
+  }
+
+  /**
+   * Routes binary data through progressively wider metric envelopes.
+   * A successful attempt is accepted only when A* proves that no incomplete
+   * loaded-cell frontier could hide a cheaper national-graph path. The final
+   * exact radius-2 corridor preserves the previous production fallback when
+   * certification remains unavailable or inconclusive.
+   * @param startCoordinate - Existing route endpoint in EPSG:2056.
+   * @param endCoordinate - Newly selected destination in EPSG:2056.
+   * @param signal - Abort signal owned by the caller.
+   * @returns Certified path, certified miss, or the best legacy-bounded result.
+   * @throws {RoutingAreaTooLargeError} If an attempted footprint exceeds the safety limit.
+   * @throws {Error} When provider loading or graph construction fails.
+   */
+  private async routeWithCertifiedMetricEnvelopes(
+    startCoordinate: Coordinate,
+    endCoordinate: Coordinate,
+    signal: AbortSignal,
+  ): Promise<RoutedNetworkPath | null> {
+    const directDistanceMetres = Math.hypot(
+      endCoordinate[0] - startCoordinate[0],
+      endCoordinate[1] - startCoordinate[1],
+    );
+    const initialMarginMetres =
+      initialRouteEnvelopeMarginMetres(directDistanceMetres);
+    const applicableMargins = ROUTE_ENVELOPE_MARGIN_LADDER_METRES.filter(
+      (marginMetres) => marginMetres >= initialMarginMetres,
+    );
+    const attemptedCellSignatures = new Set<string>();
+    let widestMetricPath: RoutedNetworkPath | null = null;
+
+    for (const marginMetres of applicableMargins) {
+      const cellKeys = createSegmentEnvelopeCellKeys(
+        startCoordinate,
+        endCoordinate,
+        marginMetres,
+      );
+      const cellSignature = [...cellKeys].sort().join('|');
+
+      // Different metric margins can quantize to the same cell set. Repeating
+      // A* on the identical immutable graph cannot improve the certificate.
+      if (attemptedCellSignatures.has(cellSignature)) {
+        continue;
+      }
+      attemptedCellSignatures.add(cellSignature);
+
+      try {
+        const network = await this.getNetwork(cellKeys, signal);
+        const attempt = network.routeAttempt?.(
+          startCoordinate,
+          endCoordinate,
+        );
+
+        if (!attempt) {
+          // A future binary graph without frontier diagnostics must retain the
+          // old bounded behaviour instead of trusting a reduced footprint.
+          break;
+        }
+
+        if (!attempt.frontierReached) {
+          // Both a path and a miss are final when A* never needed incomplete
+          // neighbouring data that could still improve the answer.
+          return attempt.path;
+        }
+
+        widestMetricPath = attempt.path ?? widestMetricPath;
+      } catch (error) {
+        // A small envelope may be empty or entirely outside the published
+        // coverage even though a wider footprint reaches usable national data.
+        // The final legacy attempt still propagates a complete coverage miss so
+        // the provider session can perform its normal per-operation fallback.
+        if (
+          !(error instanceof NoWalkableNetworkError) &&
+          !isRoutingCoverageError(error)
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    const legacyPath = await this.routeLegacyCorridorAttempt(
+      startCoordinate,
+      endCoordinate,
+      ROUTE_RETRY_CELL_RADIUS,
+      signal,
+    );
+
+    return legacyPath ?? widestMetricPath;
+  }
+
+  /**
+   * Preserves the established GeoAdmin corridor workflow unchanged.
+   * @param startCoordinate - Existing route endpoint in EPSG:2056.
+   * @param endCoordinate - Newly selected destination in EPSG:2056.
+   * @param signal - Abort signal owned by the caller.
+   * @returns Routed path, or `null` after both normal misses.
+   * @throws {RoutingAreaTooLargeError} If either corridor exceeds the safety limit.
+   * @throws {Error} When provider loading or graph construction fails.
+   */
+  private async routeWithLegacyCorridors(
+    startCoordinate: Coordinate,
+    endCoordinate: Coordinate,
+    signal: AbortSignal,
+  ): Promise<RoutedNetworkPath | null> {
+    const initialPath = await this.routeLegacyCorridorAttempt(
       startCoordinate,
       endCoordinate,
       ROUTE_CELL_RADIUS,
+      signal,
     );
-    let initialPath: RoutedNetworkPath | null = null;
-
-    try {
-      const initialNetwork = await this.getNetwork(
-        initialCellKeys,
-        signal,
-      );
-
-      initialPath = initialNetwork.route(startCoordinate, endCoordinate);
-    } catch (error) {
-      // A narrow corridor can be entirely outside swissTLM3D coverage. The
-      // wider retry may still reach a usable network near a national border.
-      if (!(error instanceof NoWalkableNetworkError)) {
-        throw error;
-      }
-    }
 
     if (initialPath) {
       return initialPath;
     }
 
     // A wider retry allows realistic detours around barriers without paying
-    // that loading cost for every segment.
-
-    const retryCellKeys = createCorridorCellKeys(
+    // that loading cost for every GeoAdmin segment.
+    return this.routeLegacyCorridorAttempt(
       startCoordinate,
       endCoordinate,
       ROUTE_RETRY_CELL_RADIUS,
+      signal,
+    );
+  }
+
+  /**
+   * Executes one legacy cell-radius attempt and normalizes an empty graph to a
+   * route miss. Keeping this helper shared makes the binary safety fallback
+   * exactly match the previous radius-2 production behaviour.
+   * @param startCoordinate - Existing route endpoint in EPSG:2056.
+   * @param endCoordinate - Newly selected destination in EPSG:2056.
+   * @param radius - Number of complete neighbour cells added around the line walk.
+   * @param signal - Abort signal owned by the caller.
+   * @returns Routed path, or `null` for normal missing coverage/connectivity.
+   * @throws {RoutingAreaTooLargeError} If the corridor exceeds the safety limit.
+   * @throws {Error} When provider loading or graph construction fails.
+   */
+  private async routeLegacyCorridorAttempt(
+    startCoordinate: Coordinate,
+    endCoordinate: Coordinate,
+    radius: number,
+    signal: AbortSignal,
+  ): Promise<RoutedNetworkPath | null> {
+    const cellKeys = createCorridorCellKeys(
+      startCoordinate,
+      endCoordinate,
+      radius,
     );
 
     try {
-      const retryNetwork = await this.getNetwork(
-        retryCellKeys,
-        signal,
-      );
-
-      return retryNetwork.route(startCoordinate, endCoordinate);
+      const network = await this.getNetwork(cellKeys, signal);
+      return network.route(startCoordinate, endCoordinate);
     } catch (error) {
-      // No walkable data after both attempts is a normal coverage miss. The
-      // route editor can preserve continuity with a straight fallback segment.
       if (error instanceof NoWalkableNetworkError) {
         return null;
       }

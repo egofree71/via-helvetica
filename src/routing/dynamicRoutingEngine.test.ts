@@ -1,8 +1,8 @@
 /**
  * Business context: protects the worker-owned routing engine independently
- * from the Worker transport. The suite verifies bounded corridor retries,
- * straight-fallback signalling, cell-request reuse, and the derived-graph LRU
- * without live GeoAdmin traffic or expensive graph construction.
+ * from the Worker transport. The suite verifies certified binary envelopes,
+ * legacy corridor retries, straight-fallback signalling, cell-request reuse,
+ * and the derived-graph LRU without live traffic or graph construction.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -48,8 +48,12 @@ import type { Coordinate } from 'ol/coordinate.js';
 import { DynamicRoutingNetworkEngine } from './dynamicRoutingEngine';
 import { PRECOMPUTED_BINARY_HEADER_BYTES } from './precomputedBinaryRoutingFormat';
 import { RoutingAreaTooLargeError } from './dynamicRoutingProtocol';
-import { createCorridorCellKeys } from './routingGrid';
-import type { RoutedNetworkPath } from './networkRouter';
+import {
+  createCorridorCellKeys,
+  createLocalCellKeys,
+  createSegmentEnvelopeCellKeys,
+} from './routingGrid';
+import type { RouteAttempt, RoutedNetworkPath } from './networkRouter';
 import type {
   NetworkLoadOptions,
   SwissTlmNetworkData,
@@ -82,6 +86,46 @@ function createNetwork(
     snap: vi.fn((coordinate: Coordinate) => coordinate),
     route: vi.fn(() => routeResult),
     estimatedMemoryBytes,
+  };
+}
+
+/** Binary-network double exposing the loaded-frontier diagnostic. */
+function createCertifiedNetwork(
+  attempt: RouteAttempt,
+  legacyRouteResult: RoutedNetworkPath | null = attempt.path,
+  estimatedMemoryBytes = 1_024,
+): {
+  snap: ReturnType<typeof vi.fn>;
+  route: ReturnType<typeof vi.fn>;
+  routeAttempt: ReturnType<typeof vi.fn>;
+  estimatedMemoryBytes: number;
+} {
+  return {
+    snap: vi.fn((coordinate: Coordinate) => coordinate),
+    route: vi.fn(() => legacyRouteResult),
+    routeAttempt: vi.fn(() => attempt),
+    estimatedMemoryBytes,
+  };
+}
+
+/** Minimal decoded binary cell accepted by the engine test loader. */
+function createBinaryCell(key: `${number}:${number}`) {
+  return {
+    key,
+    nodeIds: new Uint32Array(),
+    nodeX: new Int32Array(),
+    nodeY: new Int32Array(),
+    nodeZ: new Int32Array(),
+    edgeIds: new Uint32Array(),
+    edgeStartNodeIds: new Uint32Array(),
+    edgeEndNodeIds: new Uint32Array(),
+    edgeCosts: new Uint32Array(),
+    edgeFlags: new Uint8Array(),
+    globalNodeCount: 1,
+    globalEdgeCount: 1,
+    sourceRoadFeatures: 0,
+    supportsFrontierCertification: true as const,
+    buffer: new ArrayBuffer(PRECOMPUTED_BINARY_HEADER_BYTES),
   };
 }
 
@@ -214,22 +258,7 @@ describe('DynamicRoutingNetworkEngine', () => {
 
 
   it('uses binary precomputed cells through the typed-array network', async () => {
-    const graph = {
-      key: '0:0' as const,
-      nodeIds: new Uint32Array(),
-      nodeX: new Int32Array(),
-      nodeY: new Int32Array(),
-      nodeZ: new Int32Array(),
-      edgeIds: new Uint32Array(),
-      edgeStartNodeIds: new Uint32Array(),
-      edgeEndNodeIds: new Uint32Array(),
-      edgeCosts: new Uint32Array(),
-      edgeFlags: new Uint8Array(),
-      globalNodeCount: 1,
-      globalEdgeCount: 1,
-      sourceRoadFeatures: 0,
-      buffer: new ArrayBuffer(PRECOMPUTED_BINARY_HEADER_BYTES),
-    };
+    const graph = createBinaryCell('0:0');
     const precomputedBinaryCellLoader = vi.fn().mockResolvedValue(graph);
     const engine = new DynamicRoutingNetworkEngine({
       precomputedBinaryCellLoader,
@@ -248,6 +277,191 @@ describe('DynamicRoutingNetworkEngine', () => {
       new Set(['0:0']),
     );
     expect(moduleMocks.fromSwissTlm).not.toHaveBeenCalled();
+  });
+
+  it('accepts a certified binary route from the smallest metric envelope', async () => {
+    const network = createCertifiedNetwork({
+      path: DEFAULT_PATH,
+      frontierReached: false,
+    });
+    moduleMocks.fromBinary.mockReturnValue(network);
+    const precomputedBinaryCellLoader = vi.fn(async (key: `${number}:${number}`) =>
+      createBinaryCell(key),
+    );
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader,
+    });
+    const start: Coordinate = [1_200, 1_200];
+    const end: Coordinate = [1_300, 1_200];
+
+    await expect(
+      engine.route(start, end, new AbortController().signal),
+    ).resolves.toEqual(DEFAULT_PATH);
+
+    const expectedCellKeys = createSegmentEnvelopeCellKeys(start, end, 400);
+    expect(precomputedBinaryCellLoader).toHaveBeenCalledTimes(
+      expectedCellKeys.size,
+    );
+    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(1);
+    expect(moduleMocks.fromBinary).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(Array),
+      expectedCellKeys,
+    );
+    expect(network.routeAttempt).toHaveBeenCalledTimes(1);
+    expect(network.route).not.toHaveBeenCalled();
+  });
+
+  it('reuses the first-waypoint graph for a 173 m certified section near a cell edge', async () => {
+    const network = createCertifiedNetwork({
+      path: DEFAULT_PATH,
+      frontierReached: false,
+    });
+    moduleMocks.fromBinary.mockReturnValue(network);
+    const precomputedBinaryCellLoader = vi.fn(async (key: `${number}:${number}`) =>
+      createBinaryCell(key),
+    );
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader,
+    });
+    const start: Coordinate = [1_200, 256];
+    const end: Coordinate = [1_373, 256];
+    const firstWaypointCells = createLocalCellKeys(start);
+    const routeCells = createSegmentEnvelopeCellKeys(start, end, 900);
+
+    expect(routeCells).toEqual(firstWaypointCells);
+
+    await engine.snap(start, new AbortController().signal);
+    await expect(
+      engine.route(start, end, new AbortController().signal),
+    ).resolves.toEqual(DEFAULT_PATH);
+
+    expect(precomputedBinaryCellLoader).toHaveBeenCalledTimes(2);
+    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(1);
+    expect(network.routeAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it('widens a binary metric envelope only when the frontier remains relevant', async () => {
+    const firstNetwork = createCertifiedNetwork({
+      path: DEFAULT_PATH,
+      frontierReached: true,
+    });
+    const secondNetwork = createCertifiedNetwork({
+      path: DEFAULT_PATH,
+      frontierReached: false,
+    });
+    moduleMocks.fromBinary
+      .mockReturnValueOnce(firstNetwork)
+      .mockReturnValueOnce(secondNetwork);
+    const precomputedBinaryCellLoader = vi.fn(async (key: `${number}:${number}`) =>
+      createBinaryCell(key),
+    );
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader,
+    });
+    const start: Coordinate = [1_200, 1_200];
+    const end: Coordinate = [1_600, 1_200];
+
+    await expect(
+      engine.route(start, end, new AbortController().signal),
+    ).resolves.toEqual(DEFAULT_PATH);
+
+    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(2);
+    expect(moduleMocks.fromBinary.mock.calls[0]?.[2]).toEqual(
+      createSegmentEnvelopeCellKeys(start, end, 900),
+    );
+    expect(moduleMocks.fromBinary.mock.calls[1]?.[2]).toEqual(
+      createSegmentEnvelopeCellKeys(start, end, 2_400),
+    );
+    expect(firstNetwork.routeAttempt).toHaveBeenCalledTimes(1);
+    expect(secondNetwork.routeAttempt).toHaveBeenCalledTimes(1);
+    expect(firstNetwork.route).not.toHaveBeenCalled();
+    expect(secondNetwork.route).not.toHaveBeenCalled();
+  });
+
+  it('accepts a certified binary miss without loading the legacy retry corridor', async () => {
+    const network = createCertifiedNetwork({
+      path: null,
+      frontierReached: false,
+    });
+    moduleMocks.fromBinary.mockReturnValue(network);
+    const precomputedBinaryCellLoader = vi.fn(async (key: `${number}:${number}`) =>
+      createBinaryCell(key),
+    );
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader,
+    });
+
+    await expect(
+      engine.route(
+        [1_200, 1_200],
+        [1_300, 1_200],
+        new AbortController().signal,
+      ),
+    ).resolves.toBeNull();
+
+    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(1);
+    expect(network.routeAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the exact legacy radius-2 corridor after inconclusive binary attempts', async () => {
+    const firstNetwork = createCertifiedNetwork({
+      path: DEFAULT_PATH,
+      frontierReached: true,
+    });
+    const secondNetwork = createCertifiedNetwork({
+      path: DEFAULT_PATH,
+      frontierReached: true,
+    });
+    const legacyNetwork = createNetwork(DEFAULT_PATH);
+    moduleMocks.fromBinary
+      .mockReturnValueOnce(firstNetwork)
+      .mockReturnValueOnce(secondNetwork)
+      .mockReturnValueOnce(legacyNetwork);
+    const precomputedBinaryCellLoader = vi.fn(async (key: `${number}:${number}`) =>
+      createBinaryCell(key),
+    );
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader,
+    });
+    const start: Coordinate = [1_200, 1_200];
+    const end: Coordinate = [1_300, 1_200];
+
+    await expect(
+      engine.route(start, end, new AbortController().signal),
+    ).resolves.toEqual(DEFAULT_PATH);
+
+    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(3);
+    expect(moduleMocks.fromBinary.mock.calls.at(-1)?.[2]).toEqual(
+      createCorridorCellKeys(start, end, 2),
+    );
+    expect(legacyNetwork.route).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the legacy radius-2 safety fallback when diagnostics are unavailable', async () => {
+    const metricNetwork = createNetwork(DEFAULT_PATH);
+    const legacyNetwork = createNetwork(DEFAULT_PATH);
+    moduleMocks.fromBinary
+      .mockReturnValueOnce(metricNetwork)
+      .mockReturnValueOnce(legacyNetwork);
+    const precomputedBinaryCellLoader = vi.fn(async (key: `${number}:${number}`) =>
+      createBinaryCell(key),
+    );
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader,
+    });
+
+    await expect(
+      engine.route(
+        [1_200, 1_200],
+        [1_300, 1_200],
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual(DEFAULT_PATH);
+
+    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(2);
+    expect(metricNetwork.route).not.toHaveBeenCalled();
+    expect(legacyNetwork.route).toHaveBeenCalledTimes(1);
   });
 
   it('rejects simultaneous geometry and binary precomputed loaders', () => {

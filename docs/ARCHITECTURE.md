@@ -412,9 +412,11 @@ deletion reconnection, and loop closure. A rejected edit keeps the committed
 route unchanged and asks for an intermediate waypoint; explicit straight mode
 remains unrestricted because it does not load swissTLM3D data.
 
-Admitted sections load a corridor between the existing endpoint and the new
-selection. The routing engine first tries a narrow corridor and retries once
-with a wider corridor when coverage or graph connectivity is insufficient.
+Admitted sections load a bounded footprint between the existing endpoint and
+the new selection. Binary routing starts with a discrete metric envelope and
+widens only when its A* frontier diagnostic cannot certify the result; an exact
+radius-2 corridor preserves the former final safety bound. GeoAdmin keeps the
+unchanged radius-1 then radius-2 workflow.
 
 Normal absence of coverage is different from provider failure. Missing nearby
 network data may produce a free first waypoint or a straight incoming section,
@@ -707,13 +709,14 @@ trigger a one-way fallback to GeoAdmin for the rest of the browser session, so
 graph representations are never mixed and failed binary storage is not probed
 again on every edit. Intentional cancellation does not cause fallback.
 
-The typed-array binary graph has an optional bounded-search diagnostic that marks
-whether A* expanded a node outside the cells whose complete data was loaded.
-Node membership is precomputed into a compact byte array during graph assembly,
-and the diagnostic is enabled only for cells carrying the validated manifest
-contract for complete unclipped features and global graph identity. The current
-radius-1/radius-2 corridor policy does not consume this signal yet, and the
-object-based GeoAdmin graph remains unchanged.
+The typed-array binary graph has a bounded-search diagnostic that marks whether
+A* expanded a node outside the cells whose complete data was loaded. Node
+membership is precomputed into a compact byte array during graph assembly, and
+the diagnostic is enabled only for cells carrying the validated manifest
+contract for complete unclipped features and global graph identity. The binary
+engine uses this signal to certify discrete 400 m, 900 m, or 2,400 m metric
+envelopes before falling back to the exact former radius-2 corridor. The
+object-based GeoAdmin graph and its radius-1/radius-2 policy remain unchanged.
 
 Precomputed releases are generated reproducibly from official swissTLM3D source
 data outside the repository, published below immutable versioned roots, and
