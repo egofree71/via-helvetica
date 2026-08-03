@@ -416,9 +416,9 @@ Admitted sections load a bounded footprint between the existing endpoint and
 the new selection. Binary routing starts with a typical-case discrete metric
 envelope and
 widens only when its A* frontier diagnostic cannot certify the result. A snap
-miss stops once both endpoint footprints are covered, while a metric candidate
-that is no smaller than radius 1 returns to the complete legacy workflow.
-GeoAdmin keeps the unchanged radius-1 then radius-2 policy.
+miss stops once both endpoint footprints are covered, while an uneconomical or
+still-inconclusive metric sequence returns to the complete legacy radius-1 then
+radius-2 workflow. GeoAdmin keeps that unchanged legacy policy throughout.
 
 Normal absence of coverage is different from provider failure. Missing nearby
 network data may produce a free first waypoint or a straight incoming section,
@@ -719,9 +719,10 @@ contract for complete unclipped features and global graph identity. The binary
 engine uses this signal to certify discrete 400 m, 700 m, 1,100 m, 1,600 m, or
 2,400 m metric envelopes. Snap misses are final once both 260 m endpoint
 footprints are covered, and the engine returns to the full legacy
-radius-1/radius-2 workflow as soon as a metric envelope is no smaller than the
-radius-1 footprint. The object-based GeoAdmin graph and its policy remain
-unchanged.
+radius-1/radius-2 workflow whenever the metric sequence is no longer smaller,
+remains inconclusive, or lacks diagnostics. A normal radius-1 path is accepted
+before the wider radius-2 retry. The object-based GeoAdmin graph and its policy
+remain unchanged.
 
 Precomputed releases are generated reproducibly from official swissTLM3D source
 data outside the repository, published below immutable versioned roots, and

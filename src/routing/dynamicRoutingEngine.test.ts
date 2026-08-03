@@ -515,25 +515,53 @@ describe('DynamicRoutingNetworkEngine', () => {
     });
   });
 
-  it('keeps the exact legacy radius-2 retry after inconclusive smaller envelopes', async () => {
-    const firstNetwork = createCertifiedNetwork({
+  it('accepts a legacy radius-1 path after an inconclusive long metric envelope', async () => {
+    const metricNetwork = createCertifiedNetwork({
       path: DEFAULT_PATH,
       frontierReached: true,
     });
-    const secondNetwork = createCertifiedNetwork({
-      path: DEFAULT_PATH,
-      frontierReached: true,
+    const legacyInitialNetwork = createNetwork(DEFAULT_PATH);
+    moduleMocks.fromBinary
+      .mockReturnValueOnce(metricNetwork)
+      .mockReturnValueOnce(legacyInitialNetwork);
+    const precomputedBinaryCellLoader = vi.fn(async (key: `${number}:${number}`) =>
+      createBinaryCell(key),
+    );
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader,
     });
-    const thirdNetwork = createCertifiedNetwork({
+    // This diagonal section reproduces the Romont footprint relationship:
+    // the 2,400 m metric envelope is smaller than radius 1 but remains
+    // inconclusive, so radius 1 must be accepted before any radius-2 download.
+    const start: Coordinate = [2_569_749.92, 1_170_535.54];
+    const end: Coordinate = [2_571_256.31, 1_175_039.82];
+    const metricCellKeys = createSegmentEnvelopeCellKeys(start, end, 2_400);
+    const legacyInitialCellKeys = createCorridorCellKeys(start, end, 1);
+
+    expect(metricCellKeys.size).toBeLessThan(legacyInitialCellKeys.size);
+
+    await expect(
+      engine.route(start, end, new AbortController().signal),
+    ).resolves.toEqual(DEFAULT_PATH);
+
+    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(2);
+    expect(moduleMocks.fromBinary.mock.calls[0]?.[2]).toEqual(metricCellKeys);
+    expect(moduleMocks.fromBinary.mock.calls[1]?.[2]).toEqual(
+      legacyInitialCellKeys,
+    );
+    expect(metricNetwork.routeAttempt).toHaveBeenCalledTimes(1);
+    expect(legacyInitialNetwork.route).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the exact legacy radius-2 retry after radius 1 also misses', async () => {
+    const metricNetwork = createCertifiedNetwork({
       path: DEFAULT_PATH,
       frontierReached: true,
     });
     const legacyInitialNetwork = createNetwork(null);
     const legacyRetryNetwork = createNetwork(DEFAULT_PATH);
     moduleMocks.fromBinary
-      .mockReturnValueOnce(firstNetwork)
-      .mockReturnValueOnce(secondNetwork)
-      .mockReturnValueOnce(thirdNetwork)
+      .mockReturnValueOnce(metricNetwork)
       .mockReturnValueOnce(legacyInitialNetwork)
       .mockReturnValueOnce(legacyRetryNetwork);
     const precomputedBinaryCellLoader = vi.fn(async (key: `${number}:${number}`) =>
@@ -542,20 +570,48 @@ describe('DynamicRoutingNetworkEngine', () => {
     const engine = new DynamicRoutingNetworkEngine({
       precomputedBinaryCellLoader,
     });
-    const start: Coordinate = [1_200, 1_200];
-    const end: Coordinate = [1_300, 1_200];
+    const start: Coordinate = [2_569_749.92, 1_170_535.54];
+    const end: Coordinate = [2_571_256.31, 1_175_039.82];
 
     await expect(
       engine.route(start, end, new AbortController().signal),
     ).resolves.toEqual(DEFAULT_PATH);
 
-    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(5);
+    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(3);
     expect(moduleMocks.fromBinary.mock.calls.at(-2)?.[2]).toEqual(
       createCorridorCellKeys(start, end, 1),
     );
     expect(moduleMocks.fromBinary.mock.calls.at(-1)?.[2]).toEqual(
       createCorridorCellKeys(start, end, 2),
     );
+    expect(legacyInitialNetwork.route).toHaveBeenCalledTimes(1);
+    expect(legacyRetryNetwork.route).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the best smaller metric path only when both legacy corridors miss', async () => {
+    const metricNetwork = createCertifiedNetwork({
+      path: DEFAULT_PATH,
+      frontierReached: true,
+    });
+    const legacyInitialNetwork = createNetwork(null);
+    const legacyRetryNetwork = createNetwork(null);
+    moduleMocks.fromBinary
+      .mockReturnValueOnce(metricNetwork)
+      .mockReturnValueOnce(legacyInitialNetwork)
+      .mockReturnValueOnce(legacyRetryNetwork);
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader: vi.fn(async (key: `${number}:${number}`) =>
+        createBinaryCell(key),
+      ),
+    });
+    const start: Coordinate = [2_569_749.92, 1_170_535.54];
+    const end: Coordinate = [2_571_256.31, 1_175_039.82];
+
+    await expect(
+      engine.route(start, end, new AbortController().signal),
+    ).resolves.toEqual(DEFAULT_PATH);
+
+    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(3);
     expect(legacyInitialNetwork.route).toHaveBeenCalledTimes(1);
     expect(legacyRetryNetwork.route).toHaveBeenCalledTimes(1);
   });

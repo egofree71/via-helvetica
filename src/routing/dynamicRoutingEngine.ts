@@ -646,10 +646,12 @@ export class DynamicRoutingNetworkEngine {
       }
     }
 
-    const legacyPath = await this.routeLegacyCorridorAttempt(
+    // A metric certificate is useful only while it saves cells. If every
+    // smaller envelope remains inconclusive, restore the complete historical
+    // order: accept a normal radius-1 result before paying for radius 2.
+    const legacyPath = await this.routeWithLegacyCorridors(
       startCoordinate,
       endCoordinate,
-      ROUTE_RETRY_CELL_RADIUS,
       signal,
     );
 
@@ -693,8 +695,8 @@ export class DynamicRoutingNetworkEngine {
 
   /**
    * Executes one legacy cell-radius attempt and normalizes an empty graph to a
-   * route miss. Keeping this helper shared makes the binary safety fallback
-   * exactly match the previous radius-2 production behaviour.
+   * route miss. Keeping this helper shared makes binary fallback reuse exactly
+   * the same radius-1 then radius-2 policy as the established provider path.
    * @param startCoordinate - Existing route endpoint in EPSG:2056.
    * @param endCoordinate - Newly selected destination in EPSG:2056.
    * @param radius - Number of complete neighbour cells added around the line walk.

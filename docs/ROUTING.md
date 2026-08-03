@@ -319,10 +319,11 @@ A binary route operation:
 4. accepts a path or connectivity miss when `frontierReached` is false;
 5. otherwise repeats with the next distinct metric step while that envelope is
    strictly smaller than the established radius-1 corridor;
-6. when a metric envelope is no smaller, or diagnostics are unavailable,
-   re-enters the complete legacy radius-1/radius-2 workflow;
-7. if all smaller metric steps remain inconclusive without reaching that size,
-   runs the exact former radius-2 corridor and may retain the best smaller path.
+6. when a metric envelope is no smaller, diagnostics are unavailable, or all
+   smaller metric steps remain inconclusive, re-enters the complete legacy
+   radius-1/radius-2 workflow;
+7. accepts a normal radius-1 path before paying for radius 2, and retains the
+   best smaller metric path only if both legacy attempts miss.
 
 This size guard prevents the metric policy from making long sections more
 expensive than the workflow it replaces. During local development, each metric
@@ -875,7 +876,7 @@ The main-thread facade tests cover:
 The engine uses mocked provider loaders and graph doubles to protect:
 
 - certified binary metric-envelope acceptance and widening;
-- exact radius-2 binary safety fallback;
+- radius-1 then radius-2 binary safety fallback after inconclusive metric attempts;
 - unchanged GeoAdmin narrow-to-wider corridor retry;
 - completed cell reuse;
 - in-flight cell reuse;
