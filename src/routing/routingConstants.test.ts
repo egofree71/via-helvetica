@@ -10,12 +10,19 @@ import {
 } from './routingConstants';
 
 describe('routingConstants', () => {
-  it('uses the smallest metric step that covers endpoint snapping and section length', () => {
+  it('starts with typical-case margins because certification handles safe retries', () => {
     expect(initialRouteEnvelopeMarginMetres(0)).toBe(400);
-    expect(initialRouteEnvelopeMarginMetres(100)).toBe(400);
-    expect(initialRouteEnvelopeMarginMetres(173)).toBe(900);
-    expect(initialRouteEnvelopeMarginMetres(500)).toBe(900);
-    expect(initialRouteEnvelopeMarginMetres(1_000)).toBe(2_400);
+    expect(initialRouteEnvelopeMarginMetres(173)).toBe(400);
+    expect(initialRouteEnvelopeMarginMetres(657)).toBe(700);
+    expect(initialRouteEnvelopeMarginMetres(928)).toBe(1_100);
+    expect(initialRouteEnvelopeMarginMetres(1_500)).toBe(1_600);
+    expect(initialRouteEnvelopeMarginMetres(3_000)).toBe(2_400);
+  });
+
+  it('keeps intermediate steps between local and legacy-sized footprints', () => {
+    expect(ROUTE_ENVELOPE_MARGIN_LADDER_METRES).toEqual([
+      400, 700, 1_100, 1_600, 2_400,
+    ]);
   });
 
   it('caps long initial attempts at the final metric step before legacy fallback', () => {

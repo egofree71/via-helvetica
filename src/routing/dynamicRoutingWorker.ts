@@ -54,6 +54,13 @@ const binaryEngine =
           createPrecomputedBinaryRoutingCellLoader(
             routingConfiguration.precomputedBinaryBaseUrl,
           ),
+        onCertifiedRoutingAttempt: import.meta.env.DEV
+          ? (diagnostic) =>
+              console.debug(
+                '[Via Helvetica] Certified routing attempt:',
+                diagnostic,
+              )
+          : undefined,
       })
     : undefined;
 const routingSession = new DynamicRoutingProviderSession({

@@ -32,6 +32,7 @@ import {
 import { reconstructRouteNodePath } from './routePathReconstruction';
 import {
   cellKeyForCoordinate,
+  createLocalCellKeys,
   type CellKey,
 } from './routingGrid';
 
@@ -436,6 +437,8 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
   private readonly nodeInsideLoadedCell: Uint8Array;
   /** Whether the provider contract makes loaded-cell frontier checks meaningful. */
   private readonly supportsFrontierCertification: boolean;
+  /** Cells whose complete graph data was present during assembly. */
+  private readonly loadedCellKeys: ReadonlySet<CellKey>;
   private snapQueryGeneration = 0;
   private routeQueryGeneration = 0;
 
@@ -452,6 +455,7 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
     private readonly adjacencySegmentIds: Uint32Array,
     nodeInsideLoadedCell: Uint8Array,
     supportsFrontierCertification: boolean,
+    loadedCellKeys: Set<CellKey>,
     segmentBuckets: Map<number, Uint32Array>,
     stats: RoutingNetworkStats,
   ) {
@@ -462,6 +466,7 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
     this.routeVisitedGeneration = new Uint32Array(nodeX.length);
     this.nodeInsideLoadedCell = nodeInsideLoadedCell;
     this.supportsFrontierCertification = supportsFrontierCertification;
+    this.loadedCellKeys = loadedCellKeys;
     this.stats = stats;
 
     let bucketBytes = 0;
@@ -754,6 +759,7 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
       adjacencySegmentIds,
       nodeInsideLoadedCell,
       supportsFrontierCertification,
+      loadedCellKeySet,
       segmentBuckets,
       {
         roadFeatures: sourceRoadFeatures,
@@ -808,9 +814,21 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
     const endSnap = this.findSnap(endCoordinate);
 
     if (!startSnap || !endSnap) {
-      // A missing snap cannot be certified here because this graph does not know
-      // whether every cell inside the 260 m endpoint footprint was requested.
-      return { path: null, frontierReached: true };
+      const requiredSnapCellKeys = new Set<CellKey>([
+        ...createLocalCellKeys(startCoordinate),
+        ...createLocalCellKeys(endCoordinate),
+      ]);
+      const snapFootprintCovered =
+        this.supportsFrontierCertification &&
+        [...requiredSnapCellKeys].every((key) => this.loadedCellKeys.has(key));
+
+      // A wider corridor cannot repair a miss once every cell intersecting both
+      // 260 m endpoint footprints was loaded from the validated dataset.
+      return {
+        path: null,
+        frontierReached: !snapFootprintCovered,
+        snapMiss: true,
+      };
     }
 
     const directPath =
@@ -950,11 +968,12 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
           snapDistanceEnd: endSnap.distance,
         },
         frontierReached,
+        snapMiss: false,
       };
     }
 
     if (bestGoalNodeId < 0) {
-      return { path: null, frontierReached };
+      return { path: null, frontierReached, snapMiss: false };
     }
 
     const nodePath = reconstructRouteNodePath(
@@ -981,6 +1000,7 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
         snapDistanceEnd: endSnap.distance,
       },
       frontierReached,
+      snapMiss: false,
     };
   }
 

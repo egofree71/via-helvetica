@@ -105,6 +105,14 @@ interface LoadedCellResult {
   coverageError?: Error;
 }
 
+/** Empty binary graph plus the exact cells that were actually covered. */
+class EmptyCoveredBinaryNetworkError extends NoWalkableNetworkError {
+  constructor(readonly coveredCellKeys: Set<CellKey>) {
+    super();
+    this.name = 'EmptyCoveredBinaryNetworkError';
+  }
+}
+
 /** In-flight cell request shared by concurrent consumers. */
 interface PendingCell {
   /** Promise resolving to the completed cell. */
@@ -117,6 +125,28 @@ interface PendingCell {
   settled: boolean;
 }
 
+/** Development diagnostic for one certified binary-corridor decision. */
+export interface CertifiedRoutingAttemptDiagnostic {
+  /** Direct endpoint distance in LV95 metres. */
+  directDistanceMetres: number;
+  /** One-based metric-envelope attempt number within the route section. */
+  attemptNumber: number;
+  /** Requested metric halo in LV95 metres. */
+  marginMetres: number;
+  /** Number of routing cells in the candidate envelope. */
+  cellCount: number;
+  /** Final reason why this metric step completed or was skipped. */
+  outcome:
+    | 'certified-path'
+    | 'certified-miss'
+    | 'frontier-reached'
+    | 'snap-miss'
+    | 'empty-network'
+    | 'coverage-miss'
+    | 'diagnostics-unavailable'
+    | 'legacy-footprint-preferred';
+}
+
 /** Session callbacks emitted by the worker-owned routing engine. */
 export interface DynamicRoutingNetworkEngineOptions {
   /**
@@ -126,6 +156,10 @@ export interface DynamicRoutingNetworkEngineOptions {
   initialHikingEnrichmentEnabled?: boolean;
   /** Called once when optional hiking enrichment is disabled for the session. */
   onHikingEnrichmentUnavailable?: () => void;
+  /** Receives development-only measurements for binary metric attempts. */
+  onCertifiedRoutingAttempt?: (
+    diagnostic: CertifiedRoutingAttemptDiagnostic,
+  ) => void;
   /**
    * Optional normalized geometry loader injected by regression tests.
    * Normal runtime geometry loading uses GeoAdmin directly.
@@ -173,6 +207,19 @@ async function mapWithConcurrency<T, R>(
 
   await Promise.all(runners);
   return results;
+}
+
+/** Returns whether every required key is present in one candidate footprint. */
+function containsAllCellKeys(
+  candidateCellKeys: Set<CellKey>,
+  requiredCellKeys: Set<CellKey>,
+): boolean {
+  for (const key of requiredCellKeys) {
+    if (!candidateCellKeys.has(key)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -449,9 +496,9 @@ export class DynamicRoutingNetworkEngine {
   /**
    * Routes binary data through progressively wider metric envelopes.
    * A successful attempt is accepted only when A* proves that no incomplete
-   * loaded-cell frontier could hide a cheaper national-graph path. The final
-   * exact radius-2 corridor preserves the previous production fallback when
-   * certification remains unavailable or inconclusive.
+   * loaded-cell frontier could hide a cheaper national-graph path. Snap misses
+   * stop after the complete endpoint footprints are covered, and candidates no
+   * smaller than radius 1 return to the complete legacy workflow.
    * @param startCoordinate - Existing route endpoint in EPSG:2056.
    * @param endCoordinate - Newly selected destination in EPSG:2056.
    * @param signal - Abort signal owned by the caller.
@@ -473,8 +520,32 @@ export class DynamicRoutingNetworkEngine {
     const applicableMargins = ROUTE_ENVELOPE_MARGIN_LADDER_METRES.filter(
       (marginMetres) => marginMetres >= initialMarginMetres,
     );
+    const legacyInitialCellKeys = createCorridorCellKeys(
+      startCoordinate,
+      endCoordinate,
+      ROUTE_CELL_RADIUS,
+    );
+    const requiredSnapCellKeys = new Set<CellKey>([
+      ...createLocalCellKeys(startCoordinate),
+      ...createLocalCellKeys(endCoordinate),
+    ]);
     const attemptedCellSignatures = new Set<string>();
     let widestMetricPath: RoutedNetworkPath | null = null;
+    let attemptNumber = 0;
+
+    const reportAttempt = (
+      marginMetres: number,
+      cellCount: number,
+      outcome: CertifiedRoutingAttemptDiagnostic['outcome'],
+    ): void => {
+      this.options.onCertifiedRoutingAttempt?.({
+        directDistanceMetres,
+        attemptNumber,
+        marginMetres,
+        cellCount,
+        outcome,
+      });
+    };
 
     for (const marginMetres of applicableMargins) {
       const cellKeys = createSegmentEnvelopeCellKeys(
@@ -482,6 +553,24 @@ export class DynamicRoutingNetworkEngine {
         endCoordinate,
         marginMetres,
       );
+
+      // Once an envelope is no smaller than the established radius-1
+      // footprint, the metric policy has stopped saving data. Re-entering the
+      // legacy radius-1/radius-2 workflow avoids making long sections worse.
+      if (cellKeys.size >= legacyInitialCellKeys.size) {
+        attemptNumber += 1;
+        reportAttempt(
+          marginMetres,
+          cellKeys.size,
+          'legacy-footprint-preferred',
+        );
+        return this.routeWithLegacyCorridors(
+          startCoordinate,
+          endCoordinate,
+          signal,
+        );
+      }
+
       const cellSignature = [...cellKeys].sort().join('|');
 
       // Different metric margins can quantize to the same cell set. Repeating
@@ -490,7 +579,7 @@ export class DynamicRoutingNetworkEngine {
         continue;
       }
       attemptedCellSignatures.add(cellSignature);
-
+      attemptNumber += 1;
       try {
         const network = await this.getNetwork(cellKeys, signal);
         const attempt = network.routeAttempt?.(
@@ -499,27 +588,59 @@ export class DynamicRoutingNetworkEngine {
         );
 
         if (!attempt) {
+          reportAttempt(
+            marginMetres,
+            cellKeys.size,
+            'diagnostics-unavailable',
+          );
           // A future binary graph without frontier diagnostics must retain the
           // old bounded behaviour instead of trusting a reduced footprint.
-          break;
+          return this.routeWithLegacyCorridors(
+            startCoordinate,
+            endCoordinate,
+            signal,
+          );
+        }
+
+        if (attempt.snapMiss && !attempt.frontierReached) {
+          reportAttempt(marginMetres, cellKeys.size, 'snap-miss');
+          // The graph verified that every cell intersecting both 260 m endpoint
+          // footprints was actually covered by the validated binary dataset.
+          return null;
         }
 
         if (!attempt.frontierReached) {
+          reportAttempt(
+            marginMetres,
+            cellKeys.size,
+            attempt.path ? 'certified-path' : 'certified-miss',
+          );
           // Both a path and a miss are final when A* never needed incomplete
           // neighbouring data that could still improve the answer.
           return attempt.path;
         }
 
+        reportAttempt(marginMetres, cellKeys.size, 'frontier-reached');
         widestMetricPath = attempt.path ?? widestMetricPath;
       } catch (error) {
-        // A small envelope may be empty or entirely outside the published
-        // coverage even though a wider footprint reaches usable national data.
-        // The final legacy attempt still propagates a complete coverage miss so
-        // the provider session can perform its normal per-operation fallback.
         if (
-          !(error instanceof NoWalkableNetworkError) &&
-          !isRoutingCoverageError(error)
+          error instanceof EmptyCoveredBinaryNetworkError &&
+          containsAllCellKeys(error.coveredCellKeys, requiredSnapCellKeys)
         ) {
+          reportAttempt(marginMetres, cellKeys.size, 'empty-network');
+          // No walkable edge exists in any actually covered cell intersecting
+          // either endpoint snap footprint, so a wider corridor cannot help.
+          return null;
+        }
+
+        if (isRoutingCoverageError(error)) {
+          reportAttempt(marginMetres, cellKeys.size, 'coverage-miss');
+          // The final legacy attempt must still surface a complete coverage miss
+          // so the provider session can activate its normal GeoAdmin fallback.
+          continue;
+        }
+
+        if (!(error instanceof NoWalkableNetworkError)) {
           throw error;
         }
       }
@@ -682,11 +803,18 @@ export class DynamicRoutingNetworkEngine {
 
         return cell.graph;
       });
-      network = BinaryRoutingNetwork.fromCells(
-        combinedExtent(coveredCellKeys),
-        binaryCells,
-        coveredCellKeys,
-      );
+      try {
+        network = BinaryRoutingNetwork.fromCells(
+          combinedExtent(coveredCellKeys),
+          binaryCells,
+          coveredCellKeys,
+        );
+      } catch (error) {
+        if (error instanceof NoWalkableNetworkError) {
+          throw new EmptyCoveredBinaryNetworkError(coveredCellKeys);
+        }
+        throw error;
+      }
     } else {
       const geometryCells = cells.map((cell) => {
         if (cell.kind !== 'geometry') {

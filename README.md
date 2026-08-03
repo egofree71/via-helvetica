@@ -172,9 +172,11 @@ official SwitzerlandMobility hiking routes, hiking-closure and military
 danger-zone layers, Federal Office of Transport stop data, GeoAdmin services,
 and `transport.opendata.ch` departure data. The primary routing provider loads
 precomputed swissTLM3D binary cells on demand from a published national dataset.
-It starts route sections with bounded metric envelopes and widens them only when
-A* cannot certify that the loaded cells are sufficient. GeoAdmin remains
-available as a session fallback when that dataset cannot be used.
+It starts route sections with typical-case metric envelopes and widens them only
+when A* cannot certify that the loaded cells are sufficient. A complete snap
+miss stops immediately, while envelopes that no longer save cells return to the
+legacy radius-1/radius-2 workflow. GeoAdmin remains available as a session
+fallback when that dataset cannot be used.
 
 - **swisstopo** provides the official Swiss maps and geodata.
 - **swissTLM3D** is swisstopo's topographic landscape model and supplies the

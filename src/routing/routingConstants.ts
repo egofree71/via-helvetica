@@ -41,23 +41,32 @@ export const MAX_NETWORK_SECTION_DIRECT_DISTANCE_METERS = 15_000;
 /**
  * Discrete initial binary-corridor margins in LV95 metres. Stable steps keep
  * neighbouring route sections on the same cell signatures so the Worker graph
- * cache remains effective. The final 2,400 m step is followed by the unchanged
- * legacy radius-2 corridor when certification still fails.
+ * cache remains effective. A candidate that reaches the legacy radius-1 cell
+ * count is skipped so long sections retain the former bounded workflow.
  */
-export const ROUTE_ENVELOPE_MARGIN_LADDER_METRES = [400, 900, 2_400] as const;
+export const ROUTE_ENVELOPE_MARGIN_LADDER_METRES = [
+  400,
+  700,
+  1_100,
+  1_600,
+  2_400,
+] as const;
 
 /**
- * Added metric halo per metre of direct route-section distance. Raising this
- * value loads more cells up front; lowering it makes certified retries more
- * frequent without weakening correctness.
+ * Added metric halo per metre of direct route-section distance. The value aims
+ * at typical interactive sections rather than a pessimistic A* bound because a
+ * too-small first envelope is safely detected, while over-fetched cells cannot
+ * be recovered. Raising it loads more cells up front; lowering it makes
+ * certified retries more frequent without weakening correctness.
  */
-export const ROUTE_ENVELOPE_MARGIN_PER_DIRECT_METRE = 1.25;
+export const ROUTE_ENVELOPE_MARGIN_PER_DIRECT_METRE = 0.6;
 
 /**
  * Selects the first discrete metric envelope for one binary route attempt.
  * The requested halo includes the complete 260 m snapping footprint at both
- * endpoints and grows with direct section length. Long sections cap at 2,400 m
- * before the exact legacy radius-2 fallback preserves the previous bound.
+ * endpoints and grows with direct section length. Intermediate steps avoid the
+ * former 900-to-2,400 m jump; long sections still cap at 2,400 m before the
+ * legacy corridor workflow preserves the previous bound.
  * @param directDistanceMetres - Endpoint distance in LV95 metres.
  * @returns One value from `ROUTE_ENVELOPE_MARGIN_LADDER_METRES`.
  * @throws {RangeError} When the distance is negative or not finite.
