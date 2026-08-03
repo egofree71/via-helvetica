@@ -38,3 +38,6 @@ Thumbs.db
 
 # Local repository archives
 /*.zip
+
+# Maintainer-only routing publication notes
+/docs/ROUTING_DATA_PUBLICATION_RUNBOOK.local.md

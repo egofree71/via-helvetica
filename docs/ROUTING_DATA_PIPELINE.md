@@ -2,144 +2,135 @@
 
 ## Purpose
 
-The routing-data pipeline converts the official national swissTLM3D
-LV95/LN02 GeoPackage into immutable, independently loadable binary graph cells
-for the browser routing Worker.
+The routing-data pipeline converts an official swissTLM3D LV95/LN02
+GeoPackage into immutable, independently loadable binary graph cells consumed
+by the browser routing Worker.
 
-The pipeline is an offline maintenance workflow. Its large source,
-intermediate, and release files must remain outside the repository. This keeps
-Vite startup, JetBrains indexing, Git operations, backups, and antivirus scans
-from traversing tens of thousands of generated files whenever the application
-is opened.
+This is an offline maintenance workflow. Large source, intermediate, and
+release files stay outside the repository so normal development tools do not
+scan tens of thousands of generated files. The application itself does not
+need the local pipeline workspace at startup: development and production can
+load an already published release through `VITE_ROUTING_DATA_BASE_URL`.
 
-Runtime routing behaviour, graph semantics, snapping, A*, caching, and fallback
-are documented in [ROUTING.md](ROUTING.md). This document covers source import,
-binary generation, verification, and publication.
+Runtime graph semantics, snapping, A*, caching, provider fallback, and route
+calculation are documented in [ROUTING.md](ROUTING.md). This document describes
+the reproducible pipeline and its public delivery contract. Machine-specific
+paths, credentials, bucket names, domains, and operational notes should remain
+in local files outside version control.
 
-## 1. Filesystem boundary
+## 1. External data layout
 
-A recommended Windows layout is:
+Keep the data root outside the Git working tree. A typical layout is:
 
 ```text
-C:\Dev\via-helvetica\
+<project>/
     routing-data.config.example.json
     routing-data.config.local.json
-    scripts\
-    src\
-    docs\
+    scripts/
+    src/
+    docs/
 
-C:\ViaHelveticaData\
-    source\
-        SWISSTLM3D_2026_LV95_LN02.gpkg
-    work\
-        swisstlm3d-2026\
-            ch-geometry\
+<routing-data-root>/
+    source/
+        <official-swisstlm3d-source>.gpkg
+    work/
+        <dataset-id>/
+            <scope>-geometry/
             precomputed-binary-routing-build.sqlite
-    releases\
-        swisstlm3d-2026\
-            format-v3\
-                ch\
+    releases/
+        <dataset-id>/
+            <format-id>/
+                <scope>/
                     manifest.json
                     integrity.json
-                    cells\
+                    cells/
 ```
 
-`C:\ViaHelveticaData` may be replaced by another local drive. The important
-constraint is that it is not the repository itself and is not nested below the
-repository.
+The paths can be on any suitable local drive. The important constraint is that
+`<routing-data-root>` is not the repository itself and is not nested below it.
+Source GeoPackages, geometry cells, SQLite build databases, and binary releases
+must not be committed.
 
-The application never needs these local files at startup. Development and
-production normally load the published release through
-`VITE_ROUTING_DATA_BASE_URL`.
-
-## 2. Local configuration
+## 2. Local maintenance configuration
 
 Copy `routing-data.config.example.json` to the git-ignored
-`routing-data.config.local.json`, then adjust the source and publication root:
+`routing-data.config.local.json`, then replace the placeholders:
 
 ```json
 {
-  "datasetId": "swisstlm3d-2026",
+  "datasetId": "swisstlm3d-YYYY",
   "formatId": "format-v3",
   "scope": "ch",
-  "dataRoot": "C:/ViaHelveticaData",
-  "sourceGeoPackage": "C:/ViaHelveticaData/source/SWISSTLM3D_2026_LV95_LN02.gpkg",
+  "dataRoot": "C:/Path/To/RoutingData",
+  "sourceGeoPackage": "C:/Path/To/RoutingData/source/SWISSTLM3D_YYYY.gpkg",
   "publication": {
     "remote": "r2",
-    "bucket": "via-helvetica-routing-data",
-    "publicRootUrl": "https://pub-example.r2.dev",
-    "publicOrigin": "https://viahelvetica.ch",
+    "bucket": "your-routing-data-bucket",
+    "publicRootUrl": "https://data.example.org",
+    "publicOrigin": "https://app.example.org",
     "publicSampleCount": 50
   }
 }
 ```
 
-`publication.publicOrigin` is required for every real publication and standalone
-public verification. It must be the exact HTTP(S) browser origin allowed to load
-the routing objects, without a path. The dry run does not contact the public URL.
-
-The three release identifiers produce one stable path:
+The three release identifiers produce one stable relative path:
 
 ```text
-swisstlm3d-2026/format-v3/ch
+<datasetId>/<formatId>/<scope>
 ```
 
-The scripts reuse that path instead of asking for it repeatedly. With the
-example above, the effective values are:
+For the example above, the scripts derive:
 
 ```text
 geometryRoot
-= C:/ViaHelveticaData/work/swisstlm3d-2026/ch-geometry
+= C:/Path/To/RoutingData/work/swisstlm3d-YYYY/ch-geometry
 
 binaryReleaseRoot
-= C:/ViaHelveticaData/releases/swisstlm3d-2026/format-v3/ch
+= C:/Path/To/RoutingData/releases/swisstlm3d-YYYY/format-v3/ch
 
 buildDatabasePath
-= C:/ViaHelveticaData/work/swisstlm3d-2026/precomputed-binary-routing-build.sqlite
+= C:/Path/To/RoutingData/work/swisstlm3d-YYYY/precomputed-binary-routing-build.sqlite
 
 publication.prefix
-= swisstlm3d-2026/format-v3/ch
+= swisstlm3d-YYYY/format-v3/ch
 
 publication.publicBaseUrl
-= https://pub-example.r2.dev/swisstlm3d-2026/format-v3/ch
+= https://data.example.org/swisstlm3d-YYYY/format-v3/ch
 ```
 
 `datasetId` identifies the official source edition. `formatId` identifies Via
-Helvetica's binary encoding and changes only for an incompatible format change.
-`scope` remains a separate path segment so bounded or national releases can be
-identified consistently.
+Helvetica's binary encoding and changes only when that encoding becomes
+incompatible. `scope` remains a separate segment so national and bounded
+releases use the same naming model.
 
-Forward slashes avoid JSON escaping on Windows. Relative filesystem paths are
-resolved from the configuration file directory. R2 credentials never belong in
-this file; they remain in the local rclone configuration. The upload script
-reads the expected cell count from the verified local `manifest.json`; it is not
-copied into configuration.
+`publication.publicRootUrl` is the public host root, not the complete release
+path. The scripts append the derived release path. `publication.publicOrigin`
+is the exact browser origin allowed by the storage CORS policy, without a path.
+R2 or S3 credentials never belong in this JSON file; they remain in the local
+storage-client configuration.
 
-Every user-facing pipeline command reads this file automatically. An explicit
-CLI path overrides the corresponding derived value. A different file can be
-supplied with `--config <path>` for Node/Python scripts or `-Config <path>` for
-the PowerShell publication script. Former explicit `geometryRoot`,
-`binaryReleaseRoot`, `buildDatabasePath`, `publication.prefix`, and
-`publication.publicBaseUrl` fields remain accepted as advanced overrides during
-migration, but the example deliberately avoids them.
+The maintenance configuration is not read by Vite or by the browser. The
+application's runtime data URL is configured separately through
+`VITE_ROUTING_DATA_BASE_URL`.
+
+Every pipeline command reads `routing-data.config.local.json` by default. Node
+and Python scripts accept `--config <path>`, while the PowerShell publication
+script accepts `-Config <path>`. Explicit command-line paths override derived
+values for one-off experiments.
 
 ## 3. Script inventory
 
-All scripts currently in `scripts/` remain useful:
-
 | Script | Role | Direct use |
 |---|---|---|
-| `generate-localized-pages.mjs` | Generates localized application and release-history HTML entries | Application build helper; unrelated to routing data |
-| `generate-routing-geometry-cells.py` | Reads the official GeoPackage and produces normalized 2.4 km source-geometry cells | `npm run generate:routing-geometry` |
-| `generate-precomputed-binary-routing-graph.mjs` | Builds the national graph and emits raw plus Brotli binary cells | `npm run generate:precomputed-binary-routing` |
-| `verify-routing-dataset.mjs` | Performs the complete local semantic, checksum, and cross-cell verification | `npm run verify:precomputed-binary-routing` |
-| `prepare-routing-publication.mjs` | Derives publication-only metadata containing compressed objects only | Internal helper used by the upload script |
-| `upload-routing-dataset-r2.ps1` | Publishes cells first, verifies R2, and writes the manifest last | Run directly from PowerShell |
-| `verify-published-routing-dataset.mjs` | Verifies public transport decoding, headers, CORS, and sampled hashes | `npm run verify:published-routing` or upload helper |
+| `generate-routing-geometry-cells.py` | Reads the official GeoPackage and produces normalized source-geometry cells | `npm run generate:routing-geometry` |
+| `generate-precomputed-binary-routing-graph.mjs` | Builds the graph and emits raw plus Brotli binary cells | `npm run generate:precomputed-binary-routing` |
+| `verify-routing-dataset.mjs` | Performs complete local semantic, checksum, and cross-cell verification | `npm run verify:precomputed-binary-routing` |
+| `prepare-routing-publication.mjs` | Creates publication-only metadata containing compressed objects | Internal upload helper |
+| `upload-routing-dataset-r2.ps1` | Publishes cells first, verifies storage, and writes the manifest last | Run from PowerShell |
+| `verify-published-routing-dataset.mjs` | Verifies public transport decoding, headers, CORS, and sampled hashes | `npm run verify:published-routing` |
 
-No script in this list is obsolete. `prepare-routing-publication.mjs` looks
-specialized because it is deliberately an internal safety step rather than a
-standalone workflow.
+`generate-localized-pages.mjs` is an application build helper and is unrelated
+to routing-data generation.
 
 ## 4. Stage 1: import the official GeoPackage
 
@@ -149,34 +140,34 @@ Run:
 npm run generate:routing-geometry
 ```
 
-The Python generator:
+The generator:
 
 - opens the official GeoPackage read-only;
-- reads `tlm_strassen_strasse` and its R-tree index;
-- preserves complete 3D road/path geometries rather than clipping them at cell
-  borders;
-- carries the source `wanderwege` classification into the normalized records;
-- assigns each complete feature to every 2.4 km cell overlapped by its
-  bounding box;
+- reads `tlm_strassen_strasse` through its spatial index;
+- preserves complete 3D road and path geometries instead of clipping them at
+  cell borders;
+- carries the source `wanderwege` classification into normalized records;
+- assigns each complete feature to every 2.4 km cell overlapped by its bounding
+  box;
 - uses a temporary SQLite index so national extraction remains disk-backed;
-- writes the geometry dataset atomically only after successful completion;
+- writes the geometry dataset atomically after successful completion;
 - records source size, SHA-256, parsing counts, extent, and duplication
   statistics in its manifest.
 
-A bounded validation extraction can override the normal extent:
+A bounded validation extraction can override the configured extent:
 
 ```powershell
 npm run generate:routing-geometry -- --extent 2496000,1116000,2515200,1135200
 ```
 
-CLI overrides remain available for one-off experiments:
+Explicit source and output paths remain available for experiments:
 
 ```powershell
 npm run generate:routing-geometry -- "D:/Data/test.gpkg" --output "D:/Data/test-geometry" --scope test
 ```
 
-Parse errors fail the build by default. `--allow-parse-errors` is reserved for a
-source edition whose rejected geometries have already been investigated.
+Parse errors fail the build by default. Use `--allow-parse-errors` only after the
+rejected source geometries have been investigated.
 
 ## 5. Stage 2: compile the binary graph
 
@@ -187,38 +178,30 @@ npm run generate:precomputed-binary-routing
 ```
 
 National generation requires Node.js 22.5 or later because the build uses
-`node:sqlite`. Run `npm install` before generation so the script can resolve the
-project TypeScript compiler; otherwise a compatible global `tsc` must be
-available. The initial `Indexed ... geometry cells` phase does not recreate
-the geometry dataset and does not reread the GeoPackage. It reads the existing
-geometry cells, compiles each one with the shared routing rules, and builds the
-disk-backed global node/edge index needed for deterministic cross-cell IDs and
-deduplication. The later `Encoded ... binary cells` phase writes the release.
+the `node:sqlite` API. Use a newer version when required by the application
+toolchain, as documented in the README. Run `npm install` before generation so
+the script can resolve the project's TypeScript compiler.
 
 The generator:
 
-- validates every geometry source cell with the shared TypeScript format reader;
-- runs the same walkability, 3D node identity, hiking preference, and cost model
-  used by live routing;
-- builds a disk-backed national graph index at `buildDatabasePath`;
+- validates every geometry cell with the shared TypeScript format reader;
+- applies the same walkability, 3D node identity, hiking preference, and cost
+  model used by live routing;
+- builds a disk-backed global node and edge index;
 - assigns deterministic global node and edge IDs;
-- writes strictly ID-ordered fixed-point columns;
+- writes fixed-point columns in strict ID order;
 - emits both `.bin` and `.bin.br` for every non-empty cell;
-- writes CRC32-protected v3 headers with the release `datasetBuildId`;
+- writes CRC32-protected v3 headers containing the release `datasetBuildId`;
 - creates `manifest.json` and the complete SHA-256 `integrity.json` inventory;
-- atomically replaces `binaryReleaseRoot` only after the new release is complete.
+- atomically replaces the configured binary release only after completion.
 
-The raw `.bin` files are retained locally because verification compares their
-semantic content with the Brotli round trip. Only `.bin.br` objects are
-published to R2.
+Raw `.bin` files remain local because full verification compares their semantic
+content with the Brotli round trip. Only `.bin.br` objects are intended for
+public delivery.
 
-The temporary TypeScript compiler output is created in the operating-system
-temporary directory rather than the repository. The SQLite build database is
-removed after a successful run unless `--keep-database` is supplied.
-
-The validated 2026 national build produced 7,529 logical cells, approximately
-1,030 MiB of raw binary data, and approximately 313 MiB of Brotli data. These
-figures describe that source edition and are not hard format limits.
+The temporary compiler output is created in the operating-system temporary
+directory. The SQLite build database is removed after a successful run unless
+`--keep-database` is supplied.
 
 ## 6. Complete local verification
 
@@ -240,35 +223,38 @@ The verifier checks:
 - consistency of shared global nodes and edges across all cells;
 - aggregate byte and graph counts.
 
-This is intentionally an offline publication gate and may use substantial
-memory. It is not browser work.
+This command is an offline publication gate and may use substantial memory. It
+is not browser work.
 
-## 7. R2 publication
+## 7. Publication prerequisites
 
-The rclone remote must already exist and have object read/write permission for
-the target bucket. Bucket creation permission is not required. The upload script
-passes `--s3-no-check-bucket`, preventing rclone from attempting `CreateBucket`
-with a correctly restricted token.
+The publication script currently targets an S3-compatible Cloudflare R2 bucket
+through rclone. Configure a local rclone remote with object read/write access to
+the chosen bucket. Bucket-creation permission is unnecessary because the upload
+script uses `--s3-no-check-bucket`.
 
-The non-secret rclone settings are:
+Keep all access keys in rclone's machine-local configuration. Do not place
+credentials, account identifiers, or private endpoint URLs in the repository.
+A deployment-specific runbook can record non-secret infrastructure names and
+console settings, but that runbook should remain outside version control.
 
-```text
-Remote name: r2
-Storage: S3
-Provider: Cloudflare
-Credentials: enter Access Key ID and Secret Access Key manually
-Endpoint: https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-Bucket: via-helvetica-routing-data
-Token permission: Object Read & Write for this bucket only
-no_check_bucket: true
-```
+The public endpoint must satisfy these contracts:
 
-Run `rclone config file` to locate the machine-local `rclone.conf`. That file is
-sensitive because it contains the bucket credentials; keep a private backup
-outside the repository if the environment must be restorable on another PC.
-The repository documents the settings but never stores the keys.
+- HTTPS is available and HTTP requests redirect to HTTPS;
+- the configured application origin receives a matching
+  `Access-Control-Allow-Origin` header;
+- `GET` requests are permitted by CORS;
+- `.bin.br` objects retain `Content-Encoding: br`;
+- release objects retain `Cache-Control: public, max-age=31536000, immutable`;
+- non-standard binary extensions are eligible for the CDN cache;
+- published release roots are immutable.
 
-Preview the complete operation without changing R2:
+A custom domain is recommended for production. Provider development URLs can be
+useful during setup but may be rate-limited or omit production caching features.
+
+## 8. Publish an immutable release
+
+Preview the operation without modifying remote storage:
 
 ```powershell
 .\scripts\upload-routing-dataset-r2.ps1 -DryRun
@@ -280,96 +266,97 @@ Publish the configured release:
 .\scripts\upload-routing-dataset-r2.ps1
 ```
 
-The script performs the following order:
+The script performs this sequence:
 
 1. complete local verification;
-2. generation of a publication-only manifest and integrity inventory;
-3. upload of all `.bin.br` cell objects with `Content-Encoding: br`;
+2. generation of publication-only metadata containing compressed objects;
+3. upload of all `.bin.br` cells with Brotli content metadata;
 4. remote size and checksum comparison;
 5. upload of `integrity.json`;
 6. upload of `manifest.json` last;
-7. public verification of manifest, integrity, CORS, cache headers, Brotli
-   transport decoding, and evenly distributed sample hashes.
+7. public verification of the manifest, integrity inventory, CORS, cache
+   headers, Brotli transport decoding, and evenly distributed sample hashes.
 
-`manifest.json` is the release-visibility switch. A failure before that write
+`manifest.json` is the release-visibility switch. A failure before its upload
 leaves the new release undiscoverable. Cells, integrity metadata, and the
-manifest all use `Cache-Control: public, max-age=31536000, immutable` because the
-release identity is part of their URL. A corrected dataset must use a new
-source-version, format-version, or scope path; published roots are never
-overwritten. A custom Cloudflare domain may compress the JSON transport, but it
-must preserve the immutable cache and CORS contracts verified here.
+manifest use a one-year immutable cache because the release identity is already
+part of the URL.
 
-The public verifier sends the configured browser `Origin` header and requires a
-matching `Access-Control-Allow-Origin` response on the manifest, integrity
-inventory, and sampled cells. It refuses to run without that origin. It also
-retries bounded transient `404`, `429`, and `5xx` responses. This is useful
-immediately after a large upload to an `r2.dev` development URL, but persistent
-errors still fail the publication.
+Never overwrite a published release root. Corrected data must use a new
+`datasetId`, `formatId`, or `scope` path. Publishing a new source edition under a
+new path also prevents long-lived browser and edge caches from serving mixed
+releases.
 
-The public verifier can also be rerun without uploading:
+## 9. Verify an existing public release
+
+Rerun public verification without uploading:
 
 ```powershell
 npm run verify:published-routing
 ```
 
-This command reads `publication.publicOrigin` from the local configuration. When
-using explicit command-line paths instead, pass `--origin https://viahelvetica.ch`
-as well.
+This command compares the public release with the local release selected by
+`routing-data.config.local.json`. Before running it, confirm that the local
+`datasetId`, `formatId`, and `scope` identify the same release as the public URL.
+A manifest mismatch often means that the local configuration still points to a
+different annual source edition or an experimental build.
 
-## 8. Application activation
+To verify another URL explicitly:
 
-The routing-data configuration is an offline maintenance file and is not read by
-Vite or the browser. To test the published release, set the public root in the
-git-ignored `.env.local`:
+```powershell
+npm run verify:published-routing -- --base-url "https://data.example.org/swisstlm3d-YYYY/format-v3/ch"
+```
+
+When bypassing the configured public URL, also supply `--origin` when required
+by the verifier.
+
+For a direct cache and CORS check, request the same object twice with the
+application origin:
+
+```powershell
+$url = "https://data.example.org/swisstlm3d-YYYY/format-v3/ch/manifest.json"
+
+curl.exe -sS -D - -o NUL `
+  -H "Origin: https://app.example.org" `
+  $url
+```
+
+A healthy production setup normally returns `200`, the expected CORS and cache
+headers, then changes from `CF-Cache-Status: MISS` to `HIT` on a repeated request
+from the same Cloudflare location.
+
+## 10. Activate the release in the application
+
+Set the complete public release directory in the git-ignored `.env.local`:
 
 ```env
-VITE_ROUTING_DATA_BASE_URL=https://pub-example.r2.dev/swisstlm3d-2026/format-v3/ch
+VITE_ROUTING_DATA_BASE_URL=https://data.example.org/swisstlm3d-YYYY/format-v3/ch
 ```
 
 Restart Vite after changing the value. The URL must identify the directory that
-contains the public `manifest.json`.
+contains `manifest.json`; do not provide only the domain root.
 
-## 9. Migration from the former in-repository layout
+Use the browser network panel to confirm that the manifest and `.bin.br` cells
+come from the intended host. Test representative routes in contrasting Swiss
+regions before changing the production deployment.
 
-The previous experimental layout used:
-
-```text
-.routing-work/ch-geometry
-public/routing-data/ch-precomputed-binary
-```
-
-Move those directories to the locations selected in
-`routing-data.config.local.json`; do not copy them back below the project root.
-After the move:
-
-- Vite no longer scans the national binary release as a public directory;
-- its file watcher no longer traverses the geometry workspace;
-- JetBrains IDEs do not index the generated cells;
-- local route testing continues through R2;
-- Git and production builds remain independent of the offline data volume.
-
-The old paths stay in `.gitignore`, and Vite ignores legacy workspaces as a
-safety net. This prevents accidental regeneration below the repository from
-becoming Git noise, but it is not a substitute for the external layout.
-
-## 10. Release checklist
+## 11. New source-edition checklist
 
 For a new official swissTLM3D edition:
 
-1. place the new GeoPackage under the external source directory;
-2. change `datasetId` and `sourceGeoPackage` in the local configuration;
+1. obtain and archive the new official GeoPackage;
+2. change `datasetId` and `sourceGeoPackage` in the local maintenance
+   configuration;
 3. keep `formatId` unchanged unless the binary encoding itself changed;
-4. generate geometry cells;
+4. generate the normalized geometry cells;
 5. generate the binary release;
 6. run complete local verification;
 7. compare counts, sizes, parse errors, largest cells, and representative routes
    with the previous release;
-8. run an R2 dry run;
-9. publish the immutable release; R2 creates the new object-prefix hierarchy
-   automatically;
-10. verify contrasting Swiss regions with a test build;
-11. promote the new derived public root through `VITE_ROUTING_DATA_BASE_URL`
-    only after local testing.
-
-Do not propose a commit until the changed scripts and documentation have been
-tested locally with the external paths.
+8. run a publication dry run;
+9. publish under the new immutable release path;
+10. run standalone public verification;
+11. test several contrasting regions with the application configured to use the
+    new release;
+12. update the production `VITE_ROUTING_DATA_BASE_URL` only after local testing;
+13. run `npm run build` before proposing repository changes.

@@ -1,14 +1,14 @@
 {
-  "datasetId": "swisstlm3d-2026",
+  "datasetId": "swisstlm3d-YYYY",
   "formatId": "format-v3",
   "scope": "ch",
-  "dataRoot": "C:/ViaHelveticaData",
-  "sourceGeoPackage": "C:/ViaHelveticaData/source/SWISSTLM3D_2026_LV95_LN02.gpkg",
+  "dataRoot": "C:/Path/To/RoutingData",
+  "sourceGeoPackage": "C:/Path/To/RoutingData/source/SWISSTLM3D_YYYY.gpkg",
   "publication": {
     "remote": "r2",
-    "bucket": "via-helvetica-routing-data",
-    "publicRootUrl": "https://pub-REPLACE.r2.dev",
-    "publicOrigin": "https://viahelvetica.ch",
+    "bucket": "your-routing-data-bucket",
+    "publicRootUrl": "https://data.example.org",
+    "publicOrigin": "https://app.example.org",
     "publicSampleCount": 50
   }
 }

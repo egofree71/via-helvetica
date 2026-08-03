@@ -99,9 +99,9 @@ publication uploads only `.bin.br`, checksum-checks the remote objects, and
 publishes `manifest.json` last. To use a published release, set
 `VITE_ROUTING_DATA_BASE_URL` in `.env.local` and restart Vite.
 
-The complete import, generation, script inventory, migration, and publication
-workflow is documented in
-[Routing data pipeline](docs/ROUTING_DATA_PIPELINE.md).
+The generic import, generation, verification, and publication workflow is
+documented in [Routing data pipeline](docs/ROUTING_DATA_PIPELINE.md).
+Machine-specific infrastructure and credentials remain outside version control.
 
 ## Basic usage
 
@@ -218,8 +218,9 @@ retries, and session fallback are documented in
 - [Browser routing](docs/ROUTING.md): bounded swissTLM3D loading, Worker
   protocol, cell and graph caches, hiking enrichment, snapping, A*, fallback
   semantics, tests, and validation scope.
-- [Routing data pipeline](docs/ROUTING_DATA_PIPELINE.md): external local-data
-  layout, GeoPackage import, binary generation, verification, and R2 publication.
+- [Routing data pipeline](docs/ROUTING_DATA_PIPELINE.md): generic external-data
+  layout, GeoPackage import, binary generation, verification, and immutable
+  publication contracts.
 
 ## Regression tests
 
