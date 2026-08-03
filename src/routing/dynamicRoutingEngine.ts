@@ -559,6 +559,7 @@ export class DynamicRoutingNetworkEngine {
       network = BinaryRoutingNetwork.fromCells(
         combinedExtent(coveredCellKeys),
         binaryCells,
+        coveredCellKeys,
       );
     } else {
       const geometryCells = cells.map((cell) => {

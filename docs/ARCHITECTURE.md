@@ -707,6 +707,14 @@ trigger a one-way fallback to GeoAdmin for the rest of the browser session, so
 graph representations are never mixed and failed binary storage is not probed
 again on every edit. Intentional cancellation does not cause fallback.
 
+The typed-array binary graph has an optional bounded-search diagnostic that marks
+whether A* expanded a node outside the cells whose complete data was loaded.
+Node membership is precomputed into a compact byte array during graph assembly,
+and the diagnostic is enabled only for cells carrying the validated manifest
+contract for complete unclipped features and global graph identity. The current
+radius-1/radius-2 corridor policy does not consume this signal yet, and the
+object-based GeoAdmin graph remains unchanged.
+
 Precomputed releases are generated reproducibly from official swissTLM3D source
 data outside the repository, published below immutable versioned roots, and
 activated through `VITE_ROUTING_DATA_BASE_URL`. The browser reads only published
@@ -762,9 +770,10 @@ The routing Worker keeps:
   128 MiB retained-size budget.
 
 The estimates deliberately over-approximate JavaScript object, adjacency, and
-spatial-index overhead. One oversized current entry is retained so an active
-operation can complete; real browser-memory measurements remain part of routing
-validation.
+spatial-index overhead. Binary graphs also retain one byte per local node for
+loaded-cell frontier membership. One oversized current entry is retained so an
+active operation can complete; real browser-memory measurements remain part of
+routing validation.
 
 The binary snapping index traverses only the 250 m buckets touched by each edge,
 including both side buckets when a segment passes exactly through a grid corner.

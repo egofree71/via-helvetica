@@ -138,9 +138,13 @@ source file against generated geometry inputs.
 creates object-based adjacency lists and the snapping index required by the exact
 requested corridor, and runs A*. `src/routing/binaryRoutingNetwork.ts` implements
 the same snapping and A* contract over global integer IDs, fixed-point
-coordinates, CSR adjacency, and typed arrays. This split keeps route search in
-the browser while allowing the binary experiment to remove string-key and
-per-node object reconstruction.
+coordinates, CSR adjacency, and typed arrays. The binary graph also exposes an
+optional `routeAttempt()` diagnostic that reports whether A* expanded a node
+outside the cells whose complete graph data was loaded. The current corridor
+policy still calls `route()` and therefore behaves exactly as before; the
+frontier diagnostic is a tested prerequisite for a later progressive binary
+corridor. This split keeps route search in the browser while allowing the binary
+experiment to remove string-key and per-node object reconstruction.
 
 ### 2.5 Route-edit integration
 
@@ -657,14 +661,34 @@ Queue entries whose priority cannot improve the best complete route are skipped.
 Stale heap entries whose distance is worse than the stored best distance are
 also ignored.
 
-### 12.2 Destination candidates
+### 12.2 Loaded-cell frontier diagnostic
+
+The typed-array binary graph can additionally return a `RouteAttempt` containing
+the path and a conservative `frontierReached` flag. This diagnostic is enabled
+only when every assembled cell came from a manifest that guarantees complete,
+unclipped feature assignment and globally shared graph identity.
+
+During graph assembly, each local node receives one byte indicating whether its
+containing 2.4 km cell was fully loaded. During A*, the flag becomes true when a
+node outside that set is expanded while its queue priority can still beat the
+best complete route. Nodes remaining after the normal `bestCost` cutoff do not
+invalidate the result because the admissible heuristic proves that they cannot
+produce a cheaper path.
+
+The diagnostic is deliberately conservative when a snap fails or the binary
+contract is not validated. It is not yet consumed by the route-corridor retry
+policy, so this foundation does not change downloaded cells or route results.
+The object-based GeoAdmin graph continues to expose only the existing `route()`
+contract.
+
+### 12.3 Destination candidates
 
 The end snap can connect through either endpoint of its matched segment. When the
 search reaches one of those graph nodes, the final connector cost is evaluated.
 The best complete destination cost allows the search to stop exploring branches
 that cannot produce a better route.
 
-### 12.3 Reconstruction
+### 12.4 Reconstruction
 
 The selected graph-node chain is reconstructed backwards through the previous-
 node map, then converted to ordered coordinates. Reconstruction is bounded by

@@ -130,6 +130,17 @@ export interface RoutingNetworkStats {
 }
 
 
+/** Result of one bounded route search plus its frontier diagnostic. */
+export interface RouteAttempt {
+  /** Least-cost path found in the assembled graph, or `null` for a normal miss. */
+  path: RoutedNetworkPath | null;
+  /**
+   * Whether A* expanded a node whose containing routing cell was not fully
+   * loaded while that node could still improve the best known path.
+   */
+  frontierReached: boolean;
+}
+
 /** Shared contract implemented by object-based and typed-array routing graphs. */
 export interface RoutableNetwork {
   /** Diagnostics for the exact corridor graph. */
@@ -145,6 +156,15 @@ export interface RoutableNetwork {
     startCoordinate: Coordinate,
     endCoordinate: Coordinate,
   ): RoutedNetworkPath | null;
+  /**
+   * Runs one route search and reports whether missing neighbouring cells could
+   * still hide a better result. Only providers with a validated data-assignment
+   * contract expose this diagnostic.
+   */
+  routeAttempt?(
+    startCoordinate: Coordinate,
+    endCoordinate: Coordinate,
+  ): RouteAttempt;
 }
 
 /**

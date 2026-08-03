@@ -245,6 +245,7 @@ describe('DynamicRoutingNetworkEngine', () => {
     expect(moduleMocks.fromBinary).toHaveBeenCalledWith(
       expect.any(Array),
       [graph],
+      new Set(['0:0']),
     );
     expect(moduleMocks.fromSwissTlm).not.toHaveBeenCalled();
   });
