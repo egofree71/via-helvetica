@@ -14,6 +14,9 @@ import {
   PRECOMPUTED_BINARY_HEADER_BYTES,
   PRECOMPUTED_BINARY_MAGIC,
   PRECOMPUTED_BINARY_PAYLOAD_CRC32_OFFSET,
+  PRECOMPUTED_BINARY_SOURCE_CELL_ASSIGNMENT,
+  PRECOMPUTED_BINARY_EDGE_OWNERSHIP,
+  PRECOMPUTED_BINARY_NODE_IDENTITY,
   PRECOMPUTED_BINARY_XY_SCALE,
   PRECOMPUTED_BINARY_Z_SCALE,
   precomputedBinaryBuildIdFromHex,
@@ -45,6 +48,9 @@ const MANIFEST = {
   datasetBuildId: DATASET_BUILD_ID,
   globalNodeCount: 3,
   globalEdgeCount: 2,
+  sourceCellAssignment: PRECOMPUTED_BINARY_SOURCE_CELL_ASSIGNMENT,
+  edgeOwnership: PRECOMPUTED_BINARY_EDGE_OWNERSHIP,
+  nodeIdentity: PRECOMPUTED_BINARY_NODE_IDENTITY,
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -161,8 +167,61 @@ describe('precomputed binary routing cells', () => {
     expect(cell.globalNodeCount).toBe(3);
     expect(cell.globalEdgeCount).toBe(2);
     expect(cell.nodeIds.buffer).toBe(cell.buffer);
+    expect(cell.supportsFrontierCertification).toBe(true);
     expect(fetchMock.mock.calls[1]?.[0]).toContain('/cells/1041_465.bin');
   });
+
+  it('rejects a manifest that omits the topology invariants', async () => {
+    const {
+      sourceCellAssignment: _sourceCellAssignment,
+      edgeOwnership: _edgeOwnership,
+      nodeIdentity: _nodeIdentity,
+      ...legacyManifest
+    } = MANIFEST;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(legacyManifest));
+    vi.stubGlobal('fetch', fetchMock);
+    const { fetchPrecomputedBinaryRoutingCell } = await import(
+      './precomputedBinaryRoutingData'
+    );
+
+    await expect(
+      fetchPrecomputedBinaryRoutingCell(
+        '1041:465',
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('manifest is invalid or incompatible');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['sourceCellAssignment', 'clipped-at-cell-boundaries'],
+    ['edgeOwnership', 'cell-local-edge-identity'],
+    ['nodeIdentity', 'cell-local-node-identity'],
+  ] as const)(
+    'rejects a manifest with incompatible %s semantics',
+    async (field, incompatibleValue) => {
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+        jsonResponse({
+          ...MANIFEST,
+          [field]: incompatibleValue,
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const { fetchPrecomputedBinaryRoutingCell } = await import(
+        './precomputedBinaryRoutingData'
+      );
+
+      await expect(
+        fetchPrecomputedBinaryRoutingCell(
+          '1041:465',
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow('manifest is invalid or incompatible');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('rejects a published .bin.br path without HTTP Brotli metadata', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
@@ -228,6 +287,7 @@ describe('precomputed binary routing cells', () => {
     expect(cell.edgeIds).toHaveLength(0);
     expect(cell.globalNodeCount).toBe(3);
     expect(cell.globalEdgeCount).toBe(2);
+    expect(cell.supportsFrontierCertification).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -330,6 +390,19 @@ describe('precomputed binary routing cells', () => {
       message: expect.stringContaining('request failed (503)'),
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not mark a directly decoded cell as frontier-certifiable', async () => {
+    const { readPrecomputedBinaryRoutingCell } = await import(
+      './precomputedBinaryRoutingData'
+    );
+
+    const cell = readPrecomputedBinaryRoutingCell(
+      binaryCellBuffer(),
+      '1041:465',
+    );
+
+    expect(cell.supportsFrontierCertification).toBeUndefined();
   });
 
   it('rejects payload corruption before typed arrays enter the cache', async () => {

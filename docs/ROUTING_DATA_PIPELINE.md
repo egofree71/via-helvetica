@@ -199,6 +199,23 @@ Raw `.bin` files remain local because full verification compares their semantic
 content with the Brotli round trip. Only `.bin.br` objects are intended for
 public delivery.
 
+The browser also validates three manifest-level topology invariants before it
+marks loaded cells as eligible for future frontier certification:
+
+```json
+{
+  "sourceCellAssignment": "full-feature-bbox-overlap-no-clipping",
+  "edgeOwnership": "global-id-with-logical-cell-references",
+  "nodeIdentity": "shared-compiler-quantized-xyz"
+}
+```
+
+These values guarantee that complete source features are retained across cell
+boundaries and that nodes and edges keep one stable national identity. They do
+not change the binary byte layout, but they are part of the runtime compatibility
+contract. A release that omits or changes one of them is rejected rather than
+silently enabling a bounded-route certificate on incompatible data.
+
 The temporary compiler output is created in the operating-system temporary
 directory. The SQLite build database is removed after a successful run unless
 `--keep-database` is supplied.

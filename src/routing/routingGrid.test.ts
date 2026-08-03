@@ -5,9 +5,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  cellKeyForCoordinate,
   combinedExtent,
   createCorridorCellKeys,
   createLocalCellKeys,
+  createSegmentEnvelopeCellKeys,
   extentForCellKey,
 } from './routingGrid';
 
@@ -29,6 +31,59 @@ describe('routingGrid', () => {
       '1:0',
       '1:1',
     ]);
+  });
+
+  it('maps coordinates to stable cell keys on both sides of the LV95 origin', () => {
+    expect(cellKeyForCoordinate([2_399, 2_399])).toBe('0:0');
+    expect(cellKeyForCoordinate([2_400, 2_400])).toBe('1:1');
+    expect(cellKeyForCoordinate([-1, -1])).toBe('-1:-1');
+  });
+
+  it('keeps a short metric envelope inside its containing cell', () => {
+    expect(
+      sortedKeys(
+        createSegmentEnvelopeCellKeys([1_200, 1_200], [1_300, 1_200], 400),
+      ),
+    ).toEqual(['0:0']);
+  });
+
+  it('includes neighbouring cells touched by a closed metric envelope', () => {
+    expect(
+      sortedKeys(
+        createSegmentEnvelopeCellKeys([1_200, 1_200], [1_200, 1_200], 1_200),
+      ),
+    ).toEqual(['-1:0', '0:-1', '0:0', '0:1', '1:0']);
+  });
+
+  it('includes all four cells when a point envelope reaches a shared corner', () => {
+    expect(
+      sortedKeys(
+        createSegmentEnvelopeCellKeys([2_300, 2_300], [2_300, 2_300], 150),
+      ),
+    ).toEqual(['0:0', '0:1', '1:0', '1:1']);
+  });
+
+  it('keeps diagonal envelopes out of distant bounding-box corners', () => {
+    const keys = createSegmentEnvelopeCellKeys(
+      [1_200, 1_200],
+      [6_000, 6_000],
+      100,
+    );
+
+    expect(keys).toContain('0:0');
+    expect(keys).toContain('1:1');
+    expect(keys).toContain('2:2');
+    expect(keys).not.toContain('0:2');
+    expect(keys).not.toContain('2:0');
+  });
+
+  it('rejects invalid metric-envelope margins', () => {
+    expect(() =>
+      createSegmentEnvelopeCellKeys([0, 0], [1, 1], -1),
+    ).toThrow(RangeError);
+    expect(() =>
+      createSegmentEnvelopeCellKeys([0, 0], [1, 1], Number.NaN),
+    ).toThrow(RangeError);
   });
 
   it('walks every cell crossed by a horizontal segment before expansion', () => {
