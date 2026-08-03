@@ -6,6 +6,7 @@
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import type { RoutedNetworkPath } from './networkRouter';
+import { RoutingCoverageError } from './routingCoverage';
 import {
   RoutingAreaTooLargeError,
   type RoutingWorkerNotice,
@@ -45,6 +46,11 @@ function deserializeError(error: SerializedRoutingWorkerError): Error {
 
   if (error.name === 'RoutingAreaTooLargeError') {
     result = new RoutingAreaTooLargeError(error.message);
+  } else if (
+    error.name === 'StaticRoutingCoverageError' ||
+    error.name === 'PrecomputedRoutingCoverageError'
+  ) {
+    result = new RoutingCoverageError(error.name, error.message);
   } else if (error.name === 'AbortError') {
     result = new DOMException(error.message, 'AbortError');
   } else {

@@ -34,7 +34,7 @@ const frenchTranslations = {
     'Aucun compte n’est nécessaire. Les itinéraires ne sont pas enregistrés sur un serveur appartenant à Via Helvetica.',
   'about.safetyTitle': 'À savoir',
   'about.safety':
-    'Le calcul d’itinéraire est une aide expérimentale à la planification. Via Helvetica ne fournit pas de guidage en direct. Vérifiez les conditions, fermetures et avis officiels avant votre départ.',
+    'Les itinéraires et les données cartographiques sont fournis à titre indicatif et peuvent comporter des erreurs. Les conditions sur le terrain peuvent évoluer : vérifiez toujours les fermetures, dangers et avis officiels avant votre départ. Vous restez responsable du choix de votre itinéraire et de son adaptation à vos capacités ainsi qu’aux conditions rencontrées.',
   'about.projectTitle': 'Projet',
   'about.createdBy': 'Créé par',
   'about.support': 'Support',
@@ -110,6 +110,8 @@ const frenchTranslations = {
     'Le réseau swissTLM3D de cette zone n’a pas pu être chargé.',
   'route.hikingEnrichmentUnavailable':
     'Les informations sur les chemins de randonnée sont indisponibles. Pour cette session, le routage utilise uniquement le réseau de routes et de chemins swissTLM3D.',
+  'route.precomputedRoutingUnavailable':
+    'Les données de routage prétraitées sont indisponibles. Pour cette session, Via Helvetica utilise le service de routage GeoAdmin de secours.',
 
   'geolocation.show': 'Afficher ma position',
   'geolocation.recenter': 'Recentrer sur ma position',
@@ -238,7 +240,7 @@ const germanTranslations: Record<TranslationKey, string> = {
     'Es ist kein Konto erforderlich. Routen werden nicht auf einem Server von Via Helvetica gespeichert.',
   'about.safetyTitle': 'Hinweis',
   'about.safety':
-    'Die Routenberechnung ist eine experimentelle Planungshilfe. Via Helvetica bietet keine Live-Navigation. Prüfen Sie vor dem Aufbruch die Bedingungen, Sperrungen und offiziellen Hinweise.',
+    'Die vorgeschlagenen Routen und Kartendaten dienen nur zur Orientierung und können Fehler enthalten. Die Bedingungen vor Ort können sich ändern: Prüfen Sie vor dem Aufbruch stets Sperrungen, Gefahren und offizielle Hinweise. Sie sind selbst dafür verantwortlich, Ihre Route auszuwählen und sie an Ihre Fähigkeiten sowie die vorgefundenen Bedingungen anzupassen.',
   'about.projectTitle': 'Projekt',
   'about.createdBy': 'Erstellt von',
   'about.support': 'Support',
@@ -314,6 +316,8 @@ const germanTranslations: Record<TranslationKey, string> = {
     'Das swissTLM3D-Netz in diesem Gebiet konnte nicht geladen werden.',
   'route.hikingEnrichmentUnavailable':
     'Die Wanderweg-Informationen sind nicht verfügbar. Für diese Sitzung verwendet die Routenberechnung nur das swissTLM3D-Strassen- und Wegenetz.',
+  'route.precomputedRoutingUnavailable':
+    'Die vorverarbeiteten Routingdaten sind nicht verfügbar. Für diese Sitzung verwendet Via Helvetica ersatzweise den GeoAdmin-Routingdienst.',
 
   'geolocation.show': 'Meinen Standort anzeigen',
   'geolocation.recenter': 'Auf meinen Standort zentrieren',
@@ -441,7 +445,7 @@ const italianTranslations: Record<TranslationKey, string> = {
     'Non è necessario alcun account. Gli itinerari non vengono salvati su un server di Via Helvetica.',
   'about.safetyTitle': 'Da sapere',
   'about.safety':
-    'Il calcolo dell’itinerario è un aiuto sperimentale alla pianificazione. Via Helvetica non offre navigazione in tempo reale. Prima di partire, verifica condizioni, chiusure e avvisi ufficiali.',
+    'Gli itinerari e i dati cartografici sono forniti a titolo indicativo e possono contenere errori. Le condizioni sul terreno possono cambiare: prima di partire, verifica sempre chiusure, pericoli e avvisi ufficiali. Sei responsabile della scelta del tuo itinerario e del suo adattamento alle tue capacità e alle condizioni incontrate.',
   'about.projectTitle': 'Progetto',
   'about.createdBy': 'Creato da',
   'about.support': 'Supporto',
@@ -517,6 +521,8 @@ const italianTranslations: Record<TranslationKey, string> = {
     'Non è stato possibile caricare la rete swissTLM3D di questa zona.',
   'route.hikingEnrichmentUnavailable':
     'Le informazioni sui sentieri escursionistici non sono disponibili. Per questa sessione, il calcolo del percorso utilizza soltanto la rete di strade e sentieri swissTLM3D.',
+  'route.precomputedRoutingUnavailable':
+    'I dati di routing preelaborati non sono disponibili. Per questa sessione, Via Helvetica utilizza il servizio di routing GeoAdmin di riserva.',
 
   'geolocation.show': 'Mostra la mia posizione',
   'geolocation.recenter': 'Ricentra sulla mia posizione',
@@ -645,7 +651,7 @@ const englishTranslations: Record<TranslationKey, string> = {
     'No account is required. Routes are not stored on a server operated by Via Helvetica.',
   'about.safetyTitle': 'Important',
   'about.safety':
-    'Route calculation is an experimental planning aid. Via Helvetica does not provide live navigation. Check conditions, closures, and official notices before setting out.',
+    'Routes and map data are provided for guidance only and may contain errors. Conditions on the ground can change: always check closures, hazards, and official notices before setting out. You remain responsible for choosing your route and adapting it to your abilities and the conditions encountered.',
   'about.projectTitle': 'Project',
   'about.createdBy': 'Created by',
   'about.support': 'Support',
@@ -721,6 +727,8 @@ const englishTranslations: Record<TranslationKey, string> = {
     'The swissTLM3D network for this area could not be loaded.',
   'route.hikingEnrichmentUnavailable':
     'Hiking-trail information is unavailable. For this session, routing uses only the swissTLM3D road and path network.',
+  'route.precomputedRoutingUnavailable':
+    'Preprocessed routing data is unavailable. For this session, Via Helvetica is using the GeoAdmin fallback routing service.',
 
   'geolocation.show': 'Show my location',
   'geolocation.recenter': 'Recenter on my location',

@@ -955,6 +955,10 @@ export function useEditableRoute(
         showTemporaryRouteMessage(
           translationRef.current('route.hikingEnrichmentUnavailable'),
         );
+      } else if (notice === 'precomputed-routing-unavailable') {
+        showTemporaryRouteMessage(
+          translationRef.current('route.precomputedRoutingUnavailable'),
+        );
       }
     });
 

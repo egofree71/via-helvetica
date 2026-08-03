@@ -9,10 +9,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const moduleMocks = vi.hoisted(() => ({
   fetchSwissTlmNetworkData: vi.fn(),
   fromSwissTlm: vi.fn(),
+  fromBinary: vi.fn(),
 }));
 
 vi.mock('./swissTlmApi', () => ({
   fetchSwissTlmNetworkData: moduleMocks.fetchSwissTlmNetworkData,
+  mergeSwissTlmFeatures: (features: unknown[]) => ({
+    features,
+    conflictingFeatureIds: 0,
+  }),
 }));
 
 vi.mock('./networkRouter', () => {
@@ -27,13 +32,21 @@ vi.mock('./networkRouter', () => {
     static fromSwissTlm(...args: unknown[]): unknown {
       return moduleMocks.fromSwissTlm(...args);
     }
+
   }
 
   return { NoWalkableNetworkError, RoutingNetwork };
 });
 
+vi.mock('./binaryRoutingNetwork', () => ({
+  BinaryRoutingNetwork: {
+    fromCells: (...args: unknown[]) => moduleMocks.fromBinary(...args),
+  },
+}));
+
 import type { Coordinate } from 'ol/coordinate.js';
 import { DynamicRoutingNetworkEngine } from './dynamicRoutingEngine';
+import { PRECOMPUTED_BINARY_HEADER_BYTES } from './precomputedBinaryRoutingFormat';
 import { RoutingAreaTooLargeError } from './dynamicRoutingProtocol';
 import { createCorridorCellKeys } from './routingGrid';
 import type { RoutedNetworkPath } from './networkRouter';
@@ -59,13 +72,16 @@ const DEFAULT_PATH: RoutedNetworkPath = {
 /** Minimal graph double exposing only the methods used by the engine. */
 function createNetwork(
   routeResult: RoutedNetworkPath | null = DEFAULT_PATH,
+  estimatedMemoryBytes = 1_024,
 ): {
   snap: ReturnType<typeof vi.fn>;
   route: ReturnType<typeof vi.fn>;
+  estimatedMemoryBytes: number;
 } {
   return {
     snap: vi.fn((coordinate: Coordinate) => coordinate),
     route: vi.fn(() => routeResult),
+    estimatedMemoryBytes,
   };
 }
 
@@ -80,6 +96,8 @@ describe('DynamicRoutingNetworkEngine', () => {
     moduleMocks.fetchSwissTlmNetworkData.mockResolvedValue(EMPTY_NETWORK_DATA);
     moduleMocks.fromSwissTlm.mockReset();
     moduleMocks.fromSwissTlm.mockImplementation(() => createNetwork());
+    moduleMocks.fromBinary.mockReset();
+    moduleMocks.fromBinary.mockImplementation(() => createNetwork());
   });
 
   it('retries with the wider corridor and reuses cells loaded by the first attempt', async () => {
@@ -141,6 +159,104 @@ describe('DynamicRoutingNetworkEngine', () => {
       coordinate,
       coordinate,
     ]);
+  });
+
+  it('keeps a shared cell request alive when only one consumer is cancelled', async () => {
+    let resolveFetch: ((data: SwissTlmNetworkData) => void) | undefined;
+    let providerSignal: AbortSignal | undefined;
+    moduleMocks.fetchSwissTlmNetworkData.mockImplementation(
+      (_extent: unknown, signal: AbortSignal) => {
+        providerSignal = signal;
+        return new Promise<SwissTlmNetworkData>((resolve, reject) => {
+          resolveFetch = resolve;
+          signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      },
+    );
+    const engine = new DynamicRoutingNetworkEngine();
+    const coordinate: Coordinate = [1_200, 1_200];
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+    const first = engine.snap(coordinate, firstController.signal);
+    const second = engine.snap(coordinate, secondController.signal);
+
+    await vi.waitFor(() => {
+      expect(moduleMocks.fetchSwissTlmNetworkData).toHaveBeenCalledTimes(1);
+    });
+
+    firstController.abort();
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' });
+    expect(providerSignal?.aborted).toBe(false);
+
+    resolveFetch?.(EMPTY_NETWORK_DATA);
+    await expect(second).resolves.toEqual(coordinate);
+    expect(moduleMocks.fetchSwissTlmNetworkData).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses an injected geometry loader instead of GeoAdmin', async () => {
+    const geometryCellLoader = vi.fn().mockResolvedValue(EMPTY_NETWORK_DATA);
+    const engine = new DynamicRoutingNetworkEngine({ geometryCellLoader });
+    const coordinate: Coordinate = [1_200, 1_200];
+
+    await engine.snap(coordinate, new AbortController().signal);
+
+    expect(geometryCellLoader).toHaveBeenCalledTimes(1);
+    expect(geometryCellLoader).toHaveBeenCalledWith(
+      '0:0',
+      expect.any(AbortSignal),
+    );
+    expect(moduleMocks.fetchSwissTlmNetworkData).not.toHaveBeenCalled();
+  });
+
+
+  it('uses binary precomputed cells through the typed-array network', async () => {
+    const graph = {
+      key: '0:0' as const,
+      nodeIds: new Uint32Array(),
+      nodeX: new Int32Array(),
+      nodeY: new Int32Array(),
+      nodeZ: new Int32Array(),
+      edgeIds: new Uint32Array(),
+      edgeStartNodeIds: new Uint32Array(),
+      edgeEndNodeIds: new Uint32Array(),
+      edgeCosts: new Uint32Array(),
+      edgeFlags: new Uint8Array(),
+      globalNodeCount: 1,
+      globalEdgeCount: 1,
+      sourceRoadFeatures: 0,
+      buffer: new ArrayBuffer(PRECOMPUTED_BINARY_HEADER_BYTES),
+    };
+    const precomputedBinaryCellLoader = vi.fn().mockResolvedValue(graph);
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader,
+    });
+    const coordinate: Coordinate = [1_200, 1_200];
+
+    await engine.snap(coordinate, new AbortController().signal);
+
+    expect(precomputedBinaryCellLoader).toHaveBeenCalledWith(
+      '0:0',
+      expect.any(AbortSignal),
+    );
+    expect(moduleMocks.fromBinary).toHaveBeenCalledWith(
+      expect.any(Array),
+      [graph],
+    );
+    expect(moduleMocks.fromSwissTlm).not.toHaveBeenCalled();
+  });
+
+  it('rejects simultaneous geometry and binary precomputed loaders', () => {
+    expect(
+      () =>
+        new DynamicRoutingNetworkEngine({
+          geometryCellLoader: vi.fn(),
+          precomputedBinaryCellLoader: vi.fn(),
+        }),
+    ).toThrow('mutually exclusive');
   });
 
   it('starts in roads-only mode when local fallback testing disables enrichment', async () => {
@@ -274,29 +390,109 @@ describe('DynamicRoutingNetworkEngine', () => {
     expect(moduleMocks.fetchSwissTlmNetworkData).toHaveBeenCalledTimes(2);
   });
 
+
+  it('aborts pending cells and rejects new work after provider disposal', async () => {
+    moduleMocks.fetchSwissTlmNetworkData.mockImplementationOnce(
+      (_extent: unknown, signal: AbortSignal) =>
+        new Promise<SwissTlmNetworkData>((_resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        }),
+    );
+    const engine = new DynamicRoutingNetworkEngine();
+    const pendingSnap = engine.snap(
+      [1_200, 1_200],
+      new AbortController().signal,
+    );
+
+    await vi.waitFor(() => {
+      expect(moduleMocks.fetchSwissTlmNetworkData).toHaveBeenCalledTimes(1);
+    });
+
+    engine.dispose();
+
+    await expect(pendingSnap).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(
+      engine.snap([1_200, 1_200], new AbortController().signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('promotes cache hits and evicts the least-recently used graph', async () => {
     const engine = new DynamicRoutingNetworkEngine();
     const signal = new AbortController().signal;
-    const coordinates = Array.from({ length: 9 }, (_, index) =>
+    const coordinates = Array.from({ length: 3 }, (_, index) =>
       coordinateInColumn(index * 10),
     );
 
-    for (const coordinate of coordinates.slice(0, 8)) {
-      await engine.route(coordinate, coordinate, signal);
-    }
-
-    expect(moduleMocks.fromSwissTlm).toHaveBeenCalledTimes(8);
-
-    // Reusing the oldest graph promotes it before the ninth graph is inserted.
     await engine.route(coordinates[0], coordinates[0], signal);
-    await engine.route(coordinates[8], coordinates[8], signal);
-    await engine.route(coordinates[0], coordinates[0], signal);
-
-    expect(moduleMocks.fromSwissTlm).toHaveBeenCalledTimes(9);
-
-    // The second-oldest untouched graph was evicted and must now be rebuilt.
     await engine.route(coordinates[1], coordinates[1], signal);
-    expect(moduleMocks.fromSwissTlm).toHaveBeenCalledTimes(10);
+    expect(moduleMocks.fromSwissTlm).toHaveBeenCalledTimes(2);
+
+    // Reusing the oldest graph promotes it before a third graph is inserted.
+    await engine.route(coordinates[0], coordinates[0], signal);
+    await engine.route(coordinates[2], coordinates[2], signal);
+    await engine.route(coordinates[0], coordinates[0], signal);
+    expect(moduleMocks.fromSwissTlm).toHaveBeenCalledTimes(3);
+
+    // The untouched graph was evicted by the two-entry LRU.
+    await engine.route(coordinates[1], coordinates[1], signal);
+    expect(moduleMocks.fromSwissTlm).toHaveBeenCalledTimes(4);
+  });
+
+  it('keeps valid edge cells when neighbouring halo cells are outside coverage', async () => {
+    const { RoutingCoverageError } = await import('./routingCoverage');
+    const geometryCellLoader = vi.fn(
+      async (key: string): Promise<SwissTlmNetworkData> => {
+        if (key.startsWith('-')) {
+          throw new RoutingCoverageError(
+            'TestCoverageError',
+            'Outside the bounded fixture.',
+          );
+        }
+        return EMPTY_NETWORK_DATA;
+      },
+    );
+    const engine = new DynamicRoutingNetworkEngine({ geometryCellLoader });
+
+    await expect(
+      engine.snap([100, 1_200], new AbortController().signal),
+    ).resolves.toEqual([100, 1_200]);
+    expect(moduleMocks.fromSwissTlm).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves an explicit coverage error when every requested cell is outside', async () => {
+    const { RoutingCoverageError } = await import('./routingCoverage');
+    const geometryCellLoader = vi.fn(async () => {
+      throw new RoutingCoverageError(
+        'TestCoverageError',
+        'Outside the bounded fixture.',
+      );
+    });
+    const engine = new DynamicRoutingNetworkEngine({ geometryCellLoader });
+
+    await expect(
+      engine.snap([1_200, 1_200], new AbortController().signal),
+    ).rejects.toMatchObject({ name: 'TestCoverageError' });
+  });
+
+  it('evicts older corridor graphs when the estimated byte budget is exceeded', async () => {
+    moduleMocks.fromSwissTlm.mockImplementation(() =>
+      createNetwork(DEFAULT_PATH, 80 * 1024 * 1024),
+    );
+    const engine = new DynamicRoutingNetworkEngine();
+    const signal = new AbortController().signal;
+    const first = coordinateInColumn(0);
+    const second = coordinateInColumn(10);
+
+    await engine.route(first, first, signal);
+    await engine.route(second, second, signal);
+    await engine.route(first, first, signal);
+
+    // Two 80 MiB estimates exceed the 128 MiB budget, so the first graph was rebuilt.
+    expect(moduleMocks.fromSwissTlm).toHaveBeenCalledTimes(3);
   });
 
   it('rejects an oversized corridor before making provider requests', async () => {

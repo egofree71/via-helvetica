@@ -1,0 +1,14 @@
+{
+  "datasetId": "swisstlm3d-YYYY",
+  "formatId": "format-v3",
+  "scope": "ch",
+  "dataRoot": "C:/Path/To/RoutingData",
+  "sourceGeoPackage": "C:/Path/To/RoutingData/source/SWISSTLM3D_YYYY.gpkg",
+  "publication": {
+    "remote": "r2",
+    "bucket": "your-routing-data-bucket",
+    "publicRootUrl": "https://data.example.org",
+    "publicOrigin": "https://app.example.org",
+    "publicSampleCount": 50
+  }
+}

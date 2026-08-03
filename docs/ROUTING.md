@@ -15,9 +15,22 @@ The required graph comes from the official
 the cost of matching graph edges. If that optional layer cannot be obtained, the
 Worker continues in roads-only mode and reports one non-blocking session notice.
 
-This subsystem is intentionally bounded and experimental. It does not download
-a national dataset, does not operate a backend, and has not yet been validated
-as a production-grade national router. Users can disable snapping or rely on a
+A precomputed provider can instead load versioned 2.4 km binary graph cells
+generated from the official swissTLM3D GeoPackage. The offline pipeline supports
+the complete Swiss road-and-path dataset with disk-backed generation, while all
+large local inputs and outputs live outside the repository. Setting
+`VITE_ROUTING_DATA_BASE_URL` activates a remote root in either development or
+production. The Worker makes at most three binary-provider attempts, separated
+by cancellable 300 ms and 1,000 ms delays. Expected coverage misses use the
+independent GeoAdmin engine only for that operation, while persistent delivery
+or integrity failures switch the complete session. Binary and GeoAdmin cells are
+never mixed in one graph. Production without the explicit environment variable
+remains on GeoAdmin.
+
+This subsystem is intentionally bounded and experimental. It does not operate
+a project-owned backend, and the new national static dataset still requires
+cross-region and remote-browser validation before it can replace the GeoAdmin
+fallback as the production default. Users can disable snapping or rely on a
 straight fallback section when local coverage or graph connectivity is
 insufficient.
 
@@ -44,7 +57,7 @@ The routing subsystem should:
 
 The current implementation does not provide:
 
-- a downloaded or preprocessed national graph;
+- a production-validated national graph release;
 - a guaranteed production-grade national route service;
 - live navigation or continuous user tracking;
 - automatic avoidance of visible closure or military information layers;
@@ -59,9 +72,10 @@ The current implementation does not provide:
 flowchart LR
     Editor[useEditableRoute and routeEditing] --> Facade[DynamicRoutingNetworkLoader]
     Facade <--> Worker[dynamicRoutingWorker]
-    Worker --> Engine[DynamicRoutingNetworkEngine]
+    Worker --> Session[DynamicRoutingProviderSession]
+    Session --> Engine[DynamicRoutingNetworkEngine]
     Engine --> Grid[routingGrid]
-    Engine --> Provider[swissTlmApi]
+    Engine --> Provider[GeoAdmin or binary graph cells]
     Engine --> Router[RoutingNetwork]
     Provider --> GeoAdmin[GeoAdmin identify API]
     Router --> Result[Snap or routed coordinates]
@@ -86,10 +100,13 @@ It owns no routing cells, graph, or OpenLayers state.
 
 ### 2.2 Worker entry
 
-`src/routing/dynamicRoutingWorker.ts` owns one session-scoped
-`DynamicRoutingNetworkEngine`. It maps protocol operations to engine methods,
-creates a per-request abort controller, serializes errors, and posts independent
-session notices.
+`src/routing/dynamicRoutingWorker.ts` owns a
+`DynamicRoutingProviderSession` containing independent binary and GeoAdmin
+`DynamicRoutingNetworkEngine` instances when remote or local binary data is
+enabled. It maps protocol operations to the active provider, creates a
+per-request abort controller, serializes errors, and posts independent session
+notices. A permanent provider transition disposes binary requests and caches
+before repeating the complete operation on GeoAdmin.
 
 Synchronous graph construction may finish after a late cancellation, but it no
 longer blocks the map thread and its obsolete response is ignored by the
@@ -99,21 +116,31 @@ request-correlation layer.
 
 `src/routing/dynamicRoutingEngine.ts` owns:
 
-- completed raw-cell cache;
+- completed GeoAdmin geometry or binary graph cell cache;
 - reusable in-flight cell requests;
 - exact-corridor graph LRU cache;
 - cell loading concurrency;
 - narrow and widened corridor attempts;
-- feature merging;
-- graph construction;
+- source-feature merging and compilation for GeoAdmin cells;
+- typed-array CSR assembly when binary graph cells are used;
 - snapping and A* invocation;
 - the session-wide hiking-enrichment availability flag.
 
-### 2.4 Graph implementation
+### 2.4 Graph compilation and runtime
 
-`src/routing/networkRouter.ts` normalizes line segments into a walkable graph,
-indexes segments for hiking matching and snapping, applies edge costs, and runs
-A*.
+`src/routing/precomputedRoutingGraph.ts` is a pure shared compiler. It applies
+3D node quantization, pedestrian exclusions, road-cost policy, optional hiking
+matching, and duplicate-segment resolution. Live GeoAdmin routing calls it
+inside the Worker. The offline binary generator transpiles and executes the same
+source file against generated geometry inputs.
+
+`src/routing/networkRouter.ts` joins one or more compiled JSON fragments,
+creates object-based adjacency lists and the snapping index required by the exact
+requested corridor, and runs A*. `src/routing/binaryRoutingNetwork.ts` implements
+the same snapping and A* contract over global integer IDs, fixed-point
+coordinates, CSR adjacency, and typed arrays. This split keeps route search in
+the browser while allowing the binary experiment to remove string-key and
+per-node object reconstruction.
 
 ### 2.5 Route-edit integration
 
@@ -141,14 +168,49 @@ The dataset and portrayal are official. However, the GeoAdmin layer table does
 not advertise the same feature-tooltip behaviour as the road layer, so vector
 retrieval through `identify` is treated as non-guaranteed enrichment.
 
-### 3.3 Informational overlays are separate
+### 3.3 Preprocessed Swiss dataset
 
-The rendered hiking-trail WMTS overlay, ASTRA closure WMS, military-danger WMS,
-and public-transport stops are independent from the routing graph. Their
-visibility or inspection state does not alter route costs or connectivity.
+Both offline stages originate from the official swissTLM3D LV95/LN02
+GeoPackage. The road table already carries the `wanderwege` classification used
+by the current cost model, so the separate hiking GeoPackage is not required for
+this build.
 
-This prevents temporary information-provider failure or ambiguous advisory data
-from silently changing route calculation.
+Source, intermediate geometry, SQLite work, and binary release files live
+outside the repository. Their machine-local paths are defined in the
+Git-ignored `routing-data.config.local.json`; neither Vite nor the browser reads
+that file. The complete import, generation, verification, migration, script
+inventory, and R2 publication workflow is documented in
+[ROUTING_DATA_PIPELINE.md](ROUTING_DATA_PIPELINE.md).
+
+The generated release contains:
+
+```text
+manifest.json
+integrity.json
+cells/{column}_{row}.bin
+cells/{column}_{row}.bin.br
+```
+
+Every cell stores columnar arrays for node IDs, centimetre-quantized LV95 X/Y,
+decimetre-quantized Z, edge IDs, endpoint IDs, 0.0001-unit fixed-point costs, and
+a hiking bit. Format version 3 requires strictly increasing node and edge IDs,
+includes a CRC32 over the payload, and repeats the generator revision plus a
+32-byte SHA-256 `datasetBuildId` from the manifest. This rejects mixed annual or
+partial builds even when their global record counts happen to match.
+
+The runtime parser verifies the dataset build identity, CRC32, strict global-ID
+ordering, coordinate and elevation bounds, endpoint membership, and plausible
+cost/length ratios before a cell can enter the cache. Coordinate validation uses
+the declared dataset extent together with a cell-local allowance because source
+features remain complete rather than being clipped at cell boundaries. Cost
+validation includes the bounded endpoint displacement introduced when the
+national merge selects deterministic representatives inside shared 0.5 m node
+identity buckets, plus fixed-point rounding. This avoids rejecting valid short
+edges without weakening the pedestrian cost-model bounds.
+
+Corridor assembly k-way merges the sorted columns, so the national global-ID
+range does not require sparse JavaScript Maps per graph. `integrity.json` is an
+offline publication contract and is not loaded by the browser.
 
 ## 4. Spatial loading model
 
@@ -316,21 +378,83 @@ The Worker emits one structured session notice. The main-thread facade retains
 it and replays it to a later subscriber when necessary, which protects the
 notice across React Strict Mode development setup/cleanup cycles.
 
-### 6.3 Local manual test switch
+### 6.3 Provider selection and remote-data testing
 
-`src/routing/routingConfig.ts` exposes a narrow development-only switch:
+`src/routing/routingConfig.ts` resolves provider choice in this order:
 
-```ts
-LOCAL_ROUTING_DEVELOPMENT_CONFIG.useHikingEnrichment
+1. a non-empty `VITE_ROUTING_DATA_BASE_URL` activates the remote precomputed
+   binary provider in development or production;
+2. without that variable, Vite development uses
+   `LOCAL_ROUTING_DEVELOPMENT_CONFIG`, which defaults to GeoAdmin but remains a
+   manual local binary/GeoAdmin comparison switch;
+3. production without an explicit remote URL uses GeoAdmin.
+
+The URL must point to the versioned directory containing `manifest.json`, for
+example:
+
+```text
+https://pub-example.r2.dev/swisstlm3d-2026/format-v3/ch
 ```
 
-When set to `false` on `localhost`, `127.0.0.1`, or IPv6 loopback, the Worker
-starts in roads-only mode and emits the same normal notice when the first routing
-operation begins.
+Copy `.env.example` to the git-ignored `.env.local` for a local remote-data test.
+The GitHub Pages workflow also forwards the optional repository variable named
+`VITE_ROUTING_DATA_BASE_URL` into the Vite build. The binary loader normalizes
+the root, accepts only root-relative or HTTP(S) URLs without credentials, query,
+or fragment, and resolves all cell paths from validated relative manifest
+templates.
 
-Deployed hostnames always resolve to `true`, even if the local source value is
-left disabled accidentally. The switch does not affect the rendered hiking map
-overlay.
+With local GeoAdmin selected, setting `useHikingEnrichment` to `false` starts the
+Worker in roads-only mode and emits the normal notice when the first routing
+operation begins. This setting does not affect the rendered hiking map overlay.
+
+### 6.4 Session-level binary fallback
+
+Transient manifest or cell delivery failures receive at most three attempts.
+The first retry waits 300 ms and the second waits 1,000 ms; both delays remain
+immediately cancellable. Deterministic manifest and dataset-build
+incompatibilities fail immediately because another download cannot make the
+contract compatible. Persistent delivery failures, compatibility failures, CRC
+failures, or semantic validation failures activate a one-way Worker-session
+transition:
+
+1. abandon and dispose the binary engine;
+2. emit `precomputed-routing-unavailable` once;
+3. repeat the complete snap or route operation with a separate GeoAdmin engine;
+4. keep all later operations on GeoAdmin.
+
+After this transition the Worker does not probe the binary provider again until
+the page creates a new Worker session, normally after a reload. This avoids
+repeated object-storage delays for every later waypoint during a prolonged
+outage. A `RoutingCoverageError` is expected near national borders: GeoAdmin
+handles only the current operation and the binary engine remains preferred
+afterward. Caller cancellation and `RoutingAreaTooLargeError` also do not change
+providers. If a concurrent binary operation finishes after another request has
+switched the session, its result is discarded and the operation is repeated on
+GeoAdmin.
+
+### 6.5 Remote dataset publication
+
+The precomputed routing dataset is public static data, not an authenticated API.
+R2 stores only `.bin.br` objects with `Content-Encoding: br`, so Fetch returns
+decoded v3 bytes before the Worker validates them. No bucket credential or write
+token is exposed to the browser or repository.
+
+Publication remains cell-first and manifest-last. The local release is fully
+verified, compressed objects are uploaded and checksum-checked, publication-only
+metadata is written, and the public URL is sampled for transport decoding,
+headers, CORS, and raw SHA-256 agreement. Persistent publication or integrity
+failures therefore remain outside the runtime graph and trigger the normal
+GeoAdmin fallback only if a bad public release is explicitly configured.
+
+The verifier requires the exact browser origin and fails rather than silently
+skipping CORS validation. Cells, `integrity.json`, and `manifest.json` retain a
+one-year immutable cache because the release identity is part of their URL. A
+corrected release must use a new versioned root instead of overwriting published
+objects.
+
+Commands, rclone setup assumptions, retry behaviour, and the immutable release
+lifecycle are documented in
+[ROUTING_DATA_PIPELINE.md](ROUTING_DATA_PIPELINE.md).
 
 ## 7. Worker protocol and lifecycle
 
@@ -355,32 +479,43 @@ session may create a fresh Worker and fresh session caches.
 
 ### 8.1 Completed raw cells
 
-Completed cells remain in Worker memory for the page session. Reusing a cell
-avoids another GeoAdmin request when later route edits revisit the same area.
+Completed cells use a least-recently-used cache with an approximate 64 MiB byte
+budget. Reusing a cell avoids another provider request when nearby edits revisit
+the same area, while old cells can be released on long sessions. One oversized
+current cell is retained rather than immediately evicted; the estimate is a
+browser-independent safeguard, not a precise heap measurement.
 
 ### 8.2 In-flight cell sharing
 
-Concurrent consumers share a pending cell promise when its owning signal is
-still valid. A cancelled pending request is removed so a later operation can
-retry rather than inheriting an aborted promise.
+Concurrent consumers share a cell-owned pending request. Each route operation
+retains its own cancellation signal; cancelling one consumer no longer aborts a
+fetch still needed by another. The provider request is aborted only after every
+consumer has left, and a later operation can retry an aborted cell cleanly.
 
 ### 8.3 Graph LRU
 
 Graphs are cached by an exact sorted signature of their corridor cell set.
 
-- cache limit: 8 `RoutingNetwork` instances;
+- hard limit: 2 `RoutingNetwork` instances;
+- approximate retained-size budget: 128 MiB;
 - a hit is promoted to most-recently-used position;
-- the least-recently-used graph is evicted after the limit;
-- raw cells remain available even when a derived graph is evicted.
+- the least-recently-used graph is evicted when either limit is exceeded;
+- one oversized current graph is retained so the route operation can complete;
+- raw cells use their independent LRU and may outlive or be evicted before a graph.
 
 Exact signatures avoid reusing a graph whose geographic coverage differs from
-the requested corridor.
+the requested corridor. The byte estimates include conservative allowances for
+JavaScript object, adjacency, and spatial-index overhead and should be checked
+against real browser measurements.
 
 ### 8.4 Feature merging
 
 Before graph construction, roads and hiking features from all contributing
-cells are merged by stable feature ID. This prevents duplicate edges when a
-geometry crosses cell boundaries.
+cells are merged by feature ID and a deterministic full-geometry signature.
+Repeated identical geometry is removed, while a provider ID reused for a
+different geometry keeps both features under derived IDs rather than silently
+losing one road. GeoAdmin loads also report the observed ID-conflict count and
+coordinate Z coverage in the Worker console for validation.
 
 ## 9. Graph construction
 
@@ -417,7 +552,12 @@ A regular 250 m spatial grid indexes:
 - routable segments used for waypoint snapping.
 
 The index reduces repeated full-network scans during graph construction and
-snap lookup.
+snap lookup. The binary graph indexes a routable segment only in the grid
+buckets actually touched by its line. It does not fill the segment's complete
+rectangular envelope: that would make memory usage grow with width multiplied
+by height and could reject a valid long diagonal. A separate linear traversal
+limit still rejects corrupt endpoints that would span an implausible part of
+the national grid.
 
 ### 9.4 Road cost factors
 
@@ -437,6 +577,11 @@ make a segment more attractive to A*. The minimum configured cost factor is
 
 The exact attribute policy belongs in `networkRouter.ts` and its tests because
 it may evolve as swissTLM3D attributes are validated in more regions.
+
+Distances and costs are horizontal in LV95. Elevation belongs to node identity
+to protect bridges and tunnels, but slope does not currently change A* edge cost;
+the separate elevation-profile workflow applies altitude to walking-time metrics
+after an itinerary has been selected.
 
 ## 10. Hiking-segment matching
 
@@ -522,8 +667,11 @@ that cannot produce a better route.
 ### 12.3 Reconstruction
 
 The selected graph-node chain is reconstructed backwards through the previous-
-node map, then converted to ordered coordinates. Exact snapped start and end
-connectors are added while avoiding duplicate adjacent coordinates.
+node map, then converted to ordered coordinates. Reconstruction is bounded by
+the assembled graph's node count, so stale or cyclic predecessor state becomes
+an explicit provider error instead of an unbounded Worker loop. Exact snapped
+start and end connectors are added while avoiding duplicate adjacent
+coordinates.
 
 The result contains only structured-clone-safe coordinate arrays and a network
 mode indicator.
@@ -588,8 +736,10 @@ Cancellation occurs when:
 - the application unmounts;
 - the routing facade is disposed.
 
-Completed cells remain useful when they finished before cancellation. A pending
-cell whose request was aborted is removed and can be requested again later.
+Completed cells remain useful when they finished before cancellation. Shared
+cell requests outlive an individual cancelled consumer while another operation
+still depends on them; an all-consumer cancellation removes the pending entry so
+the cell can be requested again later.
 
 Late Worker responses are correlated by request ID and ignored after the
 request has been cancelled or replaced.
@@ -602,6 +752,8 @@ request has been cancelled or replaced.
 | `null` from local snap | Empty graph or no nearby segment | Place first waypoint freely |
 | `null` after both corridors | Normal missing coverage or connectivity | Store that section as straight |
 | Hiking enrichment unavailable | Optional provider capability rejected | Continue roads-only and show one notice |
+| Precomputed routing coverage miss | Current operation lies outside installed national cells | Try that operation with GeoAdmin while retaining the binary provider |
+| Precomputed routing unavailable | Remote/local binary delivery or integrity failed after retry | Dispose binary state, repeat the complete operation on GeoAdmin, and show one notice |
 | `RoutingAreaTooLargeError` | Cell safety limit exceeded | Preserve route and ask for intermediate waypoints |
 | Required-road truncation | Provider cap remains after maximum subdivision | Preserve route and report error |
 | Timeout or transient failure after retry | Provider unavailable | Preserve route and report error |
@@ -633,9 +785,21 @@ straight mode remains unrestricted.
 - road-only retry after combined-layer rejection;
 - road versus hiking truncation semantics;
 - cancellation distinction;
-- response normalization and deduplication.
+- response normalization, invalid-coordinate splitting, collision-safe identity,
+  and measured Z diagnostics.
 
 Live GeoAdmin requests are not used by the regression suite.
+
+The geometry-cell provider tests additionally protect manifest compatibility,
+bounded coverage, empty-cell handling, the shared runtime/generator geometry
+contract, invalid-coordinate splitting, numeric attribute normalization, and
+direct hiking classification. The precomputed provider tests protect its
+separate manifest, v3 build identity, strictly ordered compact node and segment
+tables, map-free multi-cell merging, local-index resolution, global node
+identity, HTTP-decoded Brotli delivery, the three-attempt 300 ms/1,000 ms
+backoff, and explicit out-of-coverage behaviour. The dataset-verifier fixtures
+additionally reject key-set mismatches and
+cross-cell global-node conflicts.
 
 ### 16.3 Worker-client tests
 
@@ -656,7 +820,8 @@ The engine uses mocked provider loaders and graph doubles to protect:
 - completed cell reuse;
 - in-flight cell reuse;
 - cleanup and retry after an aborted cell request;
-- true least-recently-used graph eviction;
+- partial corridors at bounded-provider edges;
+- true least-recently-used and byte-budget graph eviction;
 - cache and area limits;
 - session-wide roads-only transition;
 - provider-error propagation;
@@ -664,9 +829,11 @@ The engine uses mocked provider loaders and graph doubles to protect:
 
 ### 16.5 Graph tests
 
-`networkRouter` tests cover structured-clone-safe results and focused graph
-behaviour. Algorithm constants and non-obvious heuristics remain documented in
-code and should receive regression tests when their policy changes.
+`networkRouter` and shared-compiler tests cover structured-clone-safe results,
+shared nodes across fragments, duplicate boundary geometry, geometry/precomputed
+route parity, removal of excluded-road orphan nodes, 2D/3D identity separation,
+the lower-bound invariant required by the A* heuristic, and bounded
+predecessor reconstruction for both graph implementations.
 
 ### 16.6 Manual geographic validation
 
@@ -717,32 +884,44 @@ Further work should focus on evidence:
 - inspect roads-only versus enriched route quality;
 - document reproducible problematic corridors.
 
-### 18.2 Static preprocessed data
+### 18.2 National preprocessed routing data
 
-A possible intermediate architecture is:
+The preprocessing pipeline has one offline source stage and one browser runtime
+representation:
 
 ```text
 official GeoPackage
         ↓
-local script or GitHub Actions preparation
+normalized geometry cells (offline build input and validation oracle)
+        ↓ shared TypeScript graph compiler + disk-backed global ID index
+precomputed binary graph cells
         ↓
-compact vector cells
+versioned static object storage
         ↓
-GitHub Pages static storage
-        ↓
-Worker loads cells on demand
+Worker loads corridor cells on demand
 ```
 
-This could remove dependence on non-guaranteed hiking-vector identify behaviour
-while preserving frontend-only deployment. It would add data-preparation,
-versioning, storage, and update responsibilities and therefore requires a
-separate architectural decision.
+The earlier 102-cell Geneva dataset remains historical validation evidence: it
+demonstrated exact graph parity, preserved 3D separation, large reductions in
+assembly time and retained memory, and reliable remote fallback behaviour. The
+national generator generalizes that format without loading the complete Swiss
+graph into JavaScript memory.
 
-### 18.3 National graph or backend
+Before a national release becomes the production primary, validation must still
+cover contrasting urban, rural, alpine, tunnel, border, and low-connectivity
+regions; cold and warm remote transfer; desktop and mobile browsers; cell-size
+outliers; Worker memory; cache reuse; and deliberate missing-object fallback.
 
-A national preprocessed graph or backend becomes reasonable only when measured
-usage or routing quality shows that bounded browser loading cannot meet the
-product goal. Such a change would require decisions about:
+Generated routing data remains outside the repository. Development and
+production load the versioned object-storage root, while local source,
+intermediate, and release paths are reserved for the offline maintenance
+pipeline described in [ROUTING_DATA_PIPELINE.md](ROUTING_DATA_PIPELINE.md).
+
+### 18.3 Hierarchical graph or backend
+
+A hierarchical preprocessed graph or backend becomes reasonable only when
+measured national usage or routing quality shows that bounded browser cell
+loading cannot meet the product goal. Such a change would require decisions about:
 
 - data update cadence;
 - hosting and bandwidth cost;
@@ -755,7 +934,27 @@ product goal. Such a change would require decisions about:
 The existing `DynamicRoutingNetworkLoader` boundary should make future routing
 implementations replaceable without coupling React components to graph details.
 
-## 19. Maintenance rules
+## 19. Routing dataset release lifecycle
+
+A routing release is immutable and identified by its source-data and binary
+format path, for example:
+
+```text
+swisstlm3d-2026/format-v3/ch/
+```
+
+Global IDs are regenerated as one complete release; the per-cell
+`datasetBuildId` prevents accidental mixing. The previous remote release remains
+available during validation and rollback. A changed source edition, binary
+format, or cost model receives a new path, and published objects are never
+overwritten in place.
+
+The operational checklist for source import, local comparison, R2 publication,
+public verification, regional testing, and promotion through
+`VITE_ROUTING_DATA_BASE_URL` lives in
+[ROUTING_DATA_PIPELINE.md](ROUTING_DATA_PIPELINE.md).
+
+## 20. Maintenance rules
 
 Update this document when any of the following changes:
 
@@ -769,9 +968,11 @@ Update this document when any of the following changes:
 - cache limits or eviction policy;
 - distinction between fallback and error;
 - geographic validation scope;
-- decision to introduce preprocessed data or a backend.
+- decision to introduce a backend or change the runtime preprocessed-data contract.
 
 Keep tuning constants documented in code with their unit and trade-off. Keep
 algorithmic safeguards such as A*, heaps, subdivision, caching, and stale-result
-handling explained near the implementation. This document describes the
-subsystem design; code comments remain the closest source for exact formulas.
+handling explained near the implementation. This document describes the runtime subsystem design; code comments remain the
+closest source for exact formulas. Update
+[ROUTING_DATA_PIPELINE.md](ROUTING_DATA_PIPELINE.md) for offline import,
+generation, verification, and publication changes.

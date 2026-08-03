@@ -278,4 +278,116 @@ describe('fetchSwissTlmNetworkData request resilience', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('splits a road at an invalid midpoint instead of creating a shortcut', async () => {
+    const response = createResponse(200);
+    response.json = vi.fn().mockResolvedValue({
+      results: [
+        {
+          layerBodId: 'ch.swisstopo.swisstlm3d-strassen',
+          featureId: 'road-1',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0, 400],
+              [10, 0, 401],
+              [Number.NaN, 0, 402],
+              [20, 0, 403],
+              [30, 0, 404],
+            ],
+          },
+        },
+      ],
+    });
+    fetchMock.mockResolvedValue(response);
+
+    const result = await fetchSwissTlmNetworkData(
+      TEST_EXTENT,
+      new AbortController().signal,
+      { allowEmpty: true },
+    );
+
+    expect(result.roads[0].lines).toEqual([
+      [[0, 0, 400], [10, 0, 401]],
+      [[20, 0, 403], [30, 0, 404]],
+    ]);
+  });
+
+  it('retains different geometries that reuse the same provider feature ID', async () => {
+    const response = createResponse(200);
+    response.json = vi.fn().mockResolvedValue({
+      results: [
+        {
+          layerBodId: 'ch.swisstopo.swisstlm3d-strassen',
+          featureId: 'possibly-local-id',
+          geometry: {
+            type: 'LineString',
+            coordinates: [[0, 0, 400], [10, 0, 401]],
+          },
+        },
+        {
+          layerBodId: 'ch.swisstopo.swisstlm3d-strassen',
+          featureId: 'possibly-local-id',
+          geometry: {
+            type: 'LineString',
+            coordinates: [[0, 10, 410], [10, 10, 411]],
+          },
+        },
+        // The same conflicting geometry can be repeated by an adjacent request
+        // tile and must not produce a third retained feature.
+        {
+          layerBodId: 'ch.swisstopo.swisstlm3d-strassen',
+          featureId: 'possibly-local-id',
+          geometry: {
+            type: 'LineString',
+            coordinates: [[0, 10, 410], [10, 10, 411]],
+          },
+        },
+      ],
+    });
+    fetchMock.mockResolvedValue(response);
+    const onDiagnostics = vi.fn();
+
+    const result = await fetchSwissTlmNetworkData(
+      TEST_EXTENT,
+      new AbortController().signal,
+      { allowEmpty: true, onDiagnostics },
+    );
+
+    expect(result.roads).toHaveLength(2);
+    expect(new Set(result.roads.map((road) => road.id)).size).toBe(2);
+    expect(onDiagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({ conflictingFeatureIds: 1 }),
+    );
+  });
+
+  it('reports the actual Z coverage of accepted GeoAdmin road coordinates', async () => {
+    const response = createResponse(200);
+    response.json = vi.fn().mockResolvedValue({
+      results: [
+        {
+          layerBodId: 'ch.swisstopo.swisstlm3d-strassen',
+          featureId: 'mixed-z',
+          geometry: {
+            type: 'LineString',
+            coordinates: [[0, 0, 400], [10, 0]],
+          },
+        },
+      ],
+    });
+    fetchMock.mockResolvedValue(response);
+    const onDiagnostics = vi.fn();
+
+    await fetchSwissTlmNetworkData(
+      TEST_EXTENT,
+      new AbortController().signal,
+      { allowEmpty: true, onDiagnostics },
+    );
+
+    expect(onDiagnostics).toHaveBeenCalledWith({
+      roadCoordinates: 2,
+      roadCoordinatesWithZ: 1,
+      conflictingFeatureIds: 0,
+    });
+  });
 });

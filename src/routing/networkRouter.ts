@@ -8,60 +8,34 @@
 import type { Coordinate } from 'ol/coordinate.js';
 import type { Extent } from 'ol/extent.js';
 import { containsCoordinate } from 'ol/extent.js';
-import { MAX_SNAP_DISTANCE } from './routingConstants';
-import type {
-  SwissTlmLineFeature,
-  SwissTlmNetworkData,
-  SwissTlmRoadAttributes,
-} from './swissTlmApi';
+import {
+  compilePrecomputedRoutingGraph,
+  MIN_ROUTING_COST_FACTOR,
+  type PrecomputedRoutingGraphData,
+  type PrecomputedRoutingSegment,
+} from './precomputedRoutingGraph';
+import {
+  DUPLICATE_COORDINATE_DISTANCE_SQUARED,
+  MAX_SNAP_DISTANCE,
+  ROUTING_SPATIAL_GRID_SIZE_METRES,
+  shouldReplaceSnapCandidate,
+} from './routingConstants';
+import { reconstructRouteNodePath } from './routePathReconstruction';
+import type { SwissTlmNetworkData } from './swissTlmApi';
 
 export { MAX_SNAP_DISTANCE } from './routingConstants';
 
 /**
- * Horizontal precision in metres used to merge near-identical vertices.
- * A lower value preserves more detail but creates a larger graph.
+ * Approximate retained bytes per graph node, including its coordinate, adjacency
+ * array, map entries, and spatial-index references. The value is deliberately
+ * conservative because JavaScript object overhead varies by browser.
  */
-const NODE_HORIZONTAL_PRECISION = 0.5;
+const ESTIMATED_GRAPH_NODE_BYTES = 416;
 /**
- * Vertical precision in metres used in node keys so grade-separated crossings
- * remain disconnected.
+ * Approximate retained bytes per graph segment, including two adjacency edges
+ * and spatial-index membership. It is used only for cache eviction decisions.
  */
-const NODE_VERTICAL_PRECISION = 2;
-/**
- * Maximum distance in metres between a road segment and the hiking overlay for
- * them to be considered the same trail.
- */
-const HIKING_MATCH_DISTANCE = 8;
-/** Dimensionless lower bound for all routing cost factors, keeping the A* heuristic admissible. */
-const MIN_COST_FACTOR = 0.45;
-/**
- * Spatial-index bucket width in metres. It limits candidate scans without
- * creating too many buckets.
- */
-const SPATIAL_GRID_SIZE = 250;
-/** Minimum retained source-segment length in metres; shorter pieces are noise. */
-const MIN_SEGMENT_LENGTH = 0.1;
-/** Squared distance in square metres below which consecutive route vertices are duplicates. */
-const DUPLICATE_COORDINATE_DISTANCE_SQUARED = 0.01;
-/** Minimum absolute cosine similarity for two segments to count as parallel. */
-const MIN_DIRECTION_COSINE = 0.7;
-/** Interior fractions sampled when matching roads with the hiking overlay. */
-const HIKING_SAMPLE_FRACTIONS = [0.25, 0.5, 0.75] as const;
-
-/** swissTLM3D object-type codes that must never enter the pedestrian graph. */
-const NON_WALKABLE_OBJECT_TYPES = new Set([
-  0, // motorway exit
-  1, // motorway entrance
-  2, // motorway
-  3, // motorway service area
-  5, // motorway access connection
-  6, // service access
-  13, // car shuttle
-  14, // ferry
-  21, // expressway
-  22, // via ferrata
-]);
-
+const ESTIMATED_GRAPH_SEGMENT_BYTES = 384;
 /** Node in the immutable routing graph. */
 interface GraphNode {
   /** Stable array index used by graph edges and A*. */
@@ -122,9 +96,6 @@ interface QueueEntry {
   priority: number;
 }
 
-/** Pair of coordinates representing one indexed line segment. */
-type LineSegment = readonly [Coordinate, Coordinate];
-
 /**
  * Routed geometry returned to the route editor.
  *
@@ -140,11 +111,15 @@ export interface RoutedNetworkPath {
   snapDistanceEnd: number;
 }
 
-/** Diagnostics describing the graph created from one swissTLM3D data set. */
+/** Diagnostics describing one assembled corridor routing graph. */
 export interface RoutingNetworkStats {
-  /** Number of source road features received from GeoAdmin. */
+  /** Number of source-road references reported by the selected provider. */
   roadFeatures: number;
-  /** Number of source hiking-overlay features received from GeoAdmin. */
+  /**
+   * Number of separate hiking-overlay references reported by the provider.
+   * This is zero for binary cells, where hiking classification is encoded on
+   * retained segments rather than delivered as a separate overlay.
+   */
   hikingFeatures: number;
   /** Number of unique 3D graph nodes. */
   nodes: number;
@@ -152,6 +127,24 @@ export interface RoutingNetworkStats {
   segments: number;
   /** Number of retained segments classified as official hiking trails. */
   hikingSegments: number;
+}
+
+
+/** Shared contract implemented by object-based and typed-array routing graphs. */
+export interface RoutableNetwork {
+  /** Diagnostics for the exact corridor graph. */
+  readonly stats: RoutingNetworkStats;
+  /** Conservative retained-size estimate used by the Worker cache. */
+  readonly estimatedMemoryBytes: number;
+  /** Returns whether the graph extent contains the coordinate. */
+  contains(coordinate: Coordinate): boolean;
+  /** Projects a coordinate onto the nearest walkable segment. */
+  snap(coordinate: Coordinate): Coordinate | null;
+  /** Calculates a least-cost route between two requested coordinates. */
+  route(
+    startCoordinate: Coordinate,
+    endCoordinate: Coordinate,
+  ): RoutedNetworkPath | null;
 }
 
 /**
@@ -252,10 +245,10 @@ class SpatialGrid<T> {
     maxX: number,
     maxY: number,
   ): void {
-    const minColumn = Math.floor(minX / SPATIAL_GRID_SIZE);
-    const maxColumn = Math.floor(maxX / SPATIAL_GRID_SIZE);
-    const minRow = Math.floor(minY / SPATIAL_GRID_SIZE);
-    const maxRow = Math.floor(maxY / SPATIAL_GRID_SIZE);
+    const minColumn = Math.floor(minX / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const maxColumn = Math.floor(maxX / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const minRow = Math.floor(minY / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const maxRow = Math.floor(maxY / ROUTING_SPATIAL_GRID_SIZE_METRES);
 
     for (let column = minColumn; column <= maxColumn; column += 1) {
       for (let row = minRow; row <= maxRow; row += 1) {
@@ -279,10 +272,10 @@ class SpatialGrid<T> {
     maxY: number,
   ): Set<T> {
     const items = new Set<T>();
-    const minColumn = Math.floor(minX / SPATIAL_GRID_SIZE);
-    const maxColumn = Math.floor(maxX / SPATIAL_GRID_SIZE);
-    const minRow = Math.floor(minY / SPATIAL_GRID_SIZE);
-    const maxRow = Math.floor(maxY / SPATIAL_GRID_SIZE);
+    const minColumn = Math.floor(minX / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const maxColumn = Math.floor(maxX / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const minRow = Math.floor(minY / ROUTING_SPATIAL_GRID_SIZE_METRES);
+    const maxRow = Math.floor(maxY / ROUTING_SPATIAL_GRID_SIZE_METRES);
 
     for (let column = minColumn; column <= maxColumn; column += 1) {
       for (let row = minRow; row <= maxRow; row += 1) {
@@ -310,32 +303,6 @@ function coordinateDistance(
   second: Coordinate,
 ): number {
   return Math.sqrt(coordinateDistanceSquared(first, second));
-}
-
-/**
- * Creates a quantized 3D key for merging swissTLM3D vertices into graph nodes.
- * @param coordinate - Coordinate in EPSG:2056 with optional elevation in metres.
- * @returns A stable key at the configured horizontal and vertical precision.
- */
-function nodeKey(coordinate: Coordinate): string {
-  const horizontalKey = `${Math.round(
-    coordinate[0] / NODE_HORIZONTAL_PRECISION,
-  )}:${Math.round(coordinate[1] / NODE_HORIZONTAL_PRECISION)}`;
-  const elevation = coordinate[2];
-
-  /*
-   * swissTLM3D is three-dimensional. Keeping an elevation component in the
-   * node key avoids joining a bridge to a road that merely crosses below it.
-   */
-  return Number.isFinite(elevation)
-    ? `${horizontalKey}:${Math.round(elevation / NODE_VERTICAL_PRECISION)}`
-    : `${horizontalKey}:2d`;
-}
-
-function segmentKey(startNodeId: number, endNodeId: number): string {
-  return startNodeId < endNodeId
-    ? `${startNodeId}:${endNodeId}`
-    : `${endNodeId}:${startNodeId}`;
 }
 
 /**
@@ -392,218 +359,6 @@ function projectOnSegment(
   };
 }
 
-function pointToSegmentDistanceSquared(
-  coordinate: Coordinate,
-  start: Coordinate,
-  end: Coordinate,
-): number {
-  return projectOnSegment(coordinate, start, end).distanceSquared;
-}
-
-/**
- * Converts swissTLM3D road attributes into a pedestrian routing preference.
- * Lower factors are preferred by A*, while major roads receive penalties.
- * @param attributes - Normalized road type, access, surface, and importance codes.
- * @param isHikingTrail - Whether the segment matches an official hiking trail.
- * @returns A factor greater than zero, or `Infinity` when pedestrians must not use the segment.
- */
-function roadCostFactor(
-  attributes: SwissTlmRoadAttributes,
-  isHikingTrail: boolean,
-): number {
-  const objectType = attributes.objectType;
-  const restriction = attributes.restriction;
-  const importance = attributes.importance;
-
-  // Hard exclusions take precedence over every preference so A* never trades
-  // safety or legal access for a shorter route.
-  if (
-    (objectType !== undefined &&
-      NON_WALKABLE_OBJECT_TYPES.has(objectType)) ||
-    restriction === 2_000 ||
-    importance === 100
-  ) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  // Unknown ordinary roads remain usable with a slight penalty instead of
-  // fragmenting the graph when an optional attribute is absent.
-  let factor = 1.25;
-
-  switch (objectType) {
-    case 16: // 1 m path
-    case 17: // isolated 1 m path fragment
-    case 19: // marked trace
-      factor = 0.9;
-      break;
-    case 15: // 2 m path
-    case 18: // isolated 2 m path fragment
-      factor = 0.96;
-      break;
-    case 11: // 3 m road
-      factor = 1.05;
-      break;
-    case 10: // 4 m road
-      factor = 1.18;
-      break;
-    case 12: // traffic area axis
-      factor = 1.15;
-      break;
-    case 9: // 6 m road
-      factor = 1.65;
-      break;
-    case 8: // 10 m road
-    case 20: // 8 m road
-      factor = 2.5;
-      break;
-    case 4: // virtual network connection
-      factor = 1.4;
-      break;
-    case 23: // provisional slow-traffic axis
-      factor = 1;
-      break;
-  }
-
-  // Pedestrian-oriented restrictions usually identify quieter, more suitable
-  // links, so they receive a moderate preference.
-  if ([300, 400, 1_000, 1_200].includes(restriction ?? -1)) {
-    factor *= 0.82;
-  }
-
-  // Network importance penalizes major roads without disconnecting places that
-  // can only be reached through them.
-  if (importance === 200) {
-    factor *= 1.7;
-  } else if (importance === 300) {
-    factor *= 1.25;
-  }
-
-  // Surface is only a small tie-breaker; it must not outweigh access, road type,
-  // or official hiking status.
-  if (attributes.surface === 200) {
-    factor *= 0.94;
-  } else if (attributes.surface === 100) {
-    factor *= 1.04;
-  }
-
-  // Official hiking trails are strongly preferred, but never resurrect a hard-
-  // excluded segment because exclusions returned above.
-  if (isHikingTrail) {
-    factor *= 0.72;
-  }
-
-  return factor;
-}
-
-/**
- * Builds a spatial index of the rendered hiking-trail geometries used to enrich
- * road segments that do not carry the same attributes directly.
- * @param features - Official hiking-trail line features.
- * @returns An index of individual hiking line segments.
- */
-function createHikingSegmentIndex(
-  features: SwissTlmLineFeature[],
-): SpatialGrid<LineSegment> {
-  const index = new SpatialGrid<LineSegment>();
-
-  for (const feature of features) {
-    for (const line of feature.lines) {
-      for (let vertexIndex = 1; vertexIndex < line.length; vertexIndex += 1) {
-        const segment: LineSegment = [
-          line[vertexIndex - 1],
-          line[vertexIndex],
-        ];
-        const [start, end] = segment;
-
-        index.insert(
-          segment,
-          Math.min(start[0], end[0]) - HIKING_MATCH_DISTANCE,
-          Math.min(start[1], end[1]) - HIKING_MATCH_DISTANCE,
-          Math.max(start[0], end[0]) + HIKING_MATCH_DISTANCE,
-          Math.max(start[1], end[1]) + HIKING_MATCH_DISTANCE,
-        );
-      }
-    }
-  }
-
-  return index;
-}
-
-/**
- * Tests whether two segments are roughly parallel, independent of direction.
- * @returns `true` when the absolute cosine similarity is at least 0.7.
- */
-function segmentsHaveSimilarDirection(
-  firstStart: Coordinate,
-  firstEnd: Coordinate,
-  secondStart: Coordinate,
-  secondEnd: Coordinate,
-): boolean {
-  const firstX = firstEnd[0] - firstStart[0];
-  const firstY = firstEnd[1] - firstStart[1];
-  const secondX = secondEnd[0] - secondStart[0];
-  const secondY = secondEnd[1] - secondStart[1];
-  const denominator =
-    Math.hypot(firstX, firstY) * Math.hypot(secondX, secondY);
-
-  if (denominator === 0) {
-    return false;
-  }
-
-  return (
-    Math.abs(firstX * secondX + firstY * secondY) / denominator >=
-    MIN_DIRECTION_COSINE
-  );
-}
-
-/**
- * Classifies a road segment by comparing several interior samples with nearby
- * hiking-overlay segments. Requiring multiple aligned samples avoids marking a
- * road as a hiking trail merely because the two layers cross once.
- * @param start - First road-segment coordinate.
- * @param end - Second road-segment coordinate.
- * @param hikingSegmentIndex - Spatial index of official hiking geometries.
- * @returns `true` when at least two of three samples match in distance and direction.
- */
-function isHikingSegment(
-  start: Coordinate,
-  end: Coordinate,
-  hikingSegmentIndex: SpatialGrid<LineSegment>,
-): boolean {
-  const thresholdSquared = HIKING_MATCH_DISTANCE * HIKING_MATCH_DISTANCE;
-
-  // Interior samples are more reliable than endpoints, which often meet several unrelated ways.
-  const samples = HIKING_SAMPLE_FRACTIONS.map(
-    (fraction): Coordinate => [
-      start[0] + (end[0] - start[0]) * fraction,
-      start[1] + (end[1] - start[1]) * fraction,
-    ],
-  );
-  let matchingSamples = 0;
-
-  for (const sample of samples) {
-    const candidates = hikingSegmentIndex.query(
-      sample[0] - HIKING_MATCH_DISTANCE,
-      sample[1] - HIKING_MATCH_DISTANCE,
-      sample[0] + HIKING_MATCH_DISTANCE,
-      sample[1] + HIKING_MATCH_DISTANCE,
-    );
-
-    for (const [hikingStart, hikingEnd] of candidates) {
-      if (
-        segmentsHaveSimilarDirection(start, end, hikingStart, hikingEnd) &&
-        pointToSegmentDistanceSquared(sample, hikingStart, hikingEnd) <=
-          thresholdSquared
-      ) {
-        matchingSamples += 1;
-        break;
-      }
-    }
-  }
-
-  return matchingSamples >= 2;
-}
-
 /** Appends a coordinate unless it would create a sub-decimetre duplicate vertex. */
 function appendCoordinate(
   coordinates: Coordinate[],
@@ -635,12 +390,14 @@ export class NoWalkableNetworkError extends Error {
 /**
  * Immutable pedestrian routing graph built from swissTLM3D data.
  *
- * Instances must be created with `RoutingNetwork.fromSwissTlm()` so node
- * quantization, walkability filtering, segment indexing, and adjacency lists
- * are completed consistently before `snap()` or `route()` can be called.
+ * Instances must be created with `RoutingNetwork.fromSwissTlm()` or
+ * `RoutingNetwork.fromPrecomputed()` so compilation, adjacency construction,
+ * and segment indexing finish before `snap()` or `route()` can be called.
  */
 export class RoutingNetwork {
   readonly stats: RoutingNetworkStats;
+  /** Conservative retained-size estimate used by the Worker graph LRU. */
+  readonly estimatedMemoryBytes: number;
   private readonly segmentIndex = new SpatialGrid<NetworkSegment>();
 
   private constructor(
@@ -650,6 +407,9 @@ export class RoutingNetwork {
     stats: RoutingNetworkStats,
   ) {
     this.stats = stats;
+    this.estimatedMemoryBytes =
+      nodes.length * ESTIMATED_GRAPH_NODE_BYTES +
+      segments.length * ESTIMATED_GRAPH_SEGMENT_BYTES;
 
     for (const segment of segments) {
       this.segmentIndex.insert(
@@ -673,89 +433,101 @@ export class RoutingNetwork {
     extent: Extent,
     data: SwissTlmNetworkData,
   ): RoutingNetwork {
-    const nodeIds = new Map<string, number>();
-    const nodes: GraphNode[] = [];
-    const segmentCandidates = new Map<string, NetworkSegment>();
-    const hikingSegmentIndex = createHikingSegmentIndex(data.hikingTrails);
+    return RoutingNetwork.fromPrecomputed(extent, [
+      compilePrecomputedRoutingGraph(data),
+    ]);
+  }
 
-    // Centralizing node creation guarantees that every quantized 3D key maps to one graph node.
-    const getNodeId = (coordinate: Coordinate): number => {
-      const key = nodeKey(coordinate);
-      const existingNodeId = nodeIds.get(key);
+  /**
+   * Builds a routable network from one or more offline-compiled graph fragments.
+   *
+   * Global node keys join neighbouring cells, while duplicate endpoint pairs
+   * retain the lowest precomputed cost. Only adjacency construction and the
+   * snapping index remain session-local because they depend on the exact set of
+   * cells requested for the current corridor.
+   *
+   * @param extent - Combined routing-cell extent in EPSG:2056.
+   * @param fragments - Precomputed cells contributing nodes and segments.
+   * @returns A fully indexed immutable routing network.
+   * @throws {NoWalkableNetworkError} When no walkable segment is available.
+   * @throws {Error} When a segment references a missing node or invalid cost.
+   */
+  static fromPrecomputed(
+    extent: Extent,
+    fragments: PrecomputedRoutingGraphData[],
+  ): RoutingNetwork {
+    const nodeCoordinates = new Map<string, Coordinate>();
+    const segmentCandidates = new Map<string, PrecomputedRoutingSegment>();
+    let sourceRoadFeatures = 0;
+    let sourceHikingFeatures = 0;
 
-      if (existingNodeId !== undefined) {
-        return existingNodeId;
+    for (const fragment of fragments) {
+      sourceRoadFeatures += fragment.sourceRoadFeatures;
+      sourceHikingFeatures += fragment.sourceHikingFeatures;
+
+      for (const node of fragment.nodes) {
+        if (!nodeCoordinates.has(node.key)) {
+          nodeCoordinates.set(node.key, [...node.coordinate]);
+        }
       }
 
-      const nodeId = nodes.length;
-      nodeIds.set(key, nodeId);
-      nodes.push({
-        id: nodeId,
-        coordinate: [...coordinate],
-        edges: [],
-      });
-      return nodeId;
-    };
+      for (const segment of fragment.segments) {
+        if (!Number.isFinite(segment.cost) || segment.cost <= 0) {
+          throw new Error('Precomputed routing segment has an invalid cost.');
+        }
 
-    // Consecutive source vertices become graph edges. Arbitrary 2D crossings
-    // are deliberately not split, preserving swissTLM3D bridge/tunnel topology.
-    for (const feature of data.roads) {
-      for (const line of feature.lines) {
-        for (let vertexIndex = 1; vertexIndex < line.length; vertexIndex += 1) {
-          const start = line[vertexIndex - 1];
-          const end = line[vertexIndex];
-          const distance = coordinateDistance(start, end);
+        const key =
+          segment.startNodeKey < segment.endNodeKey
+            ? `${segment.startNodeKey}|${segment.endNodeKey}`
+            : `${segment.endNodeKey}|${segment.startNodeKey}`;
+        const existingSegment = segmentCandidates.get(key);
 
-          if (distance < MIN_SEGMENT_LENGTH) {
-            continue;
-          }
-
-          const startNodeId = getNodeId(start);
-          const endNodeId = getNodeId(end);
-
-          if (startNodeId === endNodeId) {
-            continue;
-          }
-
-          const hikingTrail = isHikingSegment(
-            start,
-            end,
-            hikingSegmentIndex,
-          );
-          const factor = roadCostFactor(feature.attributes, hikingTrail);
-
-          if (!Number.isFinite(factor)) {
-            continue;
-          }
-
-          const candidate: NetworkSegment = {
-            id: -1,
-            startNodeId,
-            endNodeId,
-            start: nodes[startNodeId].coordinate,
-            end: nodes[endNodeId].coordinate,
-            distance,
-            cost: distance * factor,
-            isHikingTrail: hikingTrail,
-          };
-          const key = segmentKey(startNodeId, endNodeId);
-          const existingCandidate = segmentCandidates.get(key);
-
-          // Overlapping source features can describe the same endpoints.
-          // Retain the most walkable interpretation.
-          if (!existingCandidate || candidate.cost < existingCandidate.cost) {
-            segmentCandidates.set(key, candidate);
-          }
+        // Neighbouring files intentionally duplicate boundary geometry. The
+        // same lowest-cost policy as live graph compilation makes that overlap
+        // harmless and keeps the final graph deterministic.
+        if (!existingSegment || segment.cost < existingSegment.cost) {
+          segmentCandidates.set(key, segment);
         }
       }
     }
 
-    const segments = [...segmentCandidates.values()].map(
-      (segment, index): NetworkSegment => ({ ...segment, id: index }),
-    );
+    const nodeIds = new Map<string, number>();
+    const nodes: GraphNode[] = [];
 
-    // Walking is currently allowed in both directions because no one-way
-    // pedestrian restriction is modelled yet.
+    for (const [key, coordinate] of nodeCoordinates) {
+      const id = nodes.length;
+      nodeIds.set(key, id);
+      nodes.push({ id, coordinate, edges: [] });
+    }
+
+    const segments: NetworkSegment[] = [];
+
+    for (const segment of segmentCandidates.values()) {
+      const startNodeId = nodeIds.get(segment.startNodeKey);
+      const endNodeId = nodeIds.get(segment.endNodeKey);
+
+      if (startNodeId === undefined || endNodeId === undefined) {
+        throw new Error('Precomputed routing segment references a missing node.');
+      }
+
+      if (startNodeId === endNodeId) {
+        continue;
+      }
+
+      const startCoordinate = nodes[startNodeId].coordinate;
+      const endCoordinate = nodes[endNodeId].coordinate;
+      segments.push({
+        id: segments.length,
+        startNodeId,
+        endNodeId,
+        start: startCoordinate,
+        end: endCoordinate,
+        distance: coordinateDistance(startCoordinate, endCoordinate),
+        cost: segment.cost,
+        isHikingTrail: segment.isHikingTrail,
+      });
+    }
+
     for (const segment of segments) {
       nodes[segment.startNodeId].edges.push({
         to: segment.endNodeId,
@@ -772,8 +544,8 @@ export class RoutingNetwork {
     }
 
     return new RoutingNetwork(extent, nodes, segments, {
-      roadFeatures: data.roads.length,
-      hikingFeatures: data.hikingTrails.length,
+      roadFeatures: sourceRoadFeatures,
+      hikingFeatures: sourceHikingFeatures,
       nodes: nodes.length,
       segments: segments.length,
       hikingSegments: segments.filter((segment) => segment.isHikingTrail)
@@ -860,7 +632,7 @@ export class RoutingNetwork {
               this.nodes[nodeId].coordinate,
               endSnap.coordinate,
             ) *
-              MIN_COST_FACTOR,
+              MIN_ROUTING_COST_FACTOR,
         });
       }
     }
@@ -916,7 +688,7 @@ export class RoutingNetwork {
               this.nodes[edge.to].coordinate,
               endSnap.coordinate,
             ) *
-              MIN_COST_FACTOR,
+              MIN_ROUTING_COST_FACTOR,
         });
       }
     }
@@ -935,16 +707,11 @@ export class RoutingNetwork {
       return null;
     }
 
-    // Reconstruct the graph-node sequence backwards from the best destination endpoint.
-    const nodePath: number[] = [];
-    let nodeId: number | undefined = bestGoalNodeId;
-
-    while (nodeId !== undefined) {
-      nodePath.push(nodeId);
-      nodeId = previousNodes.get(nodeId);
-    }
-
-    nodePath.reverse();
+    const nodePath = reconstructRouteNodePath(
+      bestGoalNodeId,
+      this.nodes.length,
+      (nodeId) => previousNodes.get(nodeId),
+    );
 
     const coordinates: Coordinate[] = [];
     appendCoordinate(coordinates, startSnap.coordinate);
@@ -995,7 +762,17 @@ export class RoutingNetwork {
         segment.end,
       );
 
-      if (!closest || projection.distanceSquared < closest.distanceSquared) {
+      if (
+        !closest ||
+        shouldReplaceSnapCandidate(
+          projection.distanceSquared,
+          segment.start,
+          segment.end,
+          closest.distanceSquared,
+          closest.segment.start,
+          closest.segment.end,
+        )
+      ) {
         closest = {
           segment,
           coordinate: projection.coordinate,

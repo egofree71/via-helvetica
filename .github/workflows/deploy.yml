@@ -40,6 +40,8 @@ jobs:
 
       - name: Build application
         run: npm run build
+        env:
+          VITE_ROUTING_DATA_BASE_URL: ${{ vars.VITE_ROUTING_DATA_BASE_URL }}
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6

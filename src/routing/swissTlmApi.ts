@@ -132,6 +132,12 @@ export interface SwissTlmLineFeature {
   lines: Coordinate[][];
   /** Normalized road attributes; hiking-overlay features usually leave them empty. */
   attributes: SwissTlmRoadAttributes;
+  /**
+   * Precomputed hiking classification when the source can attach it directly
+   * to the road feature. GeoAdmin road features leave this undefined and still
+   * use geometric matching against the optional hiking layer.
+   */
+  isHikingTrail?: boolean;
 }
 
 /** Combined source data needed to build one RoutingNetwork. */
@@ -140,6 +146,24 @@ export interface SwissTlmNetworkData {
   roads: SwissTlmLineFeature[];
   /** Hiking-overlay features used to classify preferred graph edges. */
   hikingTrails: SwissTlmLineFeature[];
+}
+
+/** Diagnostics measured from one real GeoAdmin network load. */
+export interface SwissTlmNetworkDiagnostics {
+  /** Number of road coordinates accepted after geometry validation. */
+  roadCoordinates: number;
+  /** Number of accepted road coordinates carrying a finite Z value. */
+  roadCoordinatesWithZ: number;
+  /** Number of provider IDs reused for a different validated geometry. */
+  conflictingFeatureIds: number;
+}
+
+/** Result of collision-safe source-feature merging. */
+export interface SwissTlmFeatureMergeResult {
+  /** Deduplicated features, retaining conflicting geometries under derived IDs. */
+  features: SwissTlmLineFeature[];
+  /** Number of same-ID/different-geometry conflicts observed. */
+  conflictingFeatureIds: number;
 }
 
 /** Progress snapshot for a tiled network load. */
@@ -182,6 +206,8 @@ export interface NetworkLoadOptions {
    * rejects the non-guaranteed combined layer request.
    */
   onHikingEnrichmentUnavailable?: () => void;
+  /** Receives measured ID and Z diagnostics for the completed bounded load. */
+  onDiagnostics?: (diagnostics: SwissTlmNetworkDiagnostics) => void;
 }
 
 /** Splits an extent into fixed-size initial requests. */
@@ -265,15 +291,39 @@ function normalizeCoordinate(value: unknown): Coordinate | null {
   return typeof z === 'number' && Number.isFinite(z) ? [x, y, z] : [x, y];
 }
 
-/** Removes invalid coordinate members from one external line string. */
-function normalizeLine(value: unknown): Coordinate[] {
+/**
+ * Splits an external line at invalid coordinates. Dropping a bad midpoint and
+ * joining its neighbours would create a synthetic road segment across missing
+ * provider data.
+ */
+function normalizeLine(value: unknown): Coordinate[][] {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value
-    .map(normalizeCoordinate)
-    .filter((coordinate): coordinate is Coordinate => coordinate !== null);
+  const lines: Coordinate[][] = [];
+  let currentLine: Coordinate[] = [];
+
+  const flush = () => {
+    if (currentLine.length >= 2) {
+      lines.push(currentLine);
+    }
+    currentLine = [];
+  };
+
+  for (const member of value) {
+    const coordinate = normalizeCoordinate(member);
+
+    if (!coordinate) {
+      flush();
+      continue;
+    }
+
+    currentLine.push(coordinate);
+  }
+
+  flush();
+  return lines;
 }
 
 /** Converts supported GeoJSON line types into validated coordinate arrays. */
@@ -283,17 +333,88 @@ function readLines(geometry: IdentifyGeometry | undefined): Coordinate[][] {
   }
 
   if (geometry.type === 'LineString') {
-    const line = normalizeLine(geometry.coordinates);
-    return line.length >= 2 ? [line] : [];
+    return normalizeLine(geometry.coordinates);
   }
 
   if (geometry.type === 'MultiLineString') {
-    return geometry.coordinates
-      .map(normalizeLine)
-      .filter((line) => line.length >= 2);
+    return geometry.coordinates.flatMap(normalizeLine);
   }
 
   return [];
+}
+
+/** Creates a compact deterministic fingerprint from every validated vertex. */
+function geometrySignature(lines: Coordinate[][]): string {
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  const mix = (value: bigint) => {
+    hash ^= BigInt.asUintN(64, value);
+    hash = BigInt.asUintN(64, hash * prime);
+  };
+
+  for (const line of lines) {
+    mix(-1n);
+    for (const coordinate of line) {
+      mix(-2n);
+      for (const value of coordinate) {
+        mix(BigInt(Math.round(value / FALLBACK_ID_PRECISION)));
+      }
+    }
+  }
+
+  return hash.toString(16).padStart(16, '0');
+}
+
+/**
+ * Merges features without trusting a provider ID to be globally unique across
+ * identify requests. A conflicting geometry is retained under a derived key
+ * instead of silently replacing a different road.
+ */
+export function mergeSwissTlmFeatures(
+  values: Iterable<SwissTlmLineFeature>,
+): SwissTlmFeatureMergeResult {
+  const features = new Map<string, SwissTlmLineFeature>();
+  const signatures = new Map<string, string>();
+  let conflictingFeatureIds = 0;
+
+  for (const feature of values) {
+    const signature = geometrySignature(feature.lines);
+    const existingSignature = signatures.get(feature.id);
+
+    if (existingSignature === undefined) {
+      features.set(feature.id, feature);
+      signatures.set(feature.id, signature);
+      continue;
+    }
+
+    if (existingSignature === signature) {
+      continue;
+    }
+
+    const signatureId = `${feature.id}#${signature}`;
+
+    // A conflicting geometry can itself cross several request tiles. Its
+    // derived signature must therefore deduplicate repeated copies just like
+    // the provider ID does for the first geometry.
+    if (signatures.get(signatureId) === signature) {
+      continue;
+    }
+
+    conflictingFeatureIds += 1;
+    let derivedId = signatureId;
+    let suffix = 2;
+
+    while (features.has(derivedId)) {
+      derivedId = `${signatureId}-${suffix}`;
+      suffix += 1;
+    }
+
+    const retainedFeature = { ...feature, id: derivedId };
+    features.set(derivedId, retainedFeature);
+    signatures.set(derivedId, signature);
+  }
+
+  return { features: [...features.values()], conflictingFeatureIds };
 }
 
 /**
@@ -308,16 +429,13 @@ function parseFeature(result: IdentifyResult): SwissTlmLineFeature | null {
   }
 
   const properties = result.properties ?? result.attributes ?? {};
-  // Adjacent request tiles can return the same feature. A deterministic
-  // fallback is therefore required when no provider ID exists.
-  const fallbackId = lines
-    .flatMap((line) => [line[0], line[line.length - 1]])
-    .flat()
-    .map((value) => Math.round(value / FALLBACK_ID_PRECISION))
-    .join(':');
+  // Provider IDs are retained for diagnostics, while the full-geometry
+  // fingerprint supplies a stable fallback when the response has no ID.
+  const providerId = result.featureId ?? result.id;
+  const fallbackId = `geometry:${geometrySignature(lines)}`;
 
   return {
-    id: String(result.featureId ?? result.id ?? fallbackId),
+    id: providerId === undefined ? fallbackId : String(providerId),
     lines,
     attributes: {
       objectType: readNumber(properties, ['objektart', 'OBJEKTART']),
@@ -718,27 +836,39 @@ export async function fetchSwissTlmNetworkData(
     fetchRecursively,
   );
 
-  const roadFeatures = new Map<string, SwissTlmLineFeature>();
-  const hikingFeatures = new Map<string, SwissTlmLineFeature>();
+  const tiles = tileGroups.flat();
+  const roadMerge = mergeSwissTlmFeatures(tiles.flatMap((tile) => tile.roads));
+  const hikingMerge = mergeSwissTlmFeatures(
+    tiles.flatMap((tile) => tile.hikingTrails),
+  );
 
-  // Tile borders overlap feature extents. Provider IDs, or deterministic
-  // fallbacks, prevent duplicate graph edges.
-  for (const tile of tileGroups.flat()) {
-    for (const road of tile.roads) {
-      roadFeatures.set(road.id, road);
-    }
-
-    for (const hikingTrail of tile.hikingTrails) {
-      hikingFeatures.set(hikingTrail.id, hikingTrail);
-    }
-  }
-
-  if (roadFeatures.size === 0 && !options.allowEmpty) {
+  if (roadMerge.features.length === 0 && !options.allowEmpty) {
     throw new Error('The GeoAdmin API returned no swissTLM3D roads.');
   }
 
+  let roadCoordinates = 0;
+  let roadCoordinatesWithZ = 0;
+
+  for (const feature of roadMerge.features) {
+    for (const line of feature.lines) {
+      for (const coordinate of line) {
+        roadCoordinates += 1;
+        if (Number.isFinite(coordinate[2])) {
+          roadCoordinatesWithZ += 1;
+        }
+      }
+    }
+  }
+
+  options.onDiagnostics?.({
+    roadCoordinates,
+    roadCoordinatesWithZ,
+    conflictingFeatureIds:
+      roadMerge.conflictingFeatureIds + hikingMerge.conflictingFeatureIds,
+  });
+
   return {
-    roads: [...roadFeatures.values()],
-    hikingTrails: [...hikingFeatures.values()],
+    roads: roadMerge.features,
+    hikingTrails: hikingMerge.features,
   };
 }

@@ -35,26 +35,43 @@ const CHART_PADDING = {
   bottom: 27,
   left: 64,
 };
-/** Three horizontal guides keep the compact chart readable without visual noise. */
-const GRID_LINE_COUNT = 3;
 /**
- * Prevents tiny elevation variations from filling the chart height and looking
- * much steeper than they are on the ground.
+ * Target vertical exaggeration for routes whose visible relief would otherwise
+ * fill the chart. A 5x ratio keeps gentle terrain readable without making it
+ * look as steep as an alpine route.
+ */
+const TARGET_VERTICAL_EXAGGERATION = 5;
+/**
+ * Smallest displayed elevation range in metres. It prevents genuinely flat
+ * profiles from collapsing onto a single horizontal line.
  */
 const MINIMUM_ELEVATION_RANGE_METERS = 40;
-/** Whole-ten-metre bounds keep the compact vertical axis easy to scan. */
-const ELEVATION_BOUND_ROUNDING_METERS = 10;
-/** Larger profiles keep a small visual margin above and below their extrema. */
-const ELEVATION_RANGE_PADDING_RATIO = 0.05;
+/** Ten percent of breathing room is kept above and below the real extrema. */
+const ELEVATION_RANGE_PADDING_RATIO = 0.10;
+/**
+ * Limits empty vertical space relative to the route's padded relief. A ratio
+ * of two keeps long traverses readable even when their horizontal compression
+ * makes the five-times exaggeration target unattainable.
+ */
+const MAXIMUM_RANGE_TO_RELIEF_RATIO = 2;
+/** Roughly three readable vertical intervals avoid crowding the compact chart. */
+const TARGET_ELEVATION_INTERVAL_COUNT = 3;
 /** Roughly five readable intervals work across both short and long hikes. */
 const TARGET_DISTANCE_INTERVAL_COUNT = 5;
+
+/** Converts JavaScript's signed negative zero to the ordinary zero shown to users. */
+function normalizeSignedZero(value: number): number {
+  return Object.is(value, -0) ? 0 : value;
+}
 
 /** Formats one chart altitude in whole metres. */
 function formatAltitude(
   elevationMeters: number,
   integerFormat: Intl.NumberFormat,
 ): string {
-  return `${integerFormat.format(Math.round(elevationMeters))} m`;
+  const roundedElevation = normalizeSignedZero(Math.round(elevationMeters));
+
+  return `${integerFormat.format(roundedElevation)} m`;
 }
 
 /** Formats cumulative profile distance using metres or kilometres. */
@@ -116,7 +133,7 @@ function buildDistanceTicks(
   return ticks;
 }
 
-/** Rounded display range used to project real elevations into the SVG chart. */
+/** Display range used to project real elevations into the SVG chart. */
 interface ElevationBounds {
   /** Lower chart boundary in metres, possibly below the route minimum. */
   chartMinimumElevation: number;
@@ -124,70 +141,97 @@ interface ElevationBounds {
   chartMaximumElevation: number;
 }
 
+/** One horizontal elevation guide projected into the SVG plot. */
+interface ElevationTick {
+  /** Round altitude displayed next to the guide. */
+  elevationMeters: number;
+  /** Vertical SVG coordinate of the guide. */
+  y: number;
+}
+
 /**
- * Expands very small profiles to a realistic visual scale and rounds the axis
- * bounds without changing the underlying samples or route statistics.
+ * Chooses a route-aware vertical scale from the chart aspect ratio. Gentle
+ * routes keep visible headroom, while steep routes still use most of the plot.
  */
 function calculateElevationBounds(
   minimumElevation: number,
   maximumElevation: number,
+  totalDistanceMeters: number,
+  plotWidth: number,
+  plotHeight: number,
 ): ElevationBounds {
   const actualRange = maximumElevation - minimumElevation;
+  const reliefRange = Math.max(
+    MINIMUM_ELEVATION_RANGE_METERS,
+    actualRange * (1 + 2 * ELEVATION_RANGE_PADDING_RATIO),
+  );
+  const targetExaggerationRange =
+    ((totalDistanceMeters / plotWidth) / TARGET_VERTICAL_EXAGGERATION) *
+    plotHeight;
+  const displayedRange = Math.max(
+    reliefRange,
+    Math.min(
+      targetExaggerationRange,
+      reliefRange * MAXIMUM_RANGE_TO_RELIEF_RATIO,
+    ),
+  );
+  const centreElevation = (minimumElevation + maximumElevation) / 2;
+  let chartMinimumElevation = centreElevation - displayedRange / 2;
 
-  if (actualRange <= MINIMUM_ELEVATION_RANGE_METERS) {
-    const centreElevation = (minimumElevation + maximumElevation) / 2;
-    const halfMinimumRange = MINIMUM_ELEVATION_RANGE_METERS / 2;
-    let chartMinimumElevation =
-      Math.round(
-        (centreElevation - halfMinimumRange) /
-          ELEVATION_BOUND_ROUNDING_METERS,
-      ) * ELEVATION_BOUND_ROUNDING_METERS;
-    let chartMaximumElevation =
-      chartMinimumElevation + MINIMUM_ELEVATION_RANGE_METERS;
-
-    if (minimumElevation < chartMinimumElevation) {
-      chartMinimumElevation =
-        Math.floor(minimumElevation / ELEVATION_BOUND_ROUNDING_METERS) *
-        ELEVATION_BOUND_ROUNDING_METERS;
-      chartMaximumElevation =
-        chartMinimumElevation + MINIMUM_ELEVATION_RANGE_METERS;
-    }
-
-    if (maximumElevation > chartMaximumElevation) {
-      chartMaximumElevation =
-        Math.ceil(maximumElevation / ELEVATION_BOUND_ROUNDING_METERS) *
-        ELEVATION_BOUND_ROUNDING_METERS;
-      chartMinimumElevation =
-        chartMaximumElevation - MINIMUM_ELEVATION_RANGE_METERS;
-    }
-
-    // A range close to 40 m can straddle rounded boundaries. Expand only the
-    // side still outside the chart rather than clipping a real sample.
-    if (minimumElevation < chartMinimumElevation) {
-      chartMinimumElevation =
-        Math.floor(minimumElevation / ELEVATION_BOUND_ROUNDING_METERS) *
-        ELEVATION_BOUND_ROUNDING_METERS;
-    }
-    if (maximumElevation > chartMaximumElevation) {
-      chartMaximumElevation =
-        Math.ceil(maximumElevation / ELEVATION_BOUND_ROUNDING_METERS) *
-        ELEVATION_BOUND_ROUNDING_METERS;
-    }
-
-    return { chartMinimumElevation, chartMaximumElevation };
+  // A long route entirely above sea level should not reserve chart space for
+  // negative altitudes merely to keep the display window centred.
+  if (minimumElevation >= 0 && chartMinimumElevation < 0) {
+    chartMinimumElevation = 0;
   }
 
-  const padding = actualRange * ELEVATION_RANGE_PADDING_RATIO;
   return {
-    chartMinimumElevation:
-      Math.floor(
-        (minimumElevation - padding) / ELEVATION_BOUND_ROUNDING_METERS,
-      ) * ELEVATION_BOUND_ROUNDING_METERS,
-    chartMaximumElevation:
-      Math.ceil(
-        (maximumElevation + padding) / ELEVATION_BOUND_ROUNDING_METERS,
-      ) * ELEVATION_BOUND_ROUNDING_METERS,
+    chartMinimumElevation,
+    chartMaximumElevation: chartMinimumElevation + displayedRange,
   };
+}
+
+/** Rounds one raw elevation interval to the familiar 1, 2, 2.5, 5, 10 sequence. */
+function calculateNiceElevationInterval(displayedRange: number): number {
+  const rawInterval = displayedRange / TARGET_ELEVATION_INTERVAL_COUNT;
+  const magnitude = 10 ** Math.floor(Math.log10(rawInterval));
+  const normalizedInterval = rawInterval / magnitude;
+  const multiplier = [1, 2, 2.5, 5, 10].reduce((closest, candidate) =>
+    Math.abs(candidate - normalizedInterval) <
+    Math.abs(closest - normalizedInterval)
+      ? candidate
+      : closest,
+  );
+
+  return multiplier * magnitude;
+}
+
+/** Builds round altitude guides independently from the exact display bounds. */
+function buildElevationTicks(
+  chartMinimumElevation: number,
+  chartMaximumElevation: number,
+  plotHeight: number,
+): ElevationTick[] {
+  const displayedRange = chartMaximumElevation - chartMinimumElevation;
+  const interval = calculateNiceElevationInterval(displayedRange);
+  const ticks: ElevationTick[] = [];
+
+  for (
+    let elevationMeters =
+      Math.ceil(chartMinimumElevation / interval) * interval;
+    elevationMeters <= chartMaximumElevation;
+    elevationMeters += interval
+  ) {
+    ticks.push({
+      elevationMeters: normalizeSignedZero(elevationMeters),
+      y:
+        CHART_PADDING.top +
+        (1 -
+          (elevationMeters - chartMinimumElevation) / displayedRange) *
+          plotHeight,
+    });
+  }
+
+  return ticks;
 }
 
 /** Geometry and real-world bounds reused by every render of one profile. */
@@ -200,10 +244,12 @@ export interface ElevationChartGeometry {
   minimumElevation: number;
   /** Highest real elevation sample in metres. */
   maximumElevation: number;
-  /** Rounded lower SVG boundary in metres. */
+  /** Lower SVG boundary in metres. */
   chartMinimumElevation: number;
-  /** Rounded upper SVG boundary in metres. */
+  /** Upper SVG boundary in metres. */
   chartMaximumElevation: number;
+  /** Round horizontal guides shown inside the vertical range. */
+  elevationTicks: ElevationTick[];
   /** Final cumulative sample distance in metres, clamped above zero. */
   totalDistance: number;
 }
@@ -214,7 +260,7 @@ export interface ElevationChartGeometry {
  * profiles cannot exceed the JavaScript function-argument limit.
  *
  * @param points - Ordered cumulative-distance and elevation samples.
- * @returns Encoded line/fill paths plus real and rounded elevation bounds.
+ * @returns Encoded line/fill paths plus real and route-aware elevation bounds.
  */
 export function buildChartPoints(
   points: RouteElevationPoint[],
@@ -233,14 +279,25 @@ export function buildChartPoints(
     );
   }
 
-  const { chartMinimumElevation, chartMaximumElevation } =
-    calculateElevationBounds(minimumElevation, maximumElevation);
-  const elevationRange = chartMaximumElevation - chartMinimumElevation;
   const totalDistance = Math.max(points[points.length - 1].distanceMeters, 1);
   const plotWidth =
     CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
   const plotHeight =
     CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
+  const { chartMinimumElevation, chartMaximumElevation } =
+    calculateElevationBounds(
+      minimumElevation,
+      maximumElevation,
+      totalDistance,
+      plotWidth,
+      plotHeight,
+    );
+  const elevationRange = chartMaximumElevation - chartMinimumElevation;
+  const elevationTicks = buildElevationTicks(
+    chartMinimumElevation,
+    chartMaximumElevation,
+    plotHeight,
+  );
 
   const chartCoordinates = points.map((point) => {
     const x =
@@ -277,6 +334,7 @@ export function buildChartPoints(
     maximumElevation,
     chartMinimumElevation,
     chartMaximumElevation,
+    elevationTicks,
     totalDistance,
   };
 }
@@ -365,6 +423,7 @@ export default function RouteElevationProfile({
     maximumElevation,
     chartMinimumElevation,
     chartMaximumElevation,
+    elevationTicks,
     totalDistance,
   } = useMemo(() => buildChartPoints(points), [points]);
   const plotHeight =
@@ -571,34 +630,25 @@ export default function RouteElevationProfile({
         onPointerCancel={finishTouchExploration}
         onLostPointerCapture={handleLostPointerCapture}
       >
-        {Array.from({ length: GRID_LINE_COUNT }, (_, index) => {
-          const fraction = index / (GRID_LINE_COUNT - 1);
-          const y = CHART_PADDING.top + fraction * plotHeight;
-          const elevation =
-            chartMaximumElevation -
-            fraction *
-              (chartMaximumElevation - chartMinimumElevation);
-
-          return (
-            <g key={fraction}>
-              <line
-                className="route-elevation-profile-grid"
-                x1={CHART_PADDING.left}
-                x2={CHART_WIDTH - CHART_PADDING.right}
-                y1={y}
-                y2={y}
-              />
-              <text
-                className="route-elevation-profile-axis-label"
-                x={CHART_PADDING.left - 8}
-                y={y + 4}
-                textAnchor="end"
-              >
-                {integerFormat.format(Math.round(elevation))}
-              </text>
-            </g>
-          );
-        })}
+        {elevationTicks.map((tick) => (
+          <g key={tick.elevationMeters}>
+            <line
+              className="route-elevation-profile-grid"
+              x1={CHART_PADDING.left}
+              x2={CHART_WIDTH - CHART_PADDING.right}
+              y1={tick.y}
+              y2={tick.y}
+            />
+            <text
+              className="route-elevation-profile-axis-label"
+              x={CHART_PADDING.left - 8}
+              y={tick.y + 4}
+              textAnchor="end"
+            >
+              {integerFormat.format(tick.elevationMeters)}
+            </text>
+          </g>
+        ))}
 
         {distanceTicks.map((tick) => (
           <g key={tick.distanceMeters}>

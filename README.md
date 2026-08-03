@@ -8,6 +8,8 @@ routes in Switzerland with official swisstopo maps and geodata. It stays
 focused on one route at a time and runs entirely in the browser, so the public
 application can remain usable without an account or a project-owned backend.
 
+Built with React, TypeScript, Vite, OpenLayers, and Vitest.
+
 **Live application:** [viahelvetica.ch](https://viahelvetica.ch/)
 
 ![Via Helvetica route-planning interface on official swisstopo maps](docs/images/via-helvetica-overview.png)
@@ -17,6 +19,7 @@ application can remain usable without an account or a project-owned backend.
 - [Features](#features)
 - [Project principles](#project-principles)
 - [Quick start](#quick-start)
+- [Offline routing-data generation](#offline-routing-data-generation)
 - [Basic usage](#basic-usage)
 - [Data sources](#data-sources)
 - [Known limitations](#known-limitations)
@@ -42,8 +45,10 @@ application can remain usable without an account or a project-owned backend.
 
 Via Helvetica deliberately keeps route planning in the browser. Users do not
 need to register, routes are not uploaded to a project-owned server, and static
-hosting keeps recurring operating costs as low as possible. External official
-services still receive the bounded requests required for maps and geodata.
+hosting keeps recurring operating costs as low as possible. Routes are not
+saved locally; the browser stores only interface preferences and release
+acknowledgements. External official services still receive the bounded requests
+required for maps, geodata, elevation, routing fallback, and departures.
 
 The router is an interactive planning aid rather than an autonomous navigation
 system. The official hiking portrayal remains visible on the map, and users can
@@ -67,6 +72,36 @@ Vite then displays the project address, usually:
 ```text
 http://localhost:5173/
 ```
+
+No local routing-data configuration is required for a normal development start:
+GeoAdmin remains available as a fallback. To test the published precomputed
+routing dataset locally, set `VITE_ROUTING_DATA_BASE_URL` in `.env.local`; see
+[Offline routing-data generation](#offline-routing-data-generation).
+
+## Offline routing-data generation
+
+National swissTLM3D sources, geometry cells, SQLite work files, and binary
+releases live outside the repository. Copy
+`routing-data.config.example.json` to the git-ignored
+`routing-data.config.local.json`, then set one dataset identifier, one binary
+format identifier, the scope, the external data root, and the source GeoPackage.
+The scripts derive the local work/release paths and the versioned R2 prefix from
+that release identity. Then run:
+
+```bash
+npm run generate:routing-geometry
+npm run generate:precomputed-binary-routing
+npm run verify:precomputed-binary-routing
+```
+
+The local release retains raw and Brotli cells for complete verification. R2
+publication uploads only `.bin.br`, checksum-checks the remote objects, and
+publishes `manifest.json` last. To use a published release, set
+`VITE_ROUTING_DATA_BASE_URL` in `.env.local` and restart Vite.
+
+The generic import, generation, verification, and publication workflow is
+documented in [Routing data pipeline](docs/ROUTING_DATA_PIPELINE.md).
+Machine-specific infrastructure and credentials remain outside version control.
 
 ## Basic usage
 
@@ -135,12 +170,15 @@ pressed. Deployed geolocation requires HTTPS.
 Via Helvetica uses official swisstopo backgrounds and swissTLM3D geodata,
 official SwitzerlandMobility hiking routes, hiking-closure and military
 danger-zone layers, Federal Office of Transport stop data, GeoAdmin services,
-and `transport.opendata.ch` departure data.
+and `transport.opendata.ch` departure data. The primary routing provider loads
+precomputed swissTLM3D binary cells on demand from a published national dataset.
+GeoAdmin remains available as a session fallback when that dataset cannot be
+used.
 
 - **swisstopo** provides the official Swiss maps and geodata.
 - **swissTLM3D** is swisstopo's topographic landscape model and supplies the
   road-and-path network used for route snapping.
-- **GeoAdmin** is the federal geodata platform used for maps, bounded routing,
+- **GeoAdmin** is the federal geodata platform used for maps, routing fallback,
   elevation, and map-information requests.
 - **SwitzerlandMobility / ASTRA** provides the national, regional, and local
   hiking-route portrayal plus public route identity and geometry used for route
@@ -154,8 +192,9 @@ Wanderwege in *Wanderzeitberechnung, Version 2020.2* (8 June 2020).
 
 For the application-wide design, see the
 [architecture document](docs/ARCHITECTURE.md). Detailed routing data sources,
-cell loading, graph construction, snapping, A*, caching, and fallback behaviour
-are documented in [Browser routing](docs/ROUTING.md).
+cell loading, graph construction, snapping, A*, caching, bounded binary-provider
+retries, and session fallback are documented in
+[Browser routing](docs/ROUTING.md).
 
 ## Known limitations
 
@@ -166,7 +205,8 @@ are documented in [Browser routing](docs/ROUTING.md).
   route calculation.
 - Imported GPX and selected SwitzerlandMobility routes are read-only and replace
   the previous current itinerary.
-- Routes are not persisted locally or remotely.
+- Routes are not persisted locally or remotely. Export the current itinerary
+  as GPX before leaving or reloading the application if you want to keep it.
 - External map, elevation, routing, and timetable services can be temporarily
   unavailable or incomplete.
 
@@ -178,6 +218,9 @@ are documented in [Browser routing](docs/ROUTING.md).
 - [Browser routing](docs/ROUTING.md): bounded swissTLM3D loading, Worker
   protocol, cell and graph caches, hiking enrichment, snapping, A*, fallback
   semantics, tests, and validation scope.
+- [Routing data pipeline](docs/ROUTING_DATA_PIPELINE.md): generic external-data
+  layout, GeoPackage import, binary generation, verification, and immutable
+  publication contracts.
 
 ## Regression tests
 
@@ -187,8 +230,8 @@ location-search provider normalization, local WGS 84/LV95 coordinate parsing,
 rendered-layer provider contracts, default opacity and persistence,
 release acknowledgement and localized history content, passenger-stop filtering
 and viewport loading, worker-client messaging, and the
-dynamic routing engine's corridor, cache, cancellation cleanup, retry,
-hiking-enrichment fallback, and
+dynamic routing engine's corridor, cache, cancellation cleanup, bounded
+binary-provider retry, session fallback, hiking-enrichment fallback, and
 straight-fallback behaviour.
 
 Run the test suite with:
@@ -237,8 +280,9 @@ npm run build
 ```
 
 Keep user-facing text available in French, German, Italian, and English.
-Application-wide design belongs in `docs/ARCHITECTURE.md`; routing-specific
-design belongs in `docs/ROUTING.md`; `README.md` should stay concise and
+Application-wide design belongs in `docs/ARCHITECTURE.md`; runtime routing
+design belongs in `docs/ROUTING.md`; offline routing-data maintenance belongs in
+`docs/ROUTING_DATA_PIPELINE.md`; `README.md` should stay concise and
 user-oriented.
 
 ## Author

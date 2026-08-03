@@ -22,11 +22,26 @@ Routing is an experimental browser-side capability. It loads bounded
 swissTLM3D cells around user-selected positions, builds a regional walkable
 graph, snaps waypoints, and runs A* inside a Worker. Optional hiking geometry may
 improve route preference, but provider degradation must not disable the required
-road-and-path network. Full routing details live in [ROUTING.md](ROUTING.md).
+road-and-path network. Runtime routing details live in
+[ROUTING.md](ROUTING.md); offline import, generation, and publication live in
+[ROUTING_DATA_PIPELINE.md](ROUTING_DATA_PIPELINE.md).
 
 Information overlays—hiking closures, military danger zones, and public-
 transport stops—remain independent from route calculation. They inform the user
 but do not silently alter routing costs or connectivity.
+
+## Technology stack
+
+- React and TypeScript provide the user interface and application-state
+  composition.
+- OpenLayers and `proj4` provide the native LV95 map runtime and coordinate
+  transforms.
+- A dedicated Web Worker isolates routing-data loading, graph assembly,
+  snapping, and A*.
+- Vite provides development and static multi-page builds.
+- Vitest and JSDOM provide deterministic regression tests.
+- GitHub Actions and GitHub Pages provide continuous validation and static
+  deployment.
 
 ## 1. Product and architectural constraints
 
@@ -61,9 +76,10 @@ This constraint provides several benefits:
 - GitHub Pages can host the public application at
   [viahelvetica.ch](https://viahelvetica.ch/).
 
-A future backend or preprocessed national graph is not forbidden, but it should
-be introduced only after measured routing quality, provider limits, or real
-usage justify the operational cost.
+The current precomputed national routing dataset remains static object storage,
+not a project-owned application service. A future backend is not forbidden, but
+it should be introduced only after measured routing quality, provider limits, or
+real usage justify the operational cost.
 
 ### 1.3 Official-data preference
 
@@ -118,6 +134,7 @@ flowchart LR
     UI --> Elevation[GeoAdmin elevation profile]
     UI --> Timetable[transport.opendata.ch]
     Worker --> Identify
+    Worker --> RoutingData[Versioned binary routing cells]
 
     UI --> FileAPI[Browser File API]
     UI --> Geolocation[Browser Geolocation API]
@@ -137,6 +154,7 @@ flowchart LR
 | GeoAdmin HTML popup | Localized closure and military metadata | Popup reports a local error without changing route state |
 | GeoAdmin WMS | Closure, detour, and military danger portrayals | Overlay failure does not block map use |
 | GeoAdmin elevation profile | Elevation, ascent, descent, and walking-time samples | Distance remains available; altitude-dependent metrics become unavailable |
+| Versioned static routing storage | Optional precomputed Swiss graph cells used by the Worker | Coverage misses use GeoAdmin for the affected operation; persistent delivery, compatibility, or integrity failures switch the complete session to GeoAdmin |
 | Federal Office of Transport data | Passenger-stop geometry and attributes | Optional stop layer may be incomplete or unavailable |
 | transport.opendata.ch | On-demand departure board | Stop remains visible even when departures fail |
 | Browser APIs | Local GPX, geolocation, fullscreen | Capability-specific failure only |
@@ -205,6 +223,7 @@ flowchart TB
 | Imported GPX | `src/import/gpx.ts`, `src/map/useImportedRoute.ts`, `src/map/importedRoute.ts` | Local parsing, projection, read-only display, elevation reuse, and responsive view fitting |
 | Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts`, `src/map/useRouteProfileSynchronization.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and exclusive map/profile synchronisation for the active itinerary or selected public route |
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
+| Offline routing data | `routing-data.config.example.json`, `scripts/generate-routing-geometry-cells.py`, `scripts/generate-precomputed-binary-routing-graph.mjs`, `scripts/verify-routing-dataset.mjs`, `scripts/upload-routing-dataset-r2.ps1` | External source/work/release paths, national import, binary compilation, verification, and immutable R2 publication |
 | Search | `src/search/locationSearch.ts`, `src/search/coordinateSearch.ts`, `src/components/LocationSearch.tsx` | Local WGS 84/LV95 parsing, provider contract, session cache, result UI, keyboard navigation, and request cancellation |
 | Localization | `src/i18n/`, `scripts/generate-localized-pages.mjs` | Typed dictionaries, language persistence, locale paths, runtime document metadata, and generated localized HTML entries |
 | Release history | `src/releases/`, `src/components/ReleaseNotesDialog.tsx`, `scripts/templates/releases.html` | Returning-visitor release acknowledgement, compact localized highlights with one explicit footer dismissal, a signposted new-tab history link, a distinct current-version display and history action in About, and generated indexable release-history pages |
@@ -214,7 +233,9 @@ flowchart TB
 
 `App.tsx` is intentionally a composition point rather than a second map engine.
 It accesses one stable `MapRuntime` reference and coordinates independent
-capabilities. Examples of cross-workflow coordination include:
+capabilities. The application uses no external global state store: focused hooks
+own their domain and lifecycle state, while `App.tsx` composes their public state
+and actions. Examples of cross-workflow coordination include:
 
 - starting route creation clears an imported GPX and temporary search marker;
 - a successful GPX import leaves route mode and clears editable history;
@@ -363,7 +384,7 @@ sequenceDiagram
     participant User
     participant UI as React route hooks
     participant Worker as Routing Worker
-    participant GeoAdmin
+    participant Provider as Binary cells or GeoAdmin
     participant Map as OpenLayers display
 
     User->>UI: Click or tap waypoint
@@ -372,9 +393,9 @@ sequenceDiagram
     else Snapping enabled
         UI->>UI: Validate the 15 km direct section limit
         UI->>Worker: Snap or route request
-        Worker->>GeoAdmin: Load missing bounded cells
-        GeoAdmin-->>Worker: Roads and optional hiking geometry
-        Worker->>Worker: Merge data, build graph, snap, run A*
+        Worker->>Provider: Load missing bounded cells
+        Provider-->>Worker: Graph cells or source geometry
+        Worker->>Worker: Assemble graph, snap, run A*
         Worker-->>UI: Routed geometry or normal no-path result
         UI->>UI: Use straight fallback when appropriate
     end
@@ -664,26 +685,52 @@ do not remove the selected stop or its official SBB/CFF/FFS links.
 
 Routing is a specialized subsystem with its own Worker, protocol, provider
 strategy, caches, graph model, and validation scope. `ARCHITECTURE.md` documents
-only its relationship to the rest of the application.
+its contract with the rest of the application; algorithmic, binary-format, and
+publication details belong in the dedicated routing documents.
 
 The subsystem receives plain LV95 coordinates and returns structured-clone-safe
 snap or route results. OpenLayers objects and React state never cross the Worker
-boundary.
+boundary. Network loading, graph assembly, snapping, and A* therefore remain
+isolated from the map and user-interface thread.
 
-The required graph comes from official swissTLM3D roads and paths. Official
-hiking geometry is optional enrichment used to prefer matching edges. If the
-provider rejects the combined request, the Worker switches to roads-only loading
-for the remaining session and emits one non-blocking notice.
+The required graph comes from official swissTLM3D roads and paths. GeoAdmin can
+supply bounded source geometry at runtime, while an explicitly configured
+versioned binary dataset can supply equivalent precompiled graph cells. Optional
+hiking geometry influences route preference but is not required for basic
+connectivity; if that enrichment becomes unavailable, required road-and-path
+routing continues.
 
-For the complete design, tuning values, failure semantics, tests, and unresolved
-validation work, see [ROUTING.md](ROUTING.md).
+The provider session keeps the binary and GeoAdmin engines independent. Coverage
+misses near the published dataset boundary use GeoAdmin only for the affected
+operation. Persistent binary delivery, compatibility, or integrity failures
+trigger a one-way fallback to GeoAdmin for the rest of the browser session, so
+graph representations are never mixed and failed binary storage is not probed
+again on every edit. Intentional cancellation does not cause fallback.
+
+Precomputed releases are generated reproducibly from official swissTLM3D source
+data outside the repository, published below immutable versioned roots, and
+activated through `VITE_ROUTING_DATA_BASE_URL`. The browser reads only published
+runtime artifacts; it never reads the maintainer's local source, workspace, or
+publication configuration. Public verification checks object integrity, cache
+metadata, and the browser-origin CORS contract before a release is considered
+usable.
+
+For provider selection, corridor policy, graph construction, snapping, A*, cache
+behaviour, fallback semantics, tuning values, and runtime validation, see
+[ROUTING.md](ROUTING.md). For the external filesystem, GeoPackage import, binary
+build, verification, and immutable publication workflow, see
+[ROUTING_DATA_PIPELINE.md](ROUTING_DATA_PIPELINE.md).
 
 ## 8. Performance and concurrency
 
 ### 8.1 Dedicated Worker
 
-Network loading, graph construction, snapping, and A* stay outside the
-React/OpenLayers thread. The map remains interactive while routing work runs.
+Network loading, optional source-geometry compilation, corridor graph joining,
+snapping, and A* stay outside the React/OpenLayers thread. The map remains
+interactive while routing work runs. Binary precomputed cells remove source
+compilation and replace string-key and per-node object assembly with global
+integer IDs, typed arrays, and CSR, while preserving the Worker boundary for
+indexing and search.
 
 ### 8.2 Bounded work
 
@@ -697,13 +744,33 @@ Provider activity is constrained by:
 - recursive subdivision only when provider result limits require it;
 - one wider-corridor retry rather than unbounded expansion.
 
+The national binary representation follows the same corridor and cell-count bounds,
+but replaces recursive identify requests with one file request per non-empty
+cell. Empty cells are resolved from the manifest without a request. Out-of-region
+halo cells are ignored when a corridor still contains covered cells; a completely
+out-of-region footprint remains an explicit coverage error. The binary provider
+avoids runtime interpretation of source road attributes and performs numeric
+rather than string-based cross-cell joining.
+
 ### 8.3 Session caches
 
 The routing Worker keeps:
 
-- completed raw cells;
-- reusable in-flight cell requests;
-- a small least-recently-used cache of graphs for exact corridor cell sets.
+- a least-recently-used raw-cell cache with an approximate 64 MiB byte budget;
+- reusable cell-owned in-flight requests with independent consumer cancellation;
+- at most two exact-corridor graphs, additionally bounded by an approximate
+  128 MiB retained-size budget.
+
+The estimates deliberately over-approximate JavaScript object, adjacency, and
+spatial-index overhead. One oversized current entry is retained so an active
+operation can complete; real browser-memory measurements remain part of routing
+validation.
+
+The binary snapping index traverses only the 250 m buckets touched by each edge,
+including both side buckets when a segment passes exactly through a grid corner.
+This keeps index growth proportional to edge length rather than to the area of a
+diagonal edge's bounding rectangle. A high linear bucket-count guard remains in
+place to reject corrupted coordinates before they can exhaust the Worker heap.
 
 Other focused caches include:
 
@@ -822,39 +889,26 @@ corresponding interface language.
 ### 11.1 Test strategy
 
 Automated tests target stable domain contracts rather than browser canvas
-appearance. They cover:
+appearance. The regression suite is organized around these validation areas:
 
-- immutable route transformations and history;
-- affected-section reconstruction;
-- route-pointer interaction primitives;
-- GPX parsing, projection, metrics, editable export, and segmented read-only export;
-- directional-arrow placement;
-- location-search caching and normalization, local WGS 84/LV95 parsing,
-  coordinate-draft provider bypass, compact combobox accessibility, and distinct
-  place-versus-coordinate zoom policy;
-- locale-path priority, History API language changes, browser back/forward
-  restoration, and localized runtime metadata;
-- first-visit and returning-visitor release acknowledgement, silent storage
-  failure, history-only highlights, consistent localized identifiers, and the
-  compact dialog's single close action and signposted new-tab history link;
-- rendered-layer provider identifiers, semitransparent defaults, explicit-only
-  opacity persistence, minimum-opacity migration, and focused runtime updates;
-- the bounded expandable opacity control for every visible optional information
-  layer, including disabled settings buttons, automatic closure when a layer is
-  hidden, and compact slider accessibility contracts;
-- SwitzerlandMobility metadata normalization, full-geometry selection,
-  strict malformed-line rejection, responsive route fitting, single-itinerary
-  replacement, export, and profile-panel behavior;
-- public-transport filtering, viewport reuse, and API scale separation;
-- screen-space adjustment that keeps an information click visible beside its
-  measured popup without fitting the selected feature;
-- information-click lifecycle when an existing public-route panel is replaced,
-  including preservation of the new identify request;
-- one global elevation-profile sampling budget across independent segments;
-- the 15 km network-section boundary and pre-Worker rejection across route edits;
-- routing-grid footprints;
-- Worker request correlation, typed errors, cancellation, and disposal;
-- dynamic routing engine caching, retry, fallback, and provider errors.
+- **Route state and editing** — immutable transformations and history, affected-
+  section reconstruction, pointer-interaction primitives, direction arrows, and
+  the 15 km network-section boundary before Worker work begins.
+- **Current itineraries and metrics** — GPX parsing, projection, segmented
+  read-only geometry, export, distance and elevation processing, the global
+  profile-sampling budget, and map/profile synchronization.
+- **Map and provider integration** — location-search parsing, caching and zoom
+  policy; layer identifiers, defaults and preference persistence; public-
+  transport normalization; information-click lifecycle and popup positioning;
+  and SwitzerlandMobility identification, complete-geometry selection, fitting,
+  export, and profile behaviour.
+- **Localization, releases, and interface contracts** — locale-path priority,
+  History API navigation, runtime metadata, release acknowledgement and
+  localized identifiers, accessibility semantics, and compact layer controls.
+- **Routing and offline data** — grid footprints, source-geometry validation,
+  manifests and strict binary parsing, compiler equivalence, global-ID joining,
+  typed-array A*, Worker correlation and cancellation, caching, retries, provider
+  fallback, and typed failures.
 
 Provider calls are mocked. Regression tests must not depend on live external
 services.
@@ -909,6 +963,12 @@ dispatch. It:
 5. uploads `dist/` as a Pages artifact;
 6. deploys to the `github-pages` environment.
 
+The build accepts the optional GitHub repository variable
+`VITE_ROUTING_DATA_BASE_URL`. When present, it embeds only the public versioned
+dataset root; routing objects remain in external static object storage and do
+not enter the Pages artifact. When absent, production keeps GeoAdmin as the
+initial provider.
+
 The custom domain serves the application at the root, so `vite.config.ts` uses:
 
 ```ts
@@ -917,6 +977,13 @@ base: '/'
 
 GitHub Pages provides HTTPS, which is required for browser geolocation outside
 `localhost`.
+
+Production builds disable Vite's automatic public-directory copy and use a small
+build plugin to copy ordinary public assets. The historical
+`public/routing-data/` exclusion remains a guard against accidentally packaging
+an old local experiment, but national releases are generated outside the
+repository and loaded through their versioned public URL. Vite also ignores
+legacy routing workspaces in its file watcher.
 
 Before development and production builds, `scripts/generate-localized-pages.mjs`
 creates `/fr/`, `/de/`, `/it/`, and `/en/` application entries from the root
@@ -928,24 +995,17 @@ directories in `dist/`, which lets GitHub Pages serve every localized URL
 directly after a reload. Generated source directories are ignored by Git because
 they are deterministic build inputs.
 
-Each localized entry contains a self-referencing canonical, reciprocal
-`hreflang` links, localized Open Graph, Twitter, Schema.org, `noscript`, and
-document metadata. The root remains the `x-default` negotiation entry for
-existing links and browser-language fallback, but its canonical discovery signal
-points to `/en/`; only the four canonical localized application URLs are listed
-in the sitemap. Release history follows the same pattern: `/releases/` is the
-`x-default` entry with a canonical to `/en/releases/`, while the four localized
-history pages are canonical and listed in the sitemap. A dedicated hiking
-photograph is used consistently by Open Graph, Twitter metadata, structured data,
-and the image sitemap. It is a search and social-discovery asset rather than an
-application screenshot.
+Generated application and release-history entries carry reciprocal localized
+canonicals, `hreflang` links, social and structured metadata, and sitemap
+coverage. The root application and history URLs remain `x-default` negotiation
+entries whose canonical discovery signal points to English; the four localized
+URLs are the canonical pages listed in the sitemap. One shared hiking photograph
+serves social and search discovery rather than representing the application UI.
 
-The rendered application exposes one localized, visually hidden `h1` so
-assistive technologies and rendered-page analysis receive a stable page heading
-without reducing the map area. The React root remains marked `data-nosnippet` so
-transient interface text, including startup messages, is not selected as a
-search-result excerpt or text-fragment deep link. These are deployment concerns
-rather than runtime application services.
+The rendered application also exposes one localized, visually hidden `h1`
+without reducing the map area. Transient React interface text is excluded from
+search-result snippets. These remain build and discovery concerns rather than
+runtime application services.
 
 ## 13. Code and documentation conventions
 
@@ -974,8 +1034,10 @@ rather than runtime application services.
 - Keep `README.md` concise and user-oriented.
 - Update this document when module boundaries, primary workflows, deployment, or
   architectural constraints change.
-- Update [ROUTING.md](ROUTING.md) when routing data sources, graph behaviour,
-  tuning, cache policy, fallback semantics, or validation scope change.
+- Update [ROUTING.md](ROUTING.md) when runtime routing data sources, graph
+  behaviour, tuning, cache policy, fallback semantics, or validation scope change.
+- Update [ROUTING_DATA_PIPELINE.md](ROUTING_DATA_PIPELINE.md) when local paths,
+  source import, binary generation, verification, or publication changes.
 
 ## 14. Evolution criteria
 

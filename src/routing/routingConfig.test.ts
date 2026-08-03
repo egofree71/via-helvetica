@@ -1,32 +1,83 @@
 /**
- * Business context: protects the local-only routing switch so a developer can
- * test roads-only behavior without accidentally changing production routing.
+ * Business context: protects explicit remote routing activation while keeping
+ * GeoAdmin as the safe production default when no dataset URL is configured.
  */
 import { describe, expect, it } from 'vitest';
-import { shouldUseHikingEnrichment } from './routingConfig';
+import {
+  LOCAL_PRECOMPUTED_BINARY_ROUTING_BASE_URL,
+  LOCAL_ROUTING_DEVELOPMENT_CONFIG,
+  normalizeRoutingDataBaseUrl,
+  resolveRoutingConfiguration,
+  shouldUseHikingEnrichment,
+} from './routingConfig';
 
-describe('routing development configuration', () => {
-  it.each(['localhost', '127.0.0.1', '::1', '[::1]'])(
-    'uses the configured hiking-enrichment value on %s',
-    (hostname) => {
-      expect(
-        shouldUseHikingEnrichment(hostname, {
-          useHikingEnrichment: false,
-        }),
-      ).toBe(false);
-      expect(
-        shouldUseHikingEnrichment(hostname, {
-          useHikingEnrichment: true,
-        }),
-      ).toBe(true);
-    },
-  );
+const LOCAL_CONFIG = {
+  dataSource: 'precomputed-binary' as const,
+  useHikingEnrichment: false,
+};
 
-  it('always enables hiking enrichment outside local development', () => {
+describe('routing configuration', () => {
+  it('uses GeoAdmin by default when no remote release is configured', () => {
+    expect(resolveRoutingConfiguration(true, undefined)).toEqual({
+      dataSource: 'geo-admin',
+      usesRemoteBinaryData: false,
+    });
+    expect(LOCAL_ROUTING_DEVELOPMENT_CONFIG.dataSource).toBe('geo-admin');
+  });
+
+  it('uses local binary cells in Vite development without an environment URL', () => {
+    expect(resolveRoutingConfiguration(true, undefined, LOCAL_CONFIG)).toEqual({
+      dataSource: 'precomputed-binary',
+      precomputedBinaryBaseUrl: LOCAL_PRECOMPUTED_BINARY_ROUTING_BASE_URL,
+      usesRemoteBinaryData: false,
+    });
+    expect(shouldUseHikingEnrichment(true, LOCAL_CONFIG)).toBe(false);
+  });
+
+  it('can select GeoAdmin explicitly during local comparison', () => {
     expect(
-      shouldUseHikingEnrichment('egofree71.github.io', {
-        useHikingEnrichment: false,
+      resolveRoutingConfiguration(true, undefined, {
+        dataSource: 'geo-admin',
+        useHikingEnrichment: true,
       }),
-    ).toBe(true);
+    ).toEqual({
+      dataSource: 'geo-admin',
+      usesRemoteBinaryData: false,
+    });
+  });
+
+  it('activates a configured remote binary root in development and production', () => {
+    const remote =
+      'https://routing-data.example.test/swisstlm3d-2026/format-v3/ch/';
+
+    expect(resolveRoutingConfiguration(true, remote, LOCAL_CONFIG)).toEqual({
+      dataSource: 'precomputed-binary',
+      precomputedBinaryBaseUrl:
+        'https://routing-data.example.test/swisstlm3d-2026/format-v3/ch',
+      usesRemoteBinaryData: true,
+    });
+    expect(resolveRoutingConfiguration(false, remote, LOCAL_CONFIG)).toEqual({
+      dataSource: 'precomputed-binary',
+      precomputedBinaryBaseUrl:
+        'https://routing-data.example.test/swisstlm3d-2026/format-v3/ch',
+      usesRemoteBinaryData: true,
+    });
+  });
+
+  it('keeps GeoAdmin as the production default without an explicit remote root', () => {
+    expect(resolveRoutingConfiguration(false, undefined, LOCAL_CONFIG)).toEqual({
+      dataSource: 'geo-admin',
+      usesRemoteBinaryData: false,
+    });
+    expect(shouldUseHikingEnrichment(false, LOCAL_CONFIG)).toBe(true);
+  });
+
+  it('rejects ambiguous or credential-bearing routing-data URLs', () => {
+    expect(() =>
+      normalizeRoutingDataBaseUrl('https://user:secret@example.test/data'),
+    ).toThrow('without credentials');
+    expect(() => normalizeRoutingDataBaseUrl('/routing-data?version=2')).toThrow(
+      'query or fragment',
+    );
   });
 });
