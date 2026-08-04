@@ -947,44 +947,6 @@ Further work should focus on evidence:
 - inspect roads-only versus enriched route quality;
 - document reproducible problematic corridors.
 
-#### Development routing-policy simulator
-
-Run `npm run dev`, then open:
-
-```text
-http://localhost:5173/tools/routing-simulator/
-```
-
-The development-only page accepts one or more GPX files, transforms each
-independent GPX segment to LV95, and samples deterministic synthetic waypoint
-clicks. Every run automatically executes a fixed-distance scenario, a percentage
-scenario, and the configured seeded irregular scenarios around the same mean.
-The original GPX filename and every seed are included in JSON and CSV exports so
-an interesting result can be reproduced exactly. For a single source file, the
-download name is `via-helvetica-routing-simulation-<gpx-name>.json` or `.csv`.
-Multi-file batches use the first GPX stem plus the number of additional files.
-Near-final percentage samples
-are collapsed onto the exact endpoint to avoid zero-length duplicate sections.
-
-Each scenario creates two fresh binary-engine sessions with the same synthetic
-clicks:
-
-1. `legacy` reproduces the release-1.2 radius-1 then radius-2 policy;
-2. `certified` uses metric envelopes, loaded-frontier certification, and the
-   current legacy fallbacks.
-
-The simulator preserves each engine's cell and graph caches between waypoints,
-but it resets both sessions between scenarios. It reports unique and total cell
-loads, intrinsic Brotli bytes from the published integrity inventory, decoded
-bytes, graph builds and cache hits, metric and legacy attempt counts, route
-misses, and geometry differences. Wall-clock duration is also shown, but browser
-HTTP caching makes that value unsuitable as the primary A/B metric. Prefer
-Brotli bytes, decoded bytes, unique cells, and route-output comparisons.
-
-The simulator runs in its own Worker and is deliberately omitted from the
-production Vite entry list. It may remain in the repository as a validation tool,
-but it must not become a user-facing workflow or a dependency of route editing.
-
 ### 18.2 National preprocessed routing data
 
 The preprocessing pipeline has one offline source stage and one browser runtime

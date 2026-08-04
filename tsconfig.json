@@ -26,7 +26,6 @@
   },
   "include": [
     "src",
-    "tools",
     "vite.config.ts",
     "vitest.config.ts"
   ]

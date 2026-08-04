@@ -247,17 +247,6 @@ During development, use `npm run test:watch` to rerun affected tests after each
 change. GitHub Actions runs the complete suite before building and deploying
 the site.
 
-A development-only routing-policy simulator is available at
-`/tools/routing-simulator/` while `npm run dev` is running. It replays uploaded
-GPX segments through regular-distance, regular-percentage, and seeded irregular
-waypoint sequences in one batch, then compares the release-1.2 radius corridor
-with the certified metric corridor. Single-GPX JSON and CSV downloads include
-the GPX filename stem in the downloaded filename; multi-GPX batches use the
-first stem plus the number of additional files. Every exported row still retains
-its exact original GPX filename. The page is intentionally
-excluded from the production Vite inputs; detailed usage and interpretation are
-documented in [Routing](docs/ROUTING.md).
-
 ## Production build and deployment
 
 Build the production bundle with:

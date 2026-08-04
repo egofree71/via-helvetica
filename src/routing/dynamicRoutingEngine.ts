@@ -147,32 +147,6 @@ export interface CertifiedRoutingAttemptDiagnostic {
     | 'legacy-footprint-preferred';
 }
 
-
-/** Binary corridor policy selectable by development tools and regression tests. */
-export type BinaryRoutingCorridorPolicy = 'certified' | 'legacy';
-
-/** Diagnostic emitted whenever one exact corridor graph is reused or built. */
-export interface RoutingNetworkAccessDiagnostic {
-  /** Whether the immutable graph came from the exact-signature cache. */
-  outcome: 'built' | 'reused';
-  /** Number of requested cells in the graph signature. */
-  requestedCellCount: number;
-  /** Number of cells actually covered by the selected provider. */
-  coveredCellCount: number;
-  /** Conservative retained-size estimate for the assembled graph. */
-  estimatedBytes: number;
-}
-
-/** Diagnostic emitted after one legacy radius-based route attempt. */
-export interface LegacyRoutingAttemptDiagnostic {
-  /** Number of complete neighbouring cells added around the line walk. */
-  radius: number;
-  /** Exact number of cells in the attempted corridor. */
-  cellCount: number;
-  /** Whether the bounded graph produced a route or a normal miss. */
-  outcome: 'path' | 'miss';
-}
-
 /** Session callbacks emitted by the worker-owned routing engine. */
 export interface DynamicRoutingNetworkEngineOptions {
   /**
@@ -185,20 +159,6 @@ export interface DynamicRoutingNetworkEngineOptions {
   /** Receives development-only measurements for binary metric attempts. */
   onCertifiedRoutingAttempt?: (
     diagnostic: CertifiedRoutingAttemptDiagnostic,
-  ) => void;
-  /** Receives development-only measurements for legacy radius attempts. */
-  onLegacyRoutingAttempt?: (
-    diagnostic: LegacyRoutingAttemptDiagnostic,
-  ) => void;
-  /**
-   * Selects the binary corridor policy. Production omits this option and uses
-   * certified metric envelopes; the legacy value exists for deterministic
-   * development comparisons against the 1.2 routing workflow.
-   */
-  binaryCorridorPolicy?: BinaryRoutingCorridorPolicy;
-  /** Receives graph-cache and graph-construction measurements. */
-  onRoutingNetworkAccess?: (
-    diagnostic: RoutingNetworkAccessDiagnostic,
   ) => void;
   /**
    * Optional normalized geometry loader injected by regression tests.
@@ -524,11 +484,7 @@ export class DynamicRoutingNetworkEngine {
     endCoordinate: Coordinate,
     signal: AbortSignal,
   ): Promise<RoutedNetworkPath | null> {
-    const usesCertifiedBinaryPolicy =
-      this.options.precomputedBinaryCellLoader !== undefined &&
-      this.options.binaryCorridorPolicy !== 'legacy';
-
-    return usesCertifiedBinaryPolicy
+    return this.options.precomputedBinaryCellLoader
       ? this.routeWithCertifiedMetricEnvelopes(
           startCoordinate,
           endCoordinate,
@@ -761,20 +717,9 @@ export class DynamicRoutingNetworkEngine {
 
     try {
       const network = await this.getNetwork(cellKeys, signal);
-      const path = network.route(startCoordinate, endCoordinate);
-      this.options.onLegacyRoutingAttempt?.({
-        radius,
-        cellCount: cellKeys.size,
-        outcome: path ? 'path' : 'miss',
-      });
-      return path;
+      return network.route(startCoordinate, endCoordinate);
     } catch (error) {
       if (error instanceof NoWalkableNetworkError) {
-        this.options.onLegacyRoutingAttempt?.({
-          radius,
-          cellCount: cellKeys.size,
-          outcome: 'miss',
-        });
         return null;
       }
 
@@ -812,13 +757,6 @@ export class DynamicRoutingNetworkEngine {
         this.networkCache.splice(cachedNetworkIndex, 1);
         this.networkCache.unshift(reusedNetwork);
       }
-
-      this.options.onRoutingNetworkAccess?.({
-        outcome: 'reused',
-        requestedCellCount: cellKeys.size,
-        coveredCellCount: cellKeys.size,
-        estimatedBytes: reusedNetwork.estimatedBytes,
-      });
 
       return reusedNetwork.network;
     }
@@ -907,12 +845,6 @@ export class DynamicRoutingNetworkEngine {
     };
     this.networkCache.unshift(cachedNetwork);
     this.networkCacheBytes += cachedNetwork.estimatedBytes;
-    this.options.onRoutingNetworkAccess?.({
-      outcome: 'built',
-      requestedCellCount: cellKeys.size,
-      coveredCellCount: coveredCellKeys.size,
-      estimatedBytes: cachedNetwork.estimatedBytes,
-    });
 
     while (
       this.networkCache.length > 1 &&

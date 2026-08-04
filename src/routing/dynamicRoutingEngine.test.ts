@@ -313,53 +313,6 @@ describe('DynamicRoutingNetworkEngine', () => {
     expect(network.route).not.toHaveBeenCalled();
   });
 
-  it('lets the development simulator force the legacy binary corridor policy', async () => {
-    const network = createCertifiedNetwork({
-      path: DEFAULT_PATH,
-      frontierReached: false,
-    });
-    moduleMocks.fromBinary.mockReturnValue(network);
-    const precomputedBinaryCellLoader = vi.fn(async (key: `${number}:${number}`) =>
-      createBinaryCell(key),
-    );
-    const networkAccesses: Array<{ outcome: string; requestedCellCount: number }> = [];
-    const legacyAttempts: Array<{ radius: number; outcome: string }> = [];
-    const engine = new DynamicRoutingNetworkEngine({
-      precomputedBinaryCellLoader,
-      binaryCorridorPolicy: 'legacy',
-      onRoutingNetworkAccess: (diagnostic) => {
-        networkAccesses.push(diagnostic);
-      },
-      onLegacyRoutingAttempt: (diagnostic) => {
-        legacyAttempts.push(diagnostic);
-      },
-    });
-    const start: Coordinate = [1_200, 1_200];
-    const end: Coordinate = [1_300, 1_200];
-    const expectedCellKeys = createCorridorCellKeys(start, end, 1);
-
-    await expect(
-      engine.route(start, end, new AbortController().signal),
-    ).resolves.toEqual(DEFAULT_PATH);
-    await expect(
-      engine.route(start, end, new AbortController().signal),
-    ).resolves.toEqual(DEFAULT_PATH);
-
-    expect(precomputedBinaryCellLoader).toHaveBeenCalledTimes(
-      expectedCellKeys.size,
-    );
-    expect(network.route).toHaveBeenCalledTimes(2);
-    expect(network.routeAttempt).not.toHaveBeenCalled();
-    expect(legacyAttempts).toEqual([
-      { radius: 1, cellCount: expectedCellKeys.size, outcome: 'path' },
-      { radius: 1, cellCount: expectedCellKeys.size, outcome: 'path' },
-    ]);
-    expect(networkAccesses).toEqual([
-      { outcome: 'built', requestedCellCount: expectedCellKeys.size, coveredCellCount: expectedCellKeys.size, estimatedBytes: 1_024 },
-      { outcome: 'reused', requestedCellCount: expectedCellKeys.size, coveredCellCount: expectedCellKeys.size, estimatedBytes: 1_024 },
-    ]);
-  });
-
   it('reuses the first-waypoint graph for a 173 m certified section near a cell edge', async () => {
     const network = createCertifiedNetwork({
       path: DEFAULT_PATH,

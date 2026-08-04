@@ -951,13 +951,7 @@ manual checks include:
 - provider portrayals and official popup content;
 - stop, closure, and danger-zone clicks near panel and viewport edges on desktop
   and mobile layouts;
-- routing behaviour in contrasting geographic regions;
-- deterministic A/B replay of uploaded GPX segments through the development-only
-  `/tools/routing-simulator/` page. The page creates fresh legacy and certified
-  engine sessions inside its own Worker, preserves per-session caches between
-  synthetic waypoints, automatically runs all three sampling modes, and exports
-  the original GPX filename plus cell, byte, graph, attempt, and geometry
-  comparisons without entering the production Vite input graph.
+- routing behaviour in contrasting geographic regions.
 
 The routing subsystem remains experimental until topology and provider behaviour
 are validated in varied Swiss environments, including dense cities, mountains,
