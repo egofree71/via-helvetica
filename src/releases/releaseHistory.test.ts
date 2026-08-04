@@ -32,12 +32,8 @@ function createStorage() {
 
 describe('release history', () => {
   it('provides the same current release structure in every language', () => {
-    const expectedItemIds = [
-      'fasterRouteCreation',
-      'elevationProfile',
-      'usageInformation',
-    ];
-    const expectedDialogItemIds = expectedItemIds.slice(0, 2);
+    const expectedItemIds = ['optimizedRoutingDataLoading'];
+    const expectedDialogItemIds = expectedItemIds;
 
     for (const language of SUPPORTED_LANGUAGES) {
       const release = getCurrentRelease(language);
