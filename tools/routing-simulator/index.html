@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Via Helvetica routing simulator</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">Development tool</p>
+        <h1>Routing policy simulator</h1>
+        <p>
+          Replay GPX tracks as deterministic waypoint clicks and compare the
+          release-1.2 radius corridor with the certified metric corridor. Each
+          row starts with fresh engine caches; both policies receive the same
+          synthetic click sequence.
+        </p>
+      </header>
+
+      <section class="panel controls">
+        <label class="wide">
+          Binary routing-data URL
+          <input
+            id="routing-data-url"
+            type="url"
+            placeholder="https://…/format-v3/ch"
+          />
+        </label>
+
+        <label class="wide">
+          GPX files
+          <input id="gpx-files" type="file" accept=".gpx,application/gpx+xml" multiple />
+          <small id="file-summary">No usable GPX segment loaded.</small>
+        </label>
+
+        <div>
+          <label>
+            Regular and irregular interval (m)
+            <input id="interval-metres" type="number" min="10" step="10" value="750" />
+          </label>
+        </div>
+
+        <div>
+          <label>
+            Regular interval (% of GPX)
+            <input id="interval-percent" type="number" min="0.1" max="100" step="0.1" value="10" />
+          </label>
+        </div>
+
+        <div class="subgrid">
+          <label>
+            Variation (%)
+            <input id="variation-percent" type="number" min="0" max="95" step="1" value="40" />
+          </label>
+          <label>
+            Runs
+            <input id="random-runs" type="number" min="1" max="100" step="1" value="5" />
+          </label>
+          <label>
+            First seed
+            <input id="seed" type="number" step="1" value="12345" />
+          </label>
+        </div>
+
+        <div class="actions wide">
+          <button id="run-simulation" type="button" disabled>Run all sampling modes</button>
+          <button id="cancel-simulation" type="button" class="secondary" disabled>Cancel</button>
+          <button id="export-json" type="button" class="secondary" disabled>Export JSON</button>
+          <button id="export-csv" type="button" class="secondary" disabled>Export CSV</button>
+        </div>
+      </section>
+
+      <section class="panel progress-panel">
+        <progress id="progress" value="0" max="1"></progress>
+        <p id="status">Choose GPX files and configure the three sampling modes.</p>
+        <p id="summary">No results yet.</p>
+      </section>
+
+      <section class="results">
+        <table>
+          <thead>
+            <tr>
+              <th>GPX file</th>
+              <th>GPX segment</th>
+              <th>Sampling</th>
+              <th>Source</th>
+              <th>Points</th>
+              <th>Legacy cells</th>
+              <th>Certified cells</th>
+              <th>Δ cells</th>
+              <th>Δ Brotli</th>
+              <th>Graphs L/C</th>
+              <th>Metric attempts</th>
+              <th>Route comparison</th>
+            </tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+      </section>
+
+      <footer>
+        Wall-clock timing is cache-dependent. Use intrinsic Brotli bytes,
+        decoded bytes, cell counts, and route comparisons for decisions. This
+        page is not part of the production build.
+      </footer>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

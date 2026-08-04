@@ -147,6 +147,32 @@ export interface CertifiedRoutingAttemptDiagnostic {
     | 'legacy-footprint-preferred';
 }
 
+
+/** Binary corridor policy selectable by development tools and regression tests. */
+export type BinaryRoutingCorridorPolicy = 'certified' | 'legacy';
+
+/** Diagnostic emitted whenever one exact corridor graph is reused or built. */
+export interface RoutingNetworkAccessDiagnostic {
+  /** Whether the immutable graph came from the exact-signature cache. */
+  outcome: 'built' | 'reused';
+  /** Number of requested cells in the graph signature. */
+  requestedCellCount: number;
+  /** Number of cells actually covered by the selected provider. */
+  coveredCellCount: number;
+  /** Conservative retained-size estimate for the assembled graph. */
+  estimatedBytes: number;
+}
+
+/** Diagnostic emitted after one legacy radius-based route attempt. */
+export interface LegacyRoutingAttemptDiagnostic {
+  /** Number of complete neighbouring cells added around the line walk. */
+  radius: number;
+  /** Exact number of cells in the attempted corridor. */
+  cellCount: number;
+  /** Whether the bounded graph produced a route or a normal miss. */
+  outcome: 'path' | 'miss';
+}
+
 /** Session callbacks emitted by the worker-owned routing engine. */
 export interface DynamicRoutingNetworkEngineOptions {
   /**
@@ -159,6 +185,20 @@ export interface DynamicRoutingNetworkEngineOptions {
   /** Receives development-only measurements for binary metric attempts. */
   onCertifiedRoutingAttempt?: (
     diagnostic: CertifiedRoutingAttemptDiagnostic,
+  ) => void;
+  /** Receives development-only measurements for legacy radius attempts. */
+  onLegacyRoutingAttempt?: (
+    diagnostic: LegacyRoutingAttemptDiagnostic,
+  ) => void;
+  /**
+   * Selects the binary corridor policy. Production omits this option and uses
+   * certified metric envelopes; the legacy value exists for deterministic
+   * development comparisons against the 1.2 routing workflow.
+   */
+  binaryCorridorPolicy?: BinaryRoutingCorridorPolicy;
+  /** Receives graph-cache and graph-construction measurements. */
+  onRoutingNetworkAccess?: (
+    diagnostic: RoutingNetworkAccessDiagnostic,
   ) => void;
   /**
    * Optional normalized geometry loader injected by regression tests.
@@ -484,7 +524,11 @@ export class DynamicRoutingNetworkEngine {
     endCoordinate: Coordinate,
     signal: AbortSignal,
   ): Promise<RoutedNetworkPath | null> {
-    return this.options.precomputedBinaryCellLoader
+    const usesCertifiedBinaryPolicy =
+      this.options.precomputedBinaryCellLoader !== undefined &&
+      this.options.binaryCorridorPolicy !== 'legacy';
+
+    return usesCertifiedBinaryPolicy
       ? this.routeWithCertifiedMetricEnvelopes(
           startCoordinate,
           endCoordinate,
@@ -502,7 +546,7 @@ export class DynamicRoutingNetworkEngine {
    * @param startCoordinate - Existing route endpoint in EPSG:2056.
    * @param endCoordinate - Newly selected destination in EPSG:2056.
    * @param signal - Abort signal owned by the caller.
-   * @returns Certified path, certified miss, or the best legacy-bounded result.
+   * @returns Certified result, or the exact legacy radius-1/radius-2 result.
    * @throws {RoutingAreaTooLargeError} If an attempted footprint exceeds the safety limit.
    * @throws {Error} When provider loading or graph construction fails.
    */
@@ -530,7 +574,6 @@ export class DynamicRoutingNetworkEngine {
       ...createLocalCellKeys(endCoordinate),
     ]);
     const attemptedCellSignatures = new Set<string>();
-    let widestMetricPath: RoutedNetworkPath | null = null;
     let attemptNumber = 0;
 
     const reportAttempt = (
@@ -554,11 +597,13 @@ export class DynamicRoutingNetworkEngine {
         marginMetres,
       );
 
-      // Once an envelope is no smaller than the established radius-1
-      // footprint, the metric policy has stopped saving data. Re-entering the
-      // legacy radius-1/radius-2 workflow avoids making long sections worse.
-      if (cellKeys.size >= legacyInitialCellKeys.size) {
-        attemptNumber += 1;
+      // A metric attempt is useful only when it is strictly smaller and fully
+      // contained in the radius-1 footprint it replaces. This prevents the
+      // optimization from downloading cells that release 1.2 would never load.
+      if (
+        cellKeys.size >= legacyInitialCellKeys.size ||
+        !containsAllCellKeys(legacyInitialCellKeys, cellKeys)
+      ) {
         reportAttempt(
           marginMetres,
           cellKeys.size,
@@ -621,7 +666,6 @@ export class DynamicRoutingNetworkEngine {
         }
 
         reportAttempt(marginMetres, cellKeys.size, 'frontier-reached');
-        widestMetricPath = attempt.path ?? widestMetricPath;
       } catch (error) {
         if (
           error instanceof EmptyCoveredBinaryNetworkError &&
@@ -649,13 +693,11 @@ export class DynamicRoutingNetworkEngine {
     // A metric certificate is useful only while it saves cells. If every
     // smaller envelope remains inconclusive, restore the complete historical
     // order: accept a normal radius-1 result before paying for radius 2.
-    const legacyPath = await this.routeWithLegacyCorridors(
+    return this.routeWithLegacyCorridors(
       startCoordinate,
       endCoordinate,
       signal,
     );
-
-    return legacyPath ?? widestMetricPath;
   }
 
   /**
@@ -719,9 +761,20 @@ export class DynamicRoutingNetworkEngine {
 
     try {
       const network = await this.getNetwork(cellKeys, signal);
-      return network.route(startCoordinate, endCoordinate);
+      const path = network.route(startCoordinate, endCoordinate);
+      this.options.onLegacyRoutingAttempt?.({
+        radius,
+        cellCount: cellKeys.size,
+        outcome: path ? 'path' : 'miss',
+      });
+      return path;
     } catch (error) {
       if (error instanceof NoWalkableNetworkError) {
+        this.options.onLegacyRoutingAttempt?.({
+          radius,
+          cellCount: cellKeys.size,
+          outcome: 'miss',
+        });
         return null;
       }
 
@@ -759,6 +812,13 @@ export class DynamicRoutingNetworkEngine {
         this.networkCache.splice(cachedNetworkIndex, 1);
         this.networkCache.unshift(reusedNetwork);
       }
+
+      this.options.onRoutingNetworkAccess?.({
+        outcome: 'reused',
+        requestedCellCount: cellKeys.size,
+        coveredCellCount: cellKeys.size,
+        estimatedBytes: reusedNetwork.estimatedBytes,
+      });
 
       return reusedNetwork.network;
     }
@@ -847,6 +907,12 @@ export class DynamicRoutingNetworkEngine {
     };
     this.networkCache.unshift(cachedNetwork);
     this.networkCacheBytes += cachedNetwork.estimatedBytes;
+    this.options.onRoutingNetworkAccess?.({
+      outcome: 'built',
+      requestedCellCount: cellKeys.size,
+      coveredCellCount: coveredCellKeys.size,
+      estimatedBytes: cachedNetwork.estimatedBytes,
+    });
 
     while (
       this.networkCache.length > 1 &&

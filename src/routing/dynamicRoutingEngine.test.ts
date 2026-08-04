@@ -313,6 +313,53 @@ describe('DynamicRoutingNetworkEngine', () => {
     expect(network.route).not.toHaveBeenCalled();
   });
 
+  it('lets the development simulator force the legacy binary corridor policy', async () => {
+    const network = createCertifiedNetwork({
+      path: DEFAULT_PATH,
+      frontierReached: false,
+    });
+    moduleMocks.fromBinary.mockReturnValue(network);
+    const precomputedBinaryCellLoader = vi.fn(async (key: `${number}:${number}`) =>
+      createBinaryCell(key),
+    );
+    const networkAccesses: Array<{ outcome: string; requestedCellCount: number }> = [];
+    const legacyAttempts: Array<{ radius: number; outcome: string }> = [];
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader,
+      binaryCorridorPolicy: 'legacy',
+      onRoutingNetworkAccess: (diagnostic) => {
+        networkAccesses.push(diagnostic);
+      },
+      onLegacyRoutingAttempt: (diagnostic) => {
+        legacyAttempts.push(diagnostic);
+      },
+    });
+    const start: Coordinate = [1_200, 1_200];
+    const end: Coordinate = [1_300, 1_200];
+    const expectedCellKeys = createCorridorCellKeys(start, end, 1);
+
+    await expect(
+      engine.route(start, end, new AbortController().signal),
+    ).resolves.toEqual(DEFAULT_PATH);
+    await expect(
+      engine.route(start, end, new AbortController().signal),
+    ).resolves.toEqual(DEFAULT_PATH);
+
+    expect(precomputedBinaryCellLoader).toHaveBeenCalledTimes(
+      expectedCellKeys.size,
+    );
+    expect(network.route).toHaveBeenCalledTimes(2);
+    expect(network.routeAttempt).not.toHaveBeenCalled();
+    expect(legacyAttempts).toEqual([
+      { radius: 1, cellCount: expectedCellKeys.size, outcome: 'path' },
+      { radius: 1, cellCount: expectedCellKeys.size, outcome: 'path' },
+    ]);
+    expect(networkAccesses).toEqual([
+      { outcome: 'built', requestedCellCount: expectedCellKeys.size, coveredCellCount: expectedCellKeys.size, estimatedBytes: 1_024 },
+      { outcome: 'reused', requestedCellCount: expectedCellKeys.size, coveredCellCount: expectedCellKeys.size, estimatedBytes: 1_024 },
+    ]);
+  });
+
   it('reuses the first-waypoint graph for a 173 m certified section near a cell edge', async () => {
     const network = createCertifiedNetwork({
       path: DEFAULT_PATH,
@@ -508,7 +555,7 @@ describe('DynamicRoutingNetworkEngine', () => {
     expect(legacyNetwork.route).toHaveBeenCalledTimes(1);
     expect(onCertifiedRoutingAttempt).toHaveBeenCalledWith({
       directDistanceMetres: 3_000,
-      attemptNumber: 1,
+      attemptNumber: 0,
       marginMetres: 2_400,
       cellCount: createSegmentEnvelopeCellKeys(start, end, 2_400).size,
       outcome: 'legacy-footprint-preferred',
@@ -588,7 +635,7 @@ describe('DynamicRoutingNetworkEngine', () => {
     expect(legacyRetryNetwork.route).toHaveBeenCalledTimes(1);
   });
 
-  it('retains the best smaller metric path only when both legacy corridors miss', async () => {
+  it('returns the exact legacy miss when both historical corridors miss', async () => {
     const metricNetwork = createCertifiedNetwork({
       path: DEFAULT_PATH,
       frontierReached: true,
@@ -609,11 +656,47 @@ describe('DynamicRoutingNetworkEngine', () => {
 
     await expect(
       engine.route(start, end, new AbortController().signal),
-    ).resolves.toEqual(DEFAULT_PATH);
+    ).resolves.toBeNull();
 
     expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(3);
     expect(legacyInitialNetwork.route).toHaveBeenCalledTimes(1);
     expect(legacyRetryNetwork.route).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefers legacy radius 1 when a smaller metric envelope leaves its footprint', async () => {
+    const legacyNetwork = createNetwork(DEFAULT_PATH);
+    moduleMocks.fromBinary.mockReturnValue(legacyNetwork);
+    const onCertifiedRoutingAttempt = vi.fn();
+    const engine = new DynamicRoutingNetworkEngine({
+      precomputedBinaryCellLoader: vi.fn(async (key: `${number}:${number}`) =>
+        createBinaryCell(key),
+      ),
+      onCertifiedRoutingAttempt,
+    });
+    const start: Coordinate = [100, 100];
+    const end: Coordinate = [5_100, 4_600];
+    const metricCellKeys = createSegmentEnvelopeCellKeys(start, end, 2_400);
+    const legacyCellKeys = createCorridorCellKeys(start, end, 1);
+
+    expect(metricCellKeys.size).toBeLessThan(legacyCellKeys.size);
+    expect(
+      [...metricCellKeys].some((cellKey) => !legacyCellKeys.has(cellKey)),
+    ).toBe(true);
+
+    await expect(
+      engine.route(start, end, new AbortController().signal),
+    ).resolves.toEqual(DEFAULT_PATH);
+
+    expect(moduleMocks.fromBinary).toHaveBeenCalledTimes(1);
+    expect(moduleMocks.fromBinary.mock.calls[0]?.[2]).toEqual(legacyCellKeys);
+    expect(legacyNetwork.route).toHaveBeenCalledTimes(1);
+    expect(onCertifiedRoutingAttempt).toHaveBeenCalledWith({
+      directDistanceMetres: Math.hypot(5_000, 4_500),
+      attemptNumber: 0,
+      marginMetres: 2_400,
+      cellCount: metricCellKeys.size,
+      outcome: 'legacy-footprint-preferred',
+    });
   });
 
   it('uses the complete legacy workflow when diagnostics are unavailable', async () => {
