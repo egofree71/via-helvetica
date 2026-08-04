@@ -102,6 +102,7 @@ describe('AboutDialog', () => {
     );
     expect(container.querySelector('.about-dialog-icon-close')).toBeNull();
     expect(container.querySelectorAll('.about-dialog button')).toHaveLength(1);
+    expect(container.textContent).toContain('1.3.0');
 
     const closeButton = container.querySelector<HTMLButtonElement>(
       '.about-dialog-close',

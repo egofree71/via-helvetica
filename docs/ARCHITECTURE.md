@@ -412,9 +412,13 @@ deletion reconnection, and loop closure. A rejected edit keeps the committed
 route unchanged and asks for an intermediate waypoint; explicit straight mode
 remains unrestricted because it does not load swissTLM3D data.
 
-Admitted sections load a corridor between the existing endpoint and the new
-selection. The routing engine first tries a narrow corridor and retries once
-with a wider corridor when coverage or graph connectivity is insufficient.
+Admitted sections load a bounded footprint between the existing endpoint and
+the new selection. Binary routing starts with a typical-case discrete metric
+envelope and
+widens only when its A* frontier diagnostic cannot certify the result. A snap
+miss stops once both endpoint footprints are covered, while an uneconomical or
+still-inconclusive metric sequence returns to the complete legacy radius-1 then
+radius-2 workflow. GeoAdmin keeps that unchanged legacy policy throughout.
 
 Normal absence of coverage is different from provider failure. Missing nearby
 network data may produce a free first waypoint or a straight incoming section,
@@ -707,6 +711,19 @@ trigger a one-way fallback to GeoAdmin for the rest of the browser session, so
 graph representations are never mixed and failed binary storage is not probed
 again on every edit. Intentional cancellation does not cause fallback.
 
+The typed-array binary graph has a bounded-search diagnostic that marks whether
+A* expanded a node outside the cells whose complete data was loaded. Node
+membership is precomputed into a compact byte array during graph assembly, and
+the diagnostic is enabled only for cells carrying the validated manifest
+contract for complete unclipped features and global graph identity. The binary
+engine uses this signal to certify discrete 400 m, 700 m, 1,100 m, 1,600 m, or
+2,400 m metric envelopes. Snap misses are final once both 260 m endpoint
+footprints are covered, and the engine returns to the full legacy
+radius-1/radius-2 workflow whenever the metric sequence is no longer smaller,
+remains inconclusive, or lacks diagnostics. A normal radius-1 path is accepted
+before the wider radius-2 retry. The object-based GeoAdmin graph and its policy
+remain unchanged.
+
 Precomputed releases are generated reproducibly from official swissTLM3D source
 data outside the repository, published below immutable versioned roots, and
 activated through `VITE_ROUTING_DATA_BASE_URL`. The browser reads only published
@@ -762,9 +779,10 @@ The routing Worker keeps:
   128 MiB retained-size budget.
 
 The estimates deliberately over-approximate JavaScript object, adjacency, and
-spatial-index overhead. One oversized current entry is retained so an active
-operation can complete; real browser-memory measurements remain part of routing
-validation.
+spatial-index overhead. Binary graphs also retain one byte per local node for
+loaded-cell frontier membership. One oversized current entry is retained so an
+active operation can complete; real browser-memory measurements remain part of
+routing validation.
 
 The binary snapping index traverses only the 250 m buckets touched by each edge,
 including both side buckets when a segment passes exactly through a grid corner.

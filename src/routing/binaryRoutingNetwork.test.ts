@@ -22,6 +22,7 @@ function cell(
     edgeCosts?: number[];
     globalNodeCount?: number;
     globalEdgeCount?: number;
+    supportsFrontierCertification?: true;
   } = {},
 ): PrecomputedBinaryRoutingCell {
   return {
@@ -43,6 +44,8 @@ function cell(
     globalEdgeCount:
       options.globalEdgeCount ?? Math.max(2, Math.max(...edgeIds, 0) + 1),
     sourceRoadFeatures: 1,
+    supportsFrontierCertification:
+      options.supportsFrontierCertification,
     buffer: new ArrayBuffer(PRECOMPUTED_BINARY_HEADER_BYTES),
   };
 }
@@ -84,6 +87,180 @@ describe('BinaryRoutingNetwork', () => {
     expect(path?.coordinates.at(-1)?.[0]).toBeCloseTo(199, 5);
     expect(path?.coordinates).toContainEqual([100, 0, 401]);
     expect(network.estimatedMemoryBytes).toBeLessThan(10_000);
+  });
+
+  it('certifies a route when A* expands only nodes inside loaded cells', () => {
+    const contained = cell(
+      '0:0',
+      [0, 1, 2],
+      [10_000, 100_000, 200_000],
+      [0, 1],
+      [0, 1],
+      [1, 2],
+      {
+        edgeCosts: [900, 1_000],
+        globalNodeCount: 3,
+        globalEdgeCount: 2,
+        supportsFrontierCertification: true,
+      },
+    );
+    const network = BinaryRoutingNetwork.fromCells(
+      [0, -100, 2_400, 100],
+      [contained],
+      new Set(['0:0'] as const),
+    );
+
+    const attempt = network.routeAttempt([110, 0], [1_990, 0]);
+
+    expect(attempt.path).not.toBeNull();
+    expect(attempt.frontierReached).toBe(false);
+    expect(attempt.snapMiss).toBe(false);
+    expect(network.route([110, 0], [1_990, 0])).toEqual(attempt.path);
+  });
+
+  it('reports an expanded node outside the fully loaded cell set', () => {
+    const spillingPath = cell(
+      '0:0',
+      [0, 1, 2],
+      [10_000, 250_000, 10_000],
+      [0, 1],
+      [0, 1],
+      [1, 2],
+      {
+        nodeY: [10_000, 10_000, 100_000],
+        edgeCosts: [2_400, 2_563],
+        globalNodeCount: 3,
+        globalEdgeCount: 2,
+        supportsFrontierCertification: true,
+      },
+    );
+    const network = BinaryRoutingNetwork.fromCells(
+      [0, 0, 3_000, 1_200],
+      [spillingPath],
+      new Set(['0:0'] as const),
+    );
+
+    const attempt = network.routeAttempt([110, 100], [100, 990]);
+
+    expect(attempt.path).not.toBeNull();
+    expect(attempt.frontierReached).toBe(true);
+    expect(attempt.snapMiss).toBe(false);
+  });
+
+  it('does not flag an outside node that cannot beat an existing direct path', () => {
+    const crossingEdge = cell(
+      '0:0',
+      [0, 1],
+      [10_000, 250_000],
+      [0],
+      [0],
+      [1],
+      {
+        nodeY: [10_000, 10_000],
+        edgeCosts: [2_400],
+        globalNodeCount: 2,
+        globalEdgeCount: 1,
+        supportsFrontierCertification: true,
+      },
+    );
+    const network = BinaryRoutingNetwork.fromCells(
+      [0, 0, 3_000, 500],
+      [crossingEdge],
+      new Set(['0:0'] as const),
+    );
+
+    const attempt = network.routeAttempt([100, 100], [200, 100]);
+
+    expect(attempt.path).not.toBeNull();
+    expect(attempt.frontierReached).toBe(false);
+    expect(attempt.snapMiss).toBe(false);
+  });
+
+  it('keeps the frontier diagnostic conservative without a validated dataset contract', () => {
+    const unverified = cell(
+      '0:0',
+      [0, 1, 2],
+      [10_000, 100_000, 200_000],
+      [0, 1],
+      [0, 1],
+      [1, 2],
+      {
+        edgeCosts: [900, 1_000],
+        globalNodeCount: 3,
+        globalEdgeCount: 2,
+      },
+    );
+    const network = BinaryRoutingNetwork.fromCells(
+      [0, -100, 2_400, 100],
+      [unverified],
+    );
+
+    const attempt = network.routeAttempt([110, 0], [1_990, 0]);
+
+    expect(attempt.path).not.toBeNull();
+    expect(attempt.frontierReached).toBe(true);
+    expect(attempt.snapMiss).toBe(false);
+  });
+
+  it('reports a missing endpoint snap separately from the A* frontier', () => {
+    const contained = cell(
+      '0:0',
+      [0, 1],
+      [10_000, 20_000],
+      [0],
+      [0],
+      [1],
+      {
+        edgeCosts: [1_000],
+        globalNodeCount: 2,
+        globalEdgeCount: 1,
+        supportsFrontierCertification: true,
+      },
+    );
+    const network = BinaryRoutingNetwork.fromCells(
+      [0, 0, 2_400, 2_400],
+      [contained],
+      new Set(['0:0'] as const),
+    );
+
+    const attempt = network.routeAttempt([1_500, 1_500], [1_600, 1_500]);
+
+    expect(attempt).toEqual({
+      path: null,
+      frontierReached: false,
+      snapMiss: true,
+    });
+  });
+
+
+  it('keeps a snap miss inconclusive when one endpoint footprint cell is absent', () => {
+    const contained = cell(
+      '0:0',
+      [0, 1],
+      [10_000, 20_000],
+      [0],
+      [0],
+      [1],
+      {
+        edgeCosts: [1_000],
+        globalNodeCount: 2,
+        globalEdgeCount: 1,
+        supportsFrontierCertification: true,
+      },
+    );
+    const network = BinaryRoutingNetwork.fromCells(
+      [0, 0, 2_400, 2_400],
+      [contained],
+      new Set(['0:0'] as const),
+    );
+
+    const attempt = network.routeAttempt([1_200, 100], [1_300, 100]);
+
+    expect(attempt).toEqual({
+      path: null,
+      frontierReached: true,
+      snapMiss: true,
+    });
   });
 
   it('rejects conflicting coordinates for the same global node', () => {

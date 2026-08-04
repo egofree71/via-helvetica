@@ -17,6 +17,7 @@ import {
 } from './precomputedBinaryRoutingFormat';
 import {
   NoWalkableNetworkError,
+  type RouteAttempt,
   type RoutedNetworkPath,
   type RoutableNetwork,
   type RoutingNetworkStats,
@@ -29,6 +30,11 @@ import {
   shouldReplaceSnapCandidate,
 } from './routingConstants';
 import { reconstructRouteNodePath } from './routePathReconstruction';
+import {
+  cellKeyForCoordinate,
+  createLocalCellKeys,
+  type CellKey,
+} from './routingGrid';
 
 /**
  * Maximum 250 m buckets one edge may actually cross before data is rejected.
@@ -427,6 +433,12 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
   private readonly routePreviousNodes: Int32Array;
   /** Per-node generation marks avoid clearing route arrays for every short path. */
   private readonly routeVisitedGeneration: Uint32Array;
+  /** One when the node lies inside a cell whose complete data was loaded. */
+  private readonly nodeInsideLoadedCell: Uint8Array;
+  /** Whether the provider contract makes loaded-cell frontier checks meaningful. */
+  private readonly supportsFrontierCertification: boolean;
+  /** Cells whose complete graph data was present during assembly. */
+  private readonly loadedCellKeys: ReadonlySet<CellKey>;
   private snapQueryGeneration = 0;
   private routeQueryGeneration = 0;
 
@@ -441,6 +453,9 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
     private readonly segmentFlags: Uint8Array,
     private readonly adjacencyOffsets: Uint32Array,
     private readonly adjacencySegmentIds: Uint32Array,
+    nodeInsideLoadedCell: Uint8Array,
+    supportsFrontierCertification: boolean,
+    loadedCellKeys: Set<CellKey>,
     segmentBuckets: Map<number, Uint32Array>,
     stats: RoutingNetworkStats,
   ) {
@@ -449,6 +464,9 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
     this.routeDistances = new Float64Array(nodeX.length);
     this.routePreviousNodes = new Int32Array(nodeX.length);
     this.routeVisitedGeneration = new Uint32Array(nodeX.length);
+    this.nodeInsideLoadedCell = nodeInsideLoadedCell;
+    this.supportsFrontierCertification = supportsFrontierCertification;
+    this.loadedCellKeys = loadedCellKeys;
     this.stats = stats;
 
     let bucketBytes = 0;
@@ -471,6 +489,7 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
       this.routeDistances.byteLength +
       this.routePreviousNodes.byteLength +
       this.routeVisitedGeneration.byteLength +
+      this.nodeInsideLoadedCell.byteLength +
       bucketBytes;
   }
 
@@ -478,6 +497,7 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
    * Joins independently loaded cells through their global integer node IDs.
    * @param extent - Combined extent of covered corridor cells.
    * @param cells - Overlapping binary cells deduplicated through global IDs.
+   * @param loadedCellKeys - Cells whose complete graph data was available.
    * @returns A fully indexed typed-array routing network.
    * @throws {NoWalkableNetworkError} When no edge is available.
    * @throws {Error} When global node coordinates conflict or an edge is invalid.
@@ -485,6 +505,7 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
   static fromCells(
     extent: Extent,
     cells: PrecomputedBinaryRoutingCell[],
+    loadedCellKeys: Iterable<CellKey> = cells.map((cell) => cell.key),
   ): BinaryRoutingNetwork {
     const metadataCell = cells.find(
       (cell) => cell.globalNodeCount > 0 && cell.globalEdgeCount > 0,
@@ -649,6 +670,26 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
     const nodeX = temporaryNodeX.slice(0, nodeCount);
     const nodeY = temporaryNodeY.slice(0, nodeCount);
     const nodeZ = temporaryNodeZ.slice(0, nodeCount);
+    const supportsFrontierCertification = cells.every(
+      (cell) => cell.supportsFrontierCertification === true,
+    );
+    const loadedCellKeySet = new Set(loadedCellKeys);
+    const nodeInsideLoadedCell = new Uint8Array(nodeCount);
+
+    if (supportsFrontierCertification) {
+      for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
+        const coordinate: Coordinate = [
+          nodeX[nodeId] / PRECOMPUTED_BINARY_XY_SCALE,
+          nodeY[nodeId] / PRECOMPUTED_BINARY_XY_SCALE,
+        ];
+        nodeInsideLoadedCell[nodeId] = loadedCellKeySet.has(
+          cellKeyForCoordinate(coordinate),
+        )
+          ? 1
+          : 0;
+      }
+    }
+
     const segmentStartNodes = temporarySegmentStartNodes.slice(0, edgeCount);
     const segmentEndNodes = temporarySegmentEndNodes.slice(0, edgeCount);
     const segmentCosts = temporarySegmentCosts.slice(0, edgeCount);
@@ -716,6 +757,9 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
       segmentFlags,
       adjacencyOffsets,
       adjacencySegmentIds,
+      nodeInsideLoadedCell,
+      supportsFrontierCertification,
+      loadedCellKeySet,
       segmentBuckets,
       {
         roadFeatures: sourceRoadFeatures,
@@ -743,7 +787,7 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
   }
 
   /**
-   * Calculates the least-cost route using CSR adjacency and A*.
+   * Calculates the least-cost route while preserving the existing public API.
    * @param startCoordinate - Requested route start in EPSG:2056.
    * @param endCoordinate - Requested route destination in EPSG:2056.
    * @returns Routed geometry and snap distances, or `null` for a normal miss.
@@ -752,11 +796,39 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
     startCoordinate: Coordinate,
     endCoordinate: Coordinate,
   ): RoutedNetworkPath | null {
+    return this.routeAttempt(startCoordinate, endCoordinate).path;
+  }
+
+  /**
+   * Calculates one least-cost route and records whether A* reached an incomplete
+   * loaded-cell frontier while a better result was still possible.
+   * @param startCoordinate - Requested route start in EPSG:2056.
+   * @param endCoordinate - Requested route destination in EPSG:2056.
+   * @returns The route result plus the conservative frontier diagnostic.
+   */
+  routeAttempt(
+    startCoordinate: Coordinate,
+    endCoordinate: Coordinate,
+  ): RouteAttempt {
     const startSnap = this.findSnap(startCoordinate);
     const endSnap = this.findSnap(endCoordinate);
 
     if (!startSnap || !endSnap) {
-      return null;
+      const requiredSnapCellKeys = new Set<CellKey>([
+        ...createLocalCellKeys(startCoordinate),
+        ...createLocalCellKeys(endCoordinate),
+      ]);
+      const snapFootprintCovered =
+        this.supportsFrontierCertification &&
+        [...requiredSnapCellKeys].every((key) => this.loadedCellKeys.has(key));
+
+      // A wider corridor cannot repair a miss once every cell intersecting both
+      // 260 m endpoint footprints was loaded from the validated dataset.
+      return {
+        path: null,
+        frontierReached: !snapFootprintCovered,
+        snapMiss: true,
+      };
     }
 
     const directPath =
@@ -811,6 +883,7 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
 
     let bestCost = directPath?.cost ?? Number.POSITIVE_INFINITY;
     let bestGoalNodeId = -1;
+    let frontierReached = !this.supportsFrontierCertification;
 
     while (queue.size > 0) {
       const current = queue.pop();
@@ -823,8 +896,17 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
         continue;
       }
 
+      // Once the cheapest remaining A* priority cannot beat `bestCost`, neither
+      // this node nor any queued node can invalidate the bounded-graph result.
       if (current.priority >= bestCost) {
         break;
+      }
+
+      // Complete, unclipped source features give loaded cells every edge
+      // incident to their contained nodes. Expanding any other node means the
+      // search may depend on neighbours omitted from the assembled graph.
+      if (this.nodeInsideLoadedCell[current.nodeId] === 0) {
+        frontierReached = true;
       }
 
       let endCost: number | undefined;
@@ -833,7 +915,8 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
       }
       if (current.nodeId === endSnap.endNodeId) {
         const candidate = endSnap.cost * (1 - endSnap.fraction);
-        endCost = endCost === undefined ? candidate : Math.min(endCost, candidate);
+        endCost =
+          endCost === undefined ? candidate : Math.min(endCost, candidate);
       }
 
       if (endCost !== undefined && current.distance + endCost < bestCost) {
@@ -879,14 +962,18 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
 
     if (directPath && bestGoalNodeId < 0) {
       return {
-        coordinates: directPath.coordinates,
-        snapDistanceStart: startSnap.distance,
-        snapDistanceEnd: endSnap.distance,
+        path: {
+          coordinates: directPath.coordinates,
+          snapDistanceStart: startSnap.distance,
+          snapDistanceEnd: endSnap.distance,
+        },
+        frontierReached,
+        snapMiss: false,
       };
     }
 
     if (bestGoalNodeId < 0) {
-      return null;
+      return { path: null, frontierReached, snapMiss: false };
     }
 
     const nodePath = reconstructRouteNodePath(
@@ -907,9 +994,13 @@ export class BinaryRoutingNetwork implements RoutableNetwork {
     appendCoordinate(coordinates, endSnap.coordinate);
 
     return {
-      coordinates,
-      snapDistanceStart: startSnap.distance,
-      snapDistanceEnd: endSnap.distance,
+      path: {
+        coordinates,
+        snapDistanceStart: startSnap.distance,
+        snapDistanceEnd: endSnap.distance,
+      },
+      frontierReached,
+      snapMiss: false,
     };
   }
 

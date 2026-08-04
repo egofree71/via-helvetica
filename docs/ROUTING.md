@@ -118,9 +118,10 @@ request-correlation layer.
 
 - completed GeoAdmin geometry or binary graph cell cache;
 - reusable in-flight cell requests;
-- exact-corridor graph LRU cache;
+- exact-cell-signature graph LRU cache;
 - cell loading concurrency;
-- narrow and widened corridor attempts;
+- certified metric-envelope attempts for binary cells;
+- unchanged narrow and widened radius corridors for GeoAdmin and final safety fallback;
 - source-feature merging and compilation for GeoAdmin cells;
 - typed-array CSR assembly when binary graph cells are used;
 - snapping and A* invocation;
@@ -138,9 +139,14 @@ source file against generated geometry inputs.
 creates object-based adjacency lists and the snapping index required by the exact
 requested corridor, and runs A*. `src/routing/binaryRoutingNetwork.ts` implements
 the same snapping and A* contract over global integer IDs, fixed-point
-coordinates, CSR adjacency, and typed arrays. This split keeps route search in
-the browser while allowing the binary experiment to remove string-key and
-per-node object reconstruction.
+coordinates, CSR adjacency, and typed arrays. The binary graph also exposes an
+optional `routeAttempt()` diagnostic that reports whether A* expanded a node
+outside the cells whose complete graph data was loaded. The binary corridor
+policy consumes this diagnostic to accept a smaller metric envelope only when
+no omitted neighbouring data can improve the result. GeoAdmin continues to use
+the object graph and the established radius-based policy. This split keeps route
+search in the browser while allowing the binary experiment to remove string-key
+and per-node object reconstruction.
 
 ### 2.5 Route-edit integration
 
@@ -228,8 +234,10 @@ calculations use LV95 (`EPSG:2056`) metres.
 | Maximum direct network section | 15,000 m | Requires intermediate waypoints when one snapped section would leave the intended hiking corridor ambiguous |
 | Cell size | 2,400 m × 2,400 m | Stable unit for loading, caching, and corridor signatures |
 | Maximum snap distance | 260 m | Limits attachment to unrelated roads |
-| Initial route corridor radius | 1 cell | Loads the crossed cells plus one neighbour on every side |
-| Wider retry radius | 2 cells | One bounded retry when the first graph lacks coverage or connectivity |
+| Binary metric-envelope steps | 400 m, 700 m, 1,100 m, 1,600 m, 2,400 m | Uses typical-case halos with intermediate cache-stable steps; certification makes a small first attempt safe |
+| Binary envelope growth | 0.6 m per metre of direct distance | Selects a typical-case initial step; over-fetching is costlier than a certified retry |
+| GeoAdmin initial corridor radius | 1 cell | Preserves the crossed-cell line walk plus one neighbour on every side |
+| Legacy safety radius | 2 cells | Final binary fallback and normal GeoAdmin retry when smaller bounded attempts are insufficient |
 | Maximum cells per operation | 80 | Prevents one long section from causing excessive traffic or memory use |
 
 Cell keys use stable integer column/row addresses. Extents are derived directly
@@ -275,28 +283,59 @@ The point is then snapped against the resulting local graph. If no walkable
 network exists or no segment falls within the maximum snap distance, the engine
 returns `null` so the editor may place the point freely.
 
-### 4.5 Route corridor
+### 4.5 Provider-specific route footprints
 
-For later waypoints, an integer grid line walk identifies the cells crossed by
-the direct segment between endpoints. Each crossed cell is expanded by the
-corridor radius.
+For binary routing, `createSegmentEnvelopeCellKeys()` selects every cell whose
+closed extent lies within a metric capsule around the direct segment. The
+initial margin includes the 260 m snapping footprint at both endpoints and grows
+with direct section length:
 
-This corridor model avoids downloading the complete rectangular bounding box
-between distant points. It is still a planning heuristic: a route that must make
-a large detour outside both corridor widths can remain unresolved.
+```text
+wanted margin = 260 m + 0.6 × direct distance
+initial step   = first of 400 m, 700 m, 1,100 m, 1,600 m, 2,400 m
+                 that covers the wanted margin
+```
 
-### 4.6 Narrow then wider retry
+The coefficient targets typical interactive sections rather than a pessimistic
+A* exploration bound. A small envelope can be widened safely when the frontier
+certificate remains inconclusive, while cells loaded unnecessarily cannot be
+recovered. Distances whose wanted margin exceeds 2,400 m start at the 2,400 m
+step. The discrete ladder keeps neighbouring edits on reusable graph signatures
+instead of producing a unique cache key for every metre.
 
-Each route operation:
+GeoAdmin retains the integer cell-line walk and square radius expansion. Its
+feature assignment is observed but not validated through the binary manifest,
+so the frontier certificate is deliberately not applied to that provider.
 
-1. builds or reuses the radius-1 corridor graph;
-2. attempts snapping and A*;
-3. if normal coverage or connectivity is insufficient, builds or reuses the
-   radius-2 corridor graph;
-4. returns `null` after the second normal miss.
+### 4.6 Certified widening and legacy safety fallback
 
-Provider, parsing, cancellation, and safety-limit errors are not converted into
-a wider normal retry unless explicitly handled by their owning layer.
+A binary route operation:
+
+1. builds or reuses the first applicable metric-envelope graph;
+2. calls `routeAttempt()` to obtain a path or miss plus `frontierReached` and
+   the separate `snapMiss` cause;
+3. returns `null` immediately when a snap miss occurs after the envelope has
+   covered both complete 260 m endpoint footprints;
+4. accepts a path or connectivity miss when `frontierReached` is false;
+5. otherwise repeats with the next distinct metric step while that envelope is
+   strictly smaller than and fully contained in the established radius-1
+   corridor;
+6. when an envelope is no longer cheaper, extends outside radius 1, diagnostics
+   are unavailable, or all smaller metric steps remain inconclusive, re-enters
+   the complete legacy radius-1/radius-2 workflow;
+7. returns exactly the legacy result after that fallback, including `null` when
+   both historical attempts miss.
+
+This footprint guard prevents the metric policy from making long sections more
+expensive or loading cells that release 1.2 would never request. During local
+development, each metric
+candidate logs its direct distance, attempt number, margin, cell count, and
+outcome in the Worker console so the ladder can be tuned from real sessions.
+
+A GeoAdmin route operation remains unchanged: radius 1 is attempted first and
+radius 2 only after a normal miss. Provider, parsing, cancellation, and
+safety-limit errors are not converted into a wider normal retry unless their
+owning layer handles them explicitly.
 
 ## 5. GeoAdmin request strategy
 
@@ -657,14 +696,36 @@ Queue entries whose priority cannot improve the best complete route are skipped.
 Stale heap entries whose distance is worse than the stored best distance are
 also ignored.
 
-### 12.2 Destination candidates
+### 12.2 Loaded-cell frontier diagnostic
+
+The typed-array binary graph can additionally return a `RouteAttempt` containing
+the path, a conservative `frontierReached` flag, and a separate `snapMiss`
+cause. This diagnostic is enabled only when every assembled cell came from a
+manifest that guarantees complete, unclipped feature assignment and globally
+shared graph identity.
+
+During graph assembly, each local node receives one byte indicating whether its
+containing 2.4 km cell was fully loaded. During A*, the frontier flag becomes
+true when a node outside that set is expanded while its queue priority can still
+beat the best complete route. Nodes remaining after the normal `bestCost`
+cutoff do not invalidate the result because the admissible heuristic proves that
+they cannot produce a cheaper path.
+
+When snapping fails, the binary graph checks the exact covered-cell set against
+both 260 m endpoint footprints. The miss is final only when every required cell
+was actually loaded from the validated dataset; a missing border cell keeps the
+attempt inconclusive so provider fallback remains possible. The same covered-set
+check handles a graph with no walkable edges. The object-based GeoAdmin graph
+continues to expose only the existing `route()` contract.
+
+### 12.3 Destination candidates
 
 The end snap can connect through either endpoint of its matched segment. When the
 search reaches one of those graph nodes, the final connector cost is evaluated.
 The best complete destination cost allows the search to stop exploring branches
 that cannot produce a better route.
 
-### 12.3 Reconstruction
+### 12.4 Reconstruction
 
 The selected graph-node chain is reconstructed backwards through the previous-
 node map, then converted to ordered coordinates. Reconstruction is bounded by
@@ -750,7 +811,7 @@ request has been cancelled or replaced.
 |---|---|---|
 | `RouteSectionTooLongError` | Intended network section exceeds 15 km direct distance | Preserve the route and request an intermediate waypoint before Worker activity |
 | `null` from local snap | Empty graph or no nearby segment | Place first waypoint freely |
-| `null` after both corridors | Normal missing coverage or connectivity | Store that section as straight |
+| `null` after certified/legacy bounded attempts | Normal missing coverage or connectivity | Store that section as straight |
 | Hiking enrichment unavailable | Optional provider capability rejected | Continue roads-only and show one notice |
 | Precomputed routing coverage miss | Current operation lies outside installed national cells | Try that operation with GeoAdmin while retaining the binary provider |
 | Precomputed routing unavailable | Remote/local binary delivery or integrity failed after retry | Dispose binary state, repeat the complete operation on GeoAdmin, and show one notice |
@@ -816,7 +877,9 @@ The main-thread facade tests cover:
 
 The engine uses mocked provider loaders and graph doubles to protect:
 
-- narrow-to-wider corridor retry;
+- certified binary metric-envelope acceptance and widening;
+- radius-1 then radius-2 binary safety fallback after inconclusive metric attempts;
+- unchanged GeoAdmin narrow-to-wider corridor retry;
 - completed cell reuse;
 - in-flight cell reuse;
 - cleanup and retry after an aborted cell request;

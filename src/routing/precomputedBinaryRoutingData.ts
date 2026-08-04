@@ -21,6 +21,9 @@ import {
   PRECOMPUTED_BINARY_MIN_ELEVATION_METRES,
   PRECOMPUTED_BINARY_NO_ELEVATION,
   PRECOMPUTED_BINARY_PAYLOAD_CRC32_OFFSET,
+  PRECOMPUTED_BINARY_SOURCE_CELL_ASSIGNMENT,
+  PRECOMPUTED_BINARY_EDGE_OWNERSHIP,
+  PRECOMPUTED_BINARY_NODE_IDENTITY,
   PRECOMPUTED_BINARY_XY_SCALE,
   PRECOMPUTED_BINARY_Z_SCALE,
   precomputedBinaryBuildIdToHex,
@@ -87,6 +90,12 @@ interface PrecomputedBinaryRoutingManifest {
   generatorVersion: number;
   /** SHA-256 release identifier repeated in every v3 cell header. */
   datasetBuildId: string;
+  /** Complete-source assignment required for exact loaded-frontier detection. */
+  sourceCellAssignment: typeof PRECOMPUTED_BINARY_SOURCE_CELL_ASSIGNMENT;
+  /** Logical edge-reference model required for stable cross-cell topology. */
+  edgeOwnership: typeof PRECOMPUTED_BINARY_EDGE_OWNERSHIP;
+  /** National shared-node model required for stable cross-cell topology. */
+  nodeIdentity: typeof PRECOMPUTED_BINARY_NODE_IDENTITY;
 }
 
 /** Untrusted JSON representation of the binary graph manifest. */
@@ -131,6 +140,12 @@ interface PrecomputedBinaryRoutingManifestPayload {
   coordinateValidationMarginMetres?: unknown;
   /** Untrusted pedestrian cost-model revision. */
   costModelVersion?: unknown;
+  /** Untrusted source-feature assignment model. */
+  sourceCellAssignment?: unknown;
+  /** Untrusted cross-cell edge ownership model. */
+  edgeOwnership?: unknown;
+  /** Untrusted shared-node identity model. */
+  nodeIdentity?: unknown;
 }
 
 /** Binary-search lookup created without per-ID JavaScript Set entries. */
@@ -272,6 +287,10 @@ async function loadManifest(
         payload.coordinateValidationMarginMetres !==
           PRECOMPUTED_BINARY_COORDINATE_MARGIN_METRES ||
         payload.costModelVersion !== EXPECTED_COST_MODEL_VERSION ||
+        payload.sourceCellAssignment !==
+          PRECOMPUTED_BINARY_SOURCE_CELL_ASSIGNMENT ||
+        payload.edgeOwnership !== PRECOMPUTED_BINARY_EDGE_OWNERSHIP ||
+        payload.nodeIdentity !== PRECOMPUTED_BINARY_NODE_IDENTITY ||
         !Number.isInteger(payload.nonEmptyCellCount) ||
         typeof payload.nonEmptyCellCount !== 'number' ||
         payload.nonEmptyCellCount !== nonEmptyCellKeys?.length ||
@@ -302,7 +321,7 @@ async function loadManifest(
         );
       }
 
-      return {
+      const manifest: PrecomputedBinaryRoutingManifest = {
         version: payload.version,
         projection: payload.projection,
         cellSizeMetres: payload.cellSizeMetres,
@@ -314,7 +333,12 @@ async function loadManifest(
         cellPathTemplate,
         generatorVersion: payload.generatorVersion,
         datasetBuildId: payload.datasetBuildId,
+        sourceCellAssignment: PRECOMPUTED_BINARY_SOURCE_CELL_ASSIGNMENT,
+        edgeOwnership: PRECOMPUTED_BINARY_EDGE_OWNERSHIP,
+        nodeIdentity: PRECOMPUTED_BINARY_NODE_IDENTITY,
       };
+
+      return manifest;
     })
     .catch((error) => {
       state.manifestPromise = null;
@@ -371,6 +395,7 @@ function emptyCell(
     globalNodeCount: manifest.globalNodeCount,
     globalEdgeCount: manifest.globalEdgeCount,
     sourceRoadFeatures: 0,
+    supportsFrontierCertification: true,
     buffer,
   };
 }
@@ -842,7 +867,10 @@ async function fetchPrecomputedBinaryRoutingCellOnce(
     },
   );
 
-  return cell;
+  return {
+    ...cell,
+    supportsFrontierCertification: true,
+  };
 }
 
 /**

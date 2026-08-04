@@ -25,6 +25,18 @@ export const PRECOMPUTED_BINARY_DATASET_BUILD_ID_BYTES = 32;
 export const PRECOMPUTED_BINARY_PAYLOAD_CRC32_OFFSET = 100;
 /** Manifest identifier for the payload-integrity algorithm. */
 export const PRECOMPUTED_BINARY_CHECKSUM = 'crc32';
+/**
+ * Source features remain complete and are referenced by every cell touched by
+ * their bounding box. Frontier certification depends on this exact assignment.
+ */
+export const PRECOMPUTED_BINARY_SOURCE_CELL_ASSIGNMENT =
+  'full-feature-bbox-overlap-no-clipping';
+/** Global edges are stored once logically and referenced by every owning cell. */
+export const PRECOMPUTED_BINARY_EDGE_OWNERSHIP =
+  'global-id-with-logical-cell-references';
+/** Shared quantized XYZ coordinates define one stable national node identity. */
+export const PRECOMPUTED_BINARY_NODE_IDENTITY =
+  'shared-compiler-quantized-xyz';
 /** Number of stored horizontal integer units per metre (centimetres). */
 export const PRECOMPUTED_BINARY_XY_SCALE = 100;
 /** Number of stored vertical integer units per metre (decimetres). */
@@ -84,6 +96,13 @@ export interface PrecomputedBinaryRoutingCell {
   globalEdgeCount: number;
   /** Diagnostic source-road count retained by the cell header. */
   sourceRoadFeatures: number;
+  /**
+   * Present only when the provider manifest guarantees complete, unclipped
+   * feature assignment and globally shared graph identity. A future bounded A*
+   * search may use this marker to certify that an untouched frontier cannot
+   * hide a better route.
+   */
+  supportsFrontierCertification?: true;
   /** Original response buffer retained by the typed-array views. */
   buffer: ArrayBuffer;
 }
