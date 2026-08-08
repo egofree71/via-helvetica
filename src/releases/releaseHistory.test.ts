@@ -32,8 +32,15 @@ function createStorage() {
 
 describe('release history', () => {
   it('provides the same current release structure in every language', () => {
-    const expectedItemIds = ['optimizedRoutingDataLoading'];
-    const expectedDialogItemIds = expectedItemIds;
+    const expectedItemIds = [
+      'swisstopoTransfer',
+      'compactGpxExport',
+      'interfaceRefinements',
+    ];
+    const expectedDialogItemIds = [
+      'swisstopoTransfer',
+      'compactGpxExport',
+    ];
 
     for (const language of SUPPORTED_LANGUAGES) {
       const release = getCurrentRelease(language);

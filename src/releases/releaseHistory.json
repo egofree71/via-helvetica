@@ -1,9 +1,9 @@
 {
-  "currentVersion": "1.3.0",
+  "currentVersion": "1.4.0",
   "locales": {
     "fr": {
       "dialog": {
-        "title": "Nouveautés de Via Helvetica 1.3.0",
+        "title": "Nouveautés de Via Helvetica 1.4.0",
         "historyLink": "Voir l’historique complet",
         "historyLinkNewTabLabel": "s’ouvre dans un nouvel onglet"
       },
@@ -18,6 +18,39 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.4.0",
+          "summary": "Cette version facilite le transfert des itinéraires vers l’app swisstopo et réduit la taille des fichiers GPX exportés.",
+          "items": [
+            {
+              "id": "swisstopoTransfer",
+              "title": "Transfert vers l’app swisstopo :",
+              "description": "Depuis un ordinateur, un QR code permet désormais d’ouvrir l’itinéraire courant dans l’app swisstopo. Le partage est également disponible pour les GPX importés.",
+              "details": [
+                "Le bouton d’export et de partage a été déplacé afin de rester disponible pour l’itinéraire créé dans Via Helvetica comme pour un GPX chargé en lecture seule.",
+                "Sur mobile, le transfert s’ouvre directement dans l’app swisstopo sans passer par un QR code.",
+                "Pour permettre le transfert, le fichier GPX est hébergé temporairement pendant 24 heures dans un stockage dédié, uniquement après une action explicite de l’utilisateur, sans être associé à votre identité."
+              ]
+            },
+            {
+              "id": "compactGpxExport",
+              "title": "Fichiers GPX plus compacts :",
+              "description": "Les GPX générés par Via Helvetica sont désormais minifiés, ce qui réduit leur taille sans modifier les coordonnées, les altitudes ou les métadonnées utiles.",
+              "details": []
+            },
+            {
+              "id": "interfaceRefinements",
+              "title": "Interface et affichage affinés :",
+              "description": "Plusieurs ajustements améliorent l’utilisation des GPX importés et l’interface sur les petits écrans.",
+              "details": [
+                "Lors d’imports successifs de GPX, le cadrage utilise désormais un niveau de zoom natif de swisstopo afin d’éviter un fond de carte flou.",
+                "Les boutons de zoom + et − sont masqués sur les petits écrans tactiles, où le geste de pincement reste disponible.",
+                "Sur les écrans étroits, le panneau des couches reste affiché au-dessus du profil d’altitude."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.3.0",
           "summary": "Cette version réduit les données téléchargées lors de la création d’itinéraires.",
@@ -113,7 +146,7 @@
     },
     "de": {
       "dialog": {
-        "title": "Neu in Via Helvetica 1.3.0",
+        "title": "Neu in Via Helvetica 1.4.0",
         "historyLink": "Vollständigen Versionsverlauf anzeigen",
         "historyLinkNewTabLabel": "öffnet in einem neuen Tab"
       },
@@ -128,6 +161,39 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.4.0",
+          "summary": "Diese Version erleichtert die Übertragung von Routen in die swisstopo-App und verkleinert exportierte GPX-Dateien.",
+          "items": [
+            {
+              "id": "swisstopoTransfer",
+              "title": "Übertragung in die swisstopo-App:",
+              "description": "Am Computer kann die aktuelle Route jetzt per QR-Code in der swisstopo-App geöffnet werden. Die Funktion steht auch für importierte GPX-Dateien zur Verfügung.",
+              "details": [
+                "Die Export- und Teilen-Funktion wurde verschoben, damit sie sowohl für in Via Helvetica erstellte Routen als auch für schreibgeschützt geladene GPX-Dateien verfügbar bleibt.",
+                "Auf Mobilgeräten wird die Übertragung direkt in der swisstopo-App geöffnet, ohne QR-Code.",
+                "Für die Übertragung wird die GPX-Datei nach einer ausdrücklichen Benutzeraktion für 24 Stunden in einem eigenen Speicher zwischengespeichert, ohne mit Ihrer Identität verknüpft zu werden."
+              ]
+            },
+            {
+              "id": "compactGpxExport",
+              "title": "Kompaktere GPX-Dateien:",
+              "description": "Von Via Helvetica erzeugte GPX-Dateien werden nun minimiert. Dadurch sinkt die Dateigrösse, ohne Koordinaten, Höhenangaben oder nützliche Metadaten zu verändern.",
+              "details": []
+            },
+            {
+              "id": "interfaceRefinements",
+              "title": "Verfeinerte Oberfläche und Darstellung:",
+              "description": "Mehrere Anpassungen verbessern den Umgang mit importierten GPX-Dateien und die Bedienung auf kleinen Bildschirmen.",
+              "details": [
+                "Bei mehreren GPX-Importen nacheinander verwendet der Kartenausschnitt nun eine native swisstopo-Zoomstufe, damit der Kartenhintergrund scharf bleibt.",
+                "Die Zoomtasten + und − werden auf kleinen Touchscreens ausgeblendet; Zoomen per Zwei-Finger-Geste bleibt verfügbar.",
+                "Auf schmalen Bildschirmen bleibt das Ebenenfenster über dem Höhenprofil sichtbar."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.3.0",
           "summary": "Diese Version reduziert die beim Erstellen von Routen heruntergeladenen Daten.",
@@ -223,7 +289,7 @@
     },
     "it": {
       "dialog": {
-        "title": "Novità di Via Helvetica 1.3.0",
+        "title": "Novità di Via Helvetica 1.4.0",
         "historyLink": "Vedi la cronologia completa",
         "historyLinkNewTabLabel": "si apre in una nuova scheda"
       },
@@ -238,6 +304,39 @@
         "versionLabel": "Versione"
       },
       "releases": [
+        {
+          "version": "1.4.0",
+          "summary": "Questa versione semplifica il trasferimento degli itinerari nell’app swisstopo e riduce le dimensioni dei file GPX esportati.",
+          "items": [
+            {
+              "id": "swisstopoTransfer",
+              "title": "Trasferimento nell’app swisstopo:",
+              "description": "Da computer, un codice QR permette ora di aprire l’itinerario corrente nell’app swisstopo. La funzione è disponibile anche per i file GPX importati.",
+              "details": [
+                "Il comando di esportazione e condivisione è stato spostato per rimanere disponibile sia per l’itinerario creato in Via Helvetica sia per un GPX caricato in sola lettura.",
+                "Su mobile, il trasferimento si apre direttamente nell’app swisstopo senza passare da un codice QR.",
+                "Per consentire il trasferimento, il file GPX viene ospitato temporaneamente per 24 ore in uno spazio dedicato, solo dopo un’azione esplicita dell’utente, senza essere associato alla vostra identità."
+              ]
+            },
+            {
+              "id": "compactGpxExport",
+              "title": "File GPX più compatti:",
+              "description": "I GPX generati da Via Helvetica sono ora minificati, riducendo le dimensioni del file senza modificare coordinate, altitudini o metadati utili.",
+              "details": []
+            },
+            {
+              "id": "interfaceRefinements",
+              "title": "Interfaccia e visualizzazione perfezionate:",
+              "description": "Diversi ritocchi migliorano l’uso dei GPX importati e l’interfaccia sugli schermi piccoli.",
+              "details": [
+                "Dopo più importazioni GPX consecutive, l’inquadratura utilizza ora un livello di zoom nativo di swisstopo per evitare uno sfondo cartografico sfocato.",
+                "I pulsanti di zoom + e − sono nascosti sui piccoli schermi touch, dove resta disponibile il gesto di pizzicamento.",
+                "Sugli schermi stretti, il pannello dei livelli rimane visibile sopra il profilo altimetrico."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.3.0",
           "summary": "Questa versione riduce i dati scaricati durante la creazione degli itinerari.",
@@ -333,7 +432,7 @@
     },
     "en": {
       "dialog": {
-        "title": "What’s new in Via Helvetica 1.3.0",
+        "title": "What’s new in Via Helvetica 1.4.0",
         "historyLink": "View full release history",
         "historyLinkNewTabLabel": "opens in a new tab"
       },
@@ -348,6 +447,39 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.4.0",
+          "summary": "This release makes it easier to transfer routes to the swisstopo app and reduces the size of exported GPX files.",
+          "items": [
+            {
+              "id": "swisstopoTransfer",
+              "title": "Transfer to the swisstopo app:",
+              "description": "On desktop, a QR code can now open the current route in the swisstopo app. Sharing is also available for imported GPX files.",
+              "details": [
+                "The export and sharing control was moved so it remains available for both routes created in Via Helvetica and GPX files loaded as read-only references.",
+                "On mobile, the transfer opens directly in the swisstopo app without using a QR code.",
+                "To enable the transfer, the GPX file is hosted temporarily for 24 hours in dedicated storage, only after an explicit user action, without being associated with your identity."
+              ]
+            },
+            {
+              "id": "compactGpxExport",
+              "title": "More compact GPX files:",
+              "description": "GPX files generated by Via Helvetica are now minified, reducing file size without changing coordinates, elevations, or useful metadata.",
+              "details": []
+            },
+            {
+              "id": "interfaceRefinements",
+              "title": "Refined interface and display:",
+              "description": "Several small adjustments improve imported GPX handling and the interface on smaller screens.",
+              "details": [
+                "After successive GPX imports, the map fit now uses a native swisstopo zoom level to avoid a blurred map background.",
+                "The + and − zoom buttons are hidden on small touchscreens, where pinch-to-zoom remains available.",
+                "On narrow screens, the layers panel stays visible above the elevation profile."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.3.0",
           "summary": "This release reduces the data downloaded while creating routes.",

@@ -98,19 +98,23 @@ describe('ReleaseNotesDialog', () => {
 
     expect(
       container.querySelectorAll('.release-notes-list > li'),
-    ).toHaveLength(1);
-    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.3.0');
+    ).toHaveLength(2);
+    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.4.0');
     expect(container.textContent).toContain(
-      'Chargement des données de routage optimisé :',
+      'Transfert vers l’app swisstopo :',
     );
     expect(container.textContent).toContain(
-      'le nombre de tuiles de routage téléchargées a ainsi diminué d’environ 50 % en moyenne',
+      'Le partage est également disponible pour les GPX importés.',
+    );
+    expect(container.textContent).toContain('Fichiers GPX plus compacts :');
+    expect(container.textContent).toContain(
+      'réduit leur taille sans modifier les coordonnées',
     );
     expect(document.activeElement).toBe(
       container.querySelector('#release-notes-dialog-title'),
     );
     expect(container.textContent).not.toContain(
-      'Cette version enrichit la préparation des itinéraires',
+      'Interface et affichage affinés :',
     );
     expect(
       container.querySelector('.release-notes-dialog-icon-close'),
