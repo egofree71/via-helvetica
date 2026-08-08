@@ -2011,15 +2011,14 @@ select {
   }
 }
 
-@media (max-width: 700px) and (hover: none) and (pointer: coarse) {
-  /* Pinch-to-zoom is the native map gesture on phones and small tablets. Hiding
-     the redundant +/- pair keeps the permanent right-side stack compact. */
+@media (max-width: 700px) {
+  /* Vertical space, rather than the reported pointer capabilities, is the
+     limiting factor on narrow screens. Hiding the redundant +/- pair keeps
+     the permanent right-side stack short enough to expose route controls. */
   .zoom-controls {
     display: none;
   }
-}
 
-@media (max-width: 700px) {
   /* The bottom route summary occupies the scale bar's only useful position on
      narrow screens. Hiding the decorative scale avoids a permanently obscured
      control while preserving more map height than moving either element. */
@@ -2038,10 +2037,19 @@ select {
     right: 0.75rem;
   }
 
-  /* Additional information layers must remain reachable on short mobile and
-     landscape viewports instead of being clipped outside the map. */
+  /* On narrow screens the layers button can sit far below the top edge.
+     Anchoring its temporary menu to the viewport keeps both edges reachable
+     and lets the menu itself scroll instead of being clipped by browser chrome. */
   .map-layers-menu {
+    position: fixed;
+    top: 4.25rem;
+    right: 4.35rem;
+    width: 18rem;
+    max-width: calc(100vw - 5.1rem);
+    /* Keep the menu content-sized when it fits, but cap it to the visible
+       mobile viewport so shorter screens still get internal scrolling. */
     max-height: calc(100vh - 5rem);
+    max-height: calc(100dvh - 5rem);
   }
 
   .map-information-popup {
@@ -2090,8 +2098,10 @@ select {
 
   .switzerland-mobility-hiking-summary {
     bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-    width: calc(100vw - 1.5rem);
-    max-width: calc(100vw - 1.5rem);
+    left: 0.75rem;
+    width: calc(100vw - 5.25rem);
+    max-width: calc(100vw - 5.25rem);
+    transform: none;
   }
 
   .switzerland-mobility-hiking-panel-header {
@@ -2125,9 +2135,15 @@ select {
     width: 100%;
   }
 
+  /* The right-side controls remain visible while the profile is open. Keep a
+     dedicated gutter so route statistics and the elevation chart never sit
+     underneath those controls on a real phone. */
   .route-summary {
     bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-    width: calc(100vw - 1.5rem);
+    left: 0.75rem;
+    width: calc(100vw - 5.25rem);
+    max-width: calc(100vw - 5.25rem);
+    transform: none;
   }
 
   .route-statistics {
