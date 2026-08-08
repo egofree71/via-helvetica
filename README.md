@@ -49,9 +49,9 @@ Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 Via Helvetica deliberately keeps route planning in the browser. Users do not
 need to register, routes are not persistently stored by the project, and static
 hosting keeps recurring operating costs as low as possible. Normal GPX download
-remains local. If the optional swisstopo hand-off is configured, the exact GPX
-is uploaded only after an explicit user action, receives an unguessable temporary
-URL, and is deleted after a short lifetime. The browser otherwise stores only
+remains local. If the optional swisstopo hand-off is configured, the current
+named GPX is uploaded only after an explicit user action, receives an unguessable
+temporary URL, and is deleted after 24 hours by default. The browser otherwise stores only
 interface preferences and release acknowledgements. External official services
 still receive the bounded requests required for maps, geodata, elevation,
 routing fallback, and departures.
@@ -152,8 +152,9 @@ Machine-specific infrastructure and credentials remain outside version control.
   GPX content is retained only while it is the current read-only itinerary so its
   original metadata and extensions can be preserved when exporting or sharing it.
 - When the optional share Worker is configured, use **Open in swisstopo** to
-  upload that same named GPX temporarily and display a QR code for the official
-  `swisstopo.app/u/` hand-off. The normal GPX export remains purely local.
+  upload that same named GPX for up to 24 hours by default and display a QR code
+  for the official `swisstopo.app/u/` hand-off. The normal GPX export remains
+  purely local.
 - Starting a new route replaces the imported itinerary.
 
 ### Inspect route and map information

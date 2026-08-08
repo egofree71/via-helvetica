@@ -169,6 +169,12 @@ function sizesMatch(first: Size | null, second: Size): boolean {
  * Frames a GPX only after the map has recovered from the native file picker.
  * Mobile browsers can briefly expose a stale or very small viewport while the
  * picker closes, so fitting immediately can animate to the national overview.
+ * The callback also stops silently when a newer import supersedes this one.
+ *
+ * @param map - Shared OpenLayers map whose viewport must be stable before fitting.
+ * @param extent - LV95 extent of the imported route to keep fully visible.
+ * @param isCurrentImport - Guard that becomes false when another import starts.
+ * @returns Nothing; the fit is scheduled through animation frames.
  */
 function fitImportedRouteWhenViewportSettles(
   map: Map,

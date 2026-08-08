@@ -1,8 +1,9 @@
 /**
  * Business context: provides the only server-side bridge needed for Via
- * Helvetica's swisstopo QR hand-off. It accepts a small GPX generated in the
- * browser, stores it under an unguessable temporary R2 key, serves that exact
- * file publicly to swisstopo, and removes expired objects on a scheduled pass.
+ * Helvetica's swisstopo hand-off. It accepts the current GPX document supplied
+ * by the browser, whether generated locally or retained from a read-only import,
+ * stores it under an unguessable temporary R2 key, serves that exact file
+ * publicly to swisstopo, and removes expired objects on a scheduled pass.
  * Routing, user state, and normal GPX export remain entirely browser-side.
  */
 
@@ -97,7 +98,16 @@ function isExpired(object) {
   return Number.isFinite(timestamp) && timestamp <= Date.now();
 }
 
-/** Stores one explicit user-requested GPX under an unguessable temporary key. */
+/**
+ * Stores one explicit user-requested GPX under an unguessable temporary key.
+ * Size and shallow GPX checks keep the endpoint focused on route transfer rather
+ * than general-purpose object hosting.
+ *
+ * @param {Request} request - Browser upload request containing the GPX bytes.
+ * @param {object} env - Worker bindings and configuration variables.
+ * @param {string|null} corsOrigin - Validated browser origin for the response.
+ * @returns {Promise<Response>} Upload result containing the public URL and expiry.
+ */
 async function uploadGpx(request, env, corsOrigin) {
   const contentLength = Number.parseInt(
     request.headers.get('Content-Length') || '',
@@ -149,7 +159,16 @@ async function uploadGpx(request, env, corsOrigin) {
   );
 }
 
-/** Serves one temporary GPX publicly because swisstopo must fetch it by URL. */
+/**
+ * Serves one temporary GPX publicly because swisstopo must fetch it by URL.
+ * Expiration is checked on every read so an object cannot remain usable merely
+ * because the scheduled cleanup has not run yet.
+ *
+ * @param {Request} request - Public GET or HEAD request from a client.
+ * @param {object} env - Worker bindings containing the GPX R2 bucket.
+ * @param {string} key - Full R2 object key below the temporary share prefix.
+ * @returns {Promise<Response>} GPX response, or 404/410 when unavailable.
+ */
 async function serveGpx(request, env, key) {
   const object = await env.GPX_BUCKET.get(key);
 
@@ -176,7 +195,14 @@ async function serveGpx(request, env, key) {
   return new Response(object.body, { headers });
 }
 
-/** Deletes expired share objects in bounded R2 list batches. */
+/**
+ * Deletes expired share objects in bounded R2 list batches.
+ * Pagination keeps cleanup independent from the number of shares accumulated
+ * between scheduled runs.
+ *
+ * @param {object} env - Worker bindings containing the GPX R2 bucket.
+ * @returns {Promise<void>} Resolves after every expired object has been deleted.
+ */
 async function deleteExpiredShares(env) {
   let cursor;
 

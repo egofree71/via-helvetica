@@ -1,10 +1,11 @@
 /**
- * Business context: exports the itinerary currently presented by Via Helvetica
- * as a standalone GPX 1.1 track. Editable sections and independent read-only
- * route segments are simplified within a sub-metre tolerance while preserving
- * endpoints and deliberate gaps. Smoothed elevation samples are embedded when
- * available so compatible applications do not need to rebuild a noisier terrain
- * profile.
+ * Business context: prepares the itinerary currently presented by Via Helvetica
+ * for GPX download or swisstopo transfer. Editable and selected public-route
+ * geometry is serialized as compact GPX 1.1, with each continuous section
+ * simplified within a sub-metre tolerance while preserving endpoints and
+ * deliberate gaps. Imported GPX follows a separate preservation path so its
+ * provider-specific metadata and extensions are not rebuilt unnecessarily.
+ * Smoothed elevation samples are embedded in generated GPX when available.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import { getDistance } from 'ol/sphere.js';

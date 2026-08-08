@@ -34,14 +34,29 @@ export interface QrCodeMatrix {
   viewBoxSize: number;
 }
 
-/** Appends one unsigned integer to a bit buffer, most-significant bit first. */
+/**
+ * Appends one unsigned integer to the QR bit stream, most-significant bit first.
+ *
+ * @param bits - Mutable output bit buffer.
+ * @param value - Unsigned value whose low `length` bits are appended.
+ * @param length - Number of bits to append.
+ * @returns Nothing; `bits` is extended in place.
+ */
 function appendBits(bits: number[], value: number, length: number): void {
   for (let bit = length - 1; bit >= 0; bit -= 1) {
     bits.push((value >>> bit) & 1);
   }
 }
 
-/** Multiplies two bytes in the QR Code GF(2^8) field. */
+/**
+ * Multiplies two bytes in the QR Code GF(2^8) field.
+ * Reduction by the QR primitive polynomial keeps intermediate values inside
+ * one byte while preserving the field arithmetic required by Reed-Solomon.
+ *
+ * @param left - First field element in the range 0..255.
+ * @param right - Second field element in the range 0..255.
+ * @returns Product in the QR GF(2^8) field.
+ */
 function reedSolomonMultiply(left: number, right: number): number {
   let result = 0;
   let multiplicand = left;
@@ -63,7 +78,13 @@ function reedSolomonMultiply(left: number, right: number): number {
   return result;
 }
 
-/** Builds the monic Reed-Solomon generator polynomial for one QR block. */
+/**
+ * Builds the monic Reed-Solomon generator polynomial for one QR block.
+ * The roots are successive powers of two, as required by QR error correction.
+ *
+ * @param degree - Number of error-correction codewords in the block.
+ * @returns Generator coefficients ordered for the remainder calculation.
+ */
 function createReedSolomonDivisor(degree: number): number[] {
   const result = new Array<number>(degree).fill(0);
   result[degree - 1] = 1;
@@ -87,7 +108,14 @@ function createReedSolomonDivisor(degree: number): number[] {
   return result;
 }
 
-/** Calculates the Reed-Solomon remainder appended to one QR data block. */
+/**
+ * Calculates the Reed-Solomon remainder appended to one QR data block.
+ * The fixed-size shift register avoids allocating a polynomial per input byte.
+ *
+ * @param data - Data codewords belonging to one QR error-correction block.
+ * @param divisor - Generator polynomial returned by `createReedSolomonDivisor`.
+ * @returns Error-correction codewords for that block.
+ */
 function calculateReedSolomonRemainder(
   data: number[],
   divisor: number[],
@@ -107,7 +135,15 @@ function calculateReedSolomonRemainder(
   return result;
 }
 
-/** Encodes ASCII/UTF-8 text into the 194 Version 8 / Level L data codewords. */
+/**
+ * Encodes UTF-8 text into the 194 Version 8 / Level L data codewords.
+ * Byte mode is intentionally fixed because the payload is a URL and the
+ * application values deterministic behaviour over broader QR optimizations.
+ *
+ * @param text - swisstopo hand-off URL to encode.
+ * @returns Exactly 194 padded data codewords.
+ * @throws {Error} If the UTF-8 payload exceeds the fixed Version 8 capacity.
+ */
 function encodeDataCodewords(text: string): number[] {
   const bytes = Array.from(new TextEncoder().encode(text));
 
@@ -154,7 +190,14 @@ function encodeDataCodewords(text: string): number[] {
   return codewords;
 }
 
-/** Adds and interleaves the two Version 8 / Level L error-correction blocks. */
+/**
+ * Adds and interleaves the two Version 8 / Level L error-correction blocks.
+ * QR readers expect block interleaving rather than each data/remainder block
+ * being written contiguously into the matrix.
+ *
+ * @param dataCodewords - Complete padded Version 8 / Level L data payload.
+ * @returns Interleaved data and Reed-Solomon codewords ready for matrix placement.
+ */
 function addErrorCorrection(dataCodewords: number[]): number[] {
   const firstBlock = dataCodewords.slice(0, QR_DATA_CODEWORDS_PER_BLOCK);
   const secondBlock = dataCodewords.slice(QR_DATA_CODEWORDS_PER_BLOCK);
@@ -375,7 +418,17 @@ function drawFunctionPatterns(
   drawVersionBits(modules, functionModules);
 }
 
-/** Places the interleaved payload through the standard two-column QR scan. */
+/**
+ * Places the interleaved payload through the standard two-column QR scan.
+ * Function modules are skipped so finder, timing, alignment, version, and
+ * format patterns can never be overwritten by payload bits.
+ *
+ * @param modules - Mutable dark/light QR matrix.
+ * @param functionModules - Reservation mask for non-data modules.
+ * @param codewords - Interleaved data and error-correction bytes.
+ * @returns Nothing; `modules` is updated in place.
+ * @throws {Error} If matrix traversal does not consume the complete payload.
+ */
 function drawCodewords(
   modules: boolean[][],
   functionModules: boolean[][],
@@ -417,7 +470,15 @@ function drawCodewords(
   }
 }
 
-/** Applies the deterministic mask to data modules only. */
+/**
+ * Applies the deterministic mask to data modules only.
+ * Function modules are deliberately excluded because the format bits already
+ * advertise mask pattern 0 to QR readers.
+ *
+ * @param modules - Mutable dark/light QR matrix.
+ * @param functionModules - Reservation mask for non-data modules.
+ * @returns Nothing; data modules are toggled in place.
+ */
 function applyMask(
   modules: boolean[][],
   functionModules: boolean[][],
