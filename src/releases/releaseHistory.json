@@ -29,7 +29,7 @@
               "details": [
                 "Le bouton d’export et de partage a été déplacé afin de rester disponible pour l’itinéraire créé dans Via Helvetica comme pour un GPX chargé en lecture seule.",
                 "Sur mobile, le transfert s’ouvre directement dans l’app swisstopo sans passer par un QR code.",
-                "Pour permettre le transfert, le fichier GPX est hébergé temporairement pendant 24 heures dans un stockage dédié, uniquement après une action explicite de l’utilisateur, sans être associé à votre identité."
+                "Pour permettre le transfert, le fichier GPX est hébergé temporairement pendant 24 heures dans un stockage dédié, uniquement après une action explicite de l’utilisateur, sans être associé à son identité."
               ]
             },
             {
@@ -172,7 +172,7 @@
               "details": [
                 "Die Export- und Teilen-Funktion wurde verschoben, damit sie sowohl für in Via Helvetica erstellte Routen als auch für schreibgeschützt geladene GPX-Dateien verfügbar bleibt.",
                 "Auf Mobilgeräten wird die Übertragung direkt in der swisstopo-App geöffnet, ohne QR-Code.",
-                "Für die Übertragung wird die GPX-Datei nach einer ausdrücklichen Benutzeraktion für 24 Stunden in einem eigenen Speicher zwischengespeichert, ohne mit Ihrer Identität verknüpft zu werden."
+                "Für die Übertragung wird die GPX-Datei nach einer ausdrücklichen Benutzeraktion für 24 Stunden in einem eigenen Speicher zwischengespeichert, ohne mit der Identität des Benutzers verknüpft zu werden."
               ]
             },
             {
@@ -315,7 +315,7 @@
               "details": [
                 "Il comando di esportazione e condivisione è stato spostato per rimanere disponibile sia per l’itinerario creato in Via Helvetica sia per un GPX caricato in sola lettura.",
                 "Su mobile, il trasferimento si apre direttamente nell’app swisstopo senza passare da un codice QR.",
-                "Per consentire il trasferimento, il file GPX viene ospitato temporaneamente per 24 ore in uno spazio dedicato, solo dopo un’azione esplicita dell’utente, senza essere associato alla vostra identità."
+                "Per consentire il trasferimento, il file GPX viene ospitato temporaneamente per 24 ore in uno spazio dedicato, solo dopo un’azione esplicita dell’utente, senza essere associato alla sua identità."
               ]
             },
             {
@@ -458,7 +458,7 @@
               "details": [
                 "The export and sharing control was moved so it remains available for both routes created in Via Helvetica and GPX files loaded as read-only references.",
                 "On mobile, the transfer opens directly in the swisstopo app without using a QR code.",
-                "To enable the transfer, the GPX file is hosted temporarily for 24 hours in dedicated storage, only after an explicit user action, without being associated with your identity."
+                "To enable the transfer, the GPX file is hosted temporarily for 24 hours in dedicated storage, only after an explicit user action, without being associated with the user's identity."
               ]
             },
             {
