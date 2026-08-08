@@ -112,6 +112,24 @@ describe('createRouteGpx', () => {
     );
   });
 
+  it('serializes generated GPX without presentation whitespace', () => {
+    const xml = createRouteGpx(
+      [createStep(START, null), createStep(EAST, [START, EAST])],
+      new Date('2026-07-17T12:34:56.000Z'),
+      'Compact route',
+      [
+        { distanceMeters: 0, elevationMeters: 500 },
+        { distanceMeters: 1_000, elevationMeters: 550 },
+      ],
+    );
+
+    expect(xml).not.toContain('\n');
+    expect(xml).not.toMatch(/>\s+</);
+    expect(parseGpx(xml).getElementsByTagNameNS('*', 'trkpt')).not.toHaveLength(
+      0,
+    );
+  });
+
   it('simplifies each section independently and preserves every waypoint', () => {
     const middleOfFirstSection: Coordinate = [2_600_500, 1_200_000];
     const middleOfSecondSection: Coordinate = [2_601_000, 1_200_500];

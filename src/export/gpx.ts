@@ -879,10 +879,10 @@ function serializeTrackPoint(point: GpxTrackPoint): string {
   const attributes = `lat="${latitude.toFixed(GPX_COORDINATE_PRECISION)}" lon="${longitude.toFixed(GPX_COORDINATE_PRECISION)}"`;
 
   if (point.elevationMeters === null) {
-    return `      <trkpt ${attributes} />`;
+    return `<trkpt ${attributes}/>`;
   }
 
-  return `      <trkpt ${attributes}>\n        <ele>${point.elevationMeters.toFixed(GPX_ELEVATION_PRECISION)}</ele>\n      </trkpt>`;
+  return `<trkpt ${attributes}><ele>${point.elevationMeters.toFixed(GPX_ELEVATION_PRECISION)}</ele></trkpt>`;
 }
 
 /**
@@ -890,23 +890,21 @@ function serializeTrackPoint(point: GpxTrackPoint): string {
  * source lines.
  *
  * @param segment - Ordered points belonging to one continuous geometry.
- * @returns XML for one `<trkseg>` node.
+ * @returns Compact XML for one `<trkseg>` node.
  */
 function serializeTrackSegment(segment: GpxTrackSegment): string {
-  const serializedTrackPoints = segment.points
-    .map(serializeTrackPoint)
-    .join('\n');
-
-  return `    <trkseg>\n${serializedTrackPoints}\n    </trkseg>`;
+  return `<trkseg>${segment.points.map(serializeTrackPoint).join('')}</trkseg>`;
 }
 
 /**
  * Builds the shared GPX 1.1 envelope around one or more continuous segments.
+ * Formatting whitespace is deliberately omitted because GPX is an interchange
+ * format and compact output reduces both local downloads and temporary uploads.
  *
  * @param trackSegments - Non-empty continuous geometries to serialize.
  * @param generatedAt - Timestamp written to GPX metadata.
  * @param routeName - Track name written to metadata and track nodes.
- * @returns Complete UTF-8 GPX 1.1 XML document.
+ * @returns Complete compact UTF-8 GPX 1.1 XML document.
  */
 function createGpxDocument(
   trackSegments: GpxTrackSegment[],
@@ -916,23 +914,17 @@ function createGpxDocument(
   const trackPoints = trackSegments.flatMap((segment) => segment.points);
   const serializedTrackSegments = trackSegments
     .map(serializeTrackSegment)
-    .join('\n');
+    .join('');
   const serializedBounds = serializeBounds(calculateTrackBounds(trackPoints));
   const escapedRouteName = escapeXml(routeName);
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Via Helvetica" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
-  <metadata>
-    <name>${escapedRouteName}</name>
-    <time>${generatedAt.toISOString()}</time>
-    ${serializedBounds}
-  </metadata>
-  <trk>
-    <name>${escapedRouteName}</name>
-${serializedTrackSegments}
-  </trk>
-</gpx>
-`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<gpx version="1.1" creator="Via Helvetica" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">` +
+    `<metadata><name>${escapedRouteName}</name><time>${generatedAt.toISOString()}</time>${serializedBounds}</metadata>` +
+    `<trk><name>${escapedRouteName}</name>${serializedTrackSegments}</trk>` +
+    `</gpx>`
+  );
 }
 
 /**
