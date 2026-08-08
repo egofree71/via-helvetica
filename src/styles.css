@@ -273,7 +273,9 @@ select {
 
 .map-controls {
   position: absolute;
-  z-index: 20;
+  /* Transient control menus must cover bottom itinerary panels when narrow
+     viewports force both regions to overlap. */
+  z-index: 26;
   top: 1rem;
   right: 1rem;
   display: flex;
@@ -624,6 +626,7 @@ select {
 .map-control-button--fullscreen svg,
 .map-control-button--map-layers svg,
 .map-control-button--route-import svg,
+.map-control-button--route-export svg,
 .map-control-button--route-action svg,
 .map-control-button--route-toggle svg {
   width: 1.55rem;
@@ -676,7 +679,8 @@ select {
   }
 }
 
-.map-control-button--route-action:disabled {
+.map-control-button--route-action:disabled,
+.map-control-button--route-export:disabled {
   border-color: #d4d4cf;
   color: #9b9b96;
   background: #ecece8;
@@ -685,7 +689,8 @@ select {
   opacity: 1;
 }
 
-.map-control-button--route-action:disabled:hover {
+.map-control-button--route-action:disabled:hover,
+.map-control-button--route-export:disabled:hover {
   background: #ecece8;
 }
 
@@ -1474,6 +1479,13 @@ select {
   border-bottom: 1px solid rgb(32 47 60 / 12%);
 }
 
+.about-dialog-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .about-dialog-header h2 {
   margin: 0;
   font-size: 1.5rem;
@@ -1491,7 +1503,7 @@ select {
   outline: none;
 }
 
-.about-dialog-close:focus-visible,
+.about-dialog-icon-close:focus-visible,
 .about-dialog a:focus-visible {
   outline: 3px solid rgb(23 105 224 / 38%);
   outline-offset: 2px;
@@ -1566,27 +1578,25 @@ select {
   color: #125cb8;
 }
 
-.about-dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0.9rem 1.35rem 1.1rem;
-  border-top: 1px solid rgb(32 47 60 / 12%);
-}
-
-.about-dialog-close {
-  min-width: 6.5rem;
-  height: 2.65rem;
-  padding: 0 1rem;
-  border: 1px solid #1769e0;
-  border-radius: 8px;
-  color: #ffffff;
-  background: #1769e0;
+.about-dialog-icon-close {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  color: #4f5d67;
+  background: transparent;
   cursor: pointer;
-  font-weight: 600;
+  font-size: 1.65rem;
+  line-height: 1;
 }
 
-.about-dialog-close:hover {
-  background: #125ac2;
+.about-dialog-icon-close:hover {
+  color: #17212b;
+  background: rgb(32 47 60 / 8%);
 }
 
 .release-notes-dialog {
@@ -1710,7 +1720,7 @@ select {
 }
 
 .route-export-dialog {
-  width: min(28rem, calc(100vw - 2rem));
+  width: min(31rem, calc(100vw - 2rem));
   max-width: none;
   padding: 0;
   border: 0;
@@ -1728,18 +1738,58 @@ select {
 .route-export-dialog-form {
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
-  padding: 1.2rem;
+  gap: 0.75rem;
+  padding: 1.25rem;
   border: 1px solid rgb(32 47 60 / 22%);
   border-radius: 12px;
   background: rgb(255 255 255 / 98%);
   box-shadow: 0 14px 42px rgb(0 0 0 / 28%);
 }
 
+.route-export-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.2rem;
+}
+
 .route-export-dialog-form h2 {
-  margin: 0 0 0.25rem;
+  margin: 0;
   font-size: 1.15rem;
   line-height: 1.3;
+}
+
+.route-export-dialog-close {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  color: #4f5d67;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.route-export-dialog-close:hover {
+  color: #17212b;
+  background: rgb(32 47 60 / 8%);
+}
+
+.route-export-dialog-close:focus-visible {
+  outline: 3px solid rgb(23 105 224 / 38%);
+  outline-offset: 2px;
+}
+
+.route-export-dialog-close:disabled {
+  color: #a7adb2;
+  background: transparent;
+  cursor: not-allowed;
 }
 
 .route-export-dialog-form label {
@@ -1766,24 +1816,42 @@ select {
 .route-export-dialog-form p {
   margin: 0;
   color: #64717b;
-  font-size: 0.82rem;
-  line-height: 1.4;
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
-.route-export-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.65rem;
+.route-export-dialog-options {
+  display: grid;
+  gap: 0.9rem;
   margin-top: 0.45rem;
 }
 
+.route-export-dialog-swisstopo-option {
+  display: grid;
+  gap: 0.45rem;
+}
+
 .route-export-dialog-button {
-  min-width: 6.5rem;
-  height: 2.65rem;
-  padding: 0 1rem;
+  display: inline-flex;
+  width: 100%;
+  min-height: 3rem;
+  height: auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  border: 1px solid #1769e0;
   border-radius: 8px;
+  color: #ffffff;
+  background: #1769e0;
   cursor: pointer;
   font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+}
+
+.route-export-dialog-button:hover {
+  background: #125ac2;
 }
 
 .route-export-dialog-button:focus-visible {
@@ -1791,31 +1859,90 @@ select {
   outline-offset: 2px;
 }
 
-.route-export-dialog-button--secondary {
-  border: 1px solid rgb(32 47 60 / 26%);
-  color: #27343e;
-  background: #ffffff;
-}
-
-.route-export-dialog-button--secondary:hover {
-  background: #f3f5f6;
-}
-
-.route-export-dialog-button--primary {
-  border: 1px solid #1769e0;
-  color: #ffffff;
-  background: #1769e0;
-}
-
-.route-export-dialog-button--primary:hover {
-  background: #125ac2;
-}
-
-.route-export-dialog-button--primary:disabled {
+.route-export-dialog-button:disabled {
   border-color: #c8ccd0;
   color: #8a9299;
   background: #e6e8ea;
   cursor: not-allowed;
+}
+
+.route-export-dialog-form .route-export-dialog-storage-note {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  padding: 0 0.15rem;
+  color: #475569;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.route-export-dialog-share {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 12rem;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 0.2rem;
+  padding: 0.9rem;
+  border: 1px solid rgb(32 47 60 / 18%);
+  border-radius: 10px;
+  background: #f5f8fb;
+}
+
+.route-export-dialog-share-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+  color: #33414c;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.route-export-dialog-share-copy strong {
+  color: #17212b;
+  font-size: 0.95rem;
+}
+
+.route-export-dialog-qr {
+  display: block;
+  width: 12rem;
+  height: 12rem;
+  border: 1px solid rgb(32 47 60 / 18%);
+  background: #ffffff;
+}
+
+.route-export-dialog-mobile-result {
+  display: grid;
+  margin-top: 0.2rem;
+}
+
+.route-export-dialog-mobile-fallback {
+  width: 100%;
+}
+
+.route-export-dialog-form .route-export-dialog-error {
+  color: #b42318;
+  font-weight: 600;
+}
+
+@media (max-width: 36rem) {
+  .route-export-dialog {
+    width: min(100% - 1rem, 31rem);
+  }
+
+  .route-export-dialog-form {
+    padding: 1rem;
+  }
+
+  .route-export-dialog-share {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .route-export-dialog-share-copy {
+    align-items: center;
+    text-align: center;
+  }
 }
 
 .route-message {
@@ -1885,6 +2012,13 @@ select {
 }
 
 @media (max-width: 700px) {
+  /* Vertical space, rather than the reported pointer capabilities, is the
+     limiting factor on narrow screens. Hiding the redundant +/- pair keeps
+     the permanent right-side stack short enough to expose route controls. */
+  .zoom-controls {
+    display: none;
+  }
+
   /* The bottom route summary occupies the scale bar's only useful position on
      narrow screens. Hiding the decorative scale avoids a permanently obscured
      control while preserving more map height than moving either element. */
@@ -1903,10 +2037,19 @@ select {
     right: 0.75rem;
   }
 
-  /* Additional information layers must remain reachable on short mobile and
-     landscape viewports instead of being clipped outside the map. */
+  /* On narrow screens the layers button can sit far below the top edge.
+     Anchoring its temporary menu to the viewport keeps both edges reachable
+     and lets the menu itself scroll instead of being clipped by browser chrome. */
   .map-layers-menu {
+    position: fixed;
+    top: 4.25rem;
+    right: 4.35rem;
+    width: 18rem;
+    max-width: calc(100vw - 5.1rem);
+    /* Keep the menu content-sized when it fits, but cap it to the visible
+       mobile viewport so shorter screens still get internal scrolling. */
     max-height: calc(100vh - 5rem);
+    max-height: calc(100dvh - 5rem);
   }
 
   .map-information-popup {
@@ -1955,8 +2098,10 @@ select {
 
   .switzerland-mobility-hiking-summary {
     bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-    width: calc(100vw - 1.5rem);
-    max-width: calc(100vw - 1.5rem);
+    left: 0.75rem;
+    width: calc(100vw - 5.25rem);
+    max-width: calc(100vw - 5.25rem);
+    transform: none;
   }
 
   .switzerland-mobility-hiking-panel-header {
@@ -1990,9 +2135,15 @@ select {
     width: 100%;
   }
 
+  /* The right-side controls remain visible while the profile is open. Keep a
+     dedicated gutter so route statistics and the elevation chart never sit
+     underneath those controls on a real phone. */
   .route-summary {
     bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-    width: calc(100vw - 1.5rem);
+    left: 0.75rem;
+    width: calc(100vw - 5.25rem);
+    max-width: calc(100vw - 5.25rem);
+    transform: none;
   }
 
   .route-statistics {

@@ -31,7 +31,7 @@ const frenchTranslations = {
   'about.description':
     'Via Helvetica est une application web gratuite et open source. Elle permet de créer ou d’importer un itinéraire, d’en consulter la distance, le dénivelé et le profil d’altitude, puis de l’exporter au format GPX.',
   'about.privacy':
-    'Aucun compte n’est nécessaire. Les itinéraires ne sont pas enregistrés sur un serveur appartenant à Via Helvetica.',
+    'Aucun compte n’est nécessaire. Les itinéraires ne sont pas enregistrés sur un serveur de Via Helvetica, sauf lorsque vous choisissez le transfert vers swisstopo. Dans ce cas, le fichier GPX est hébergé pendant 24 heures, sans être associé à votre identité.',
   'about.safetyTitle': 'À savoir',
   'about.safety':
     'Les itinéraires et les données cartographiques sont fournis à titre indicatif et peuvent comporter des erreurs. Les conditions sur le terrain peuvent évoluer : vérifiez toujours les fermetures, dangers et avis officiels avant votre départ. Vous restez responsable du choix de votre itinéraire et de son adaptation à vos capacités ainsi qu’aux conditions rencontrées.',
@@ -221,7 +221,24 @@ const frenchTranslations = {
   'gpx.nameLabel': 'Nom de l’itinéraire',
   'gpx.nameHint':
     'Ce nom sera utilisé dans le fichier GPX et dans les applications qui l’importent.',
-  'gpx.cancel': 'Annuler',
+  'gpx.close': 'Fermer',
+  'gpx.download': 'Exporter le fichier GPX',
+  'gpx.createSwisstopoQr': 'Créer un QR code pour importer dans swisstopo',
+  'gpx.openSwisstopoApp': 'Ouvrir dans l’application swisstopo',
+  'gpx.prepareSwisstopoMobile': 'Préparer l’ouverture dans swisstopo',
+  'gpx.swisstopoStorageNotice':
+    'Pour le transfert vers swisstopo, le fichier GPX est hébergé pendant 24 heures, sans être associé à votre identité.',
+  'gpx.preparingSwisstopo': 'Préparation…',
+  'gpx.swisstopoReady': 'Itinéraire prêt pour swisstopo',
+  'gpx.swisstopoScanHint':
+    'Scannez ce code QR avec votre téléphone pour ouvrir l’itinéraire dans l’app swisstopo.',
+  'gpx.swisstopoQrAria': 'Code QR pour ouvrir l’itinéraire dans swisstopo',
+  'gpx.swisstopoTooLarge':
+    'Cet itinéraire dépasse la limite de 2 Mo pour le transfert vers swisstopo. Exportez le fichier GPX à la place.',
+  'gpx.swisstopoUnsupported':
+    'Ce fichier GPX peut être affiché dans Via Helvetica, mais son format ne peut pas être transféré vers swisstopo.',
+  'gpx.swisstopoError':
+    'Impossible de préparer l’itinéraire pour swisstopo. Réessayez.',
 } as const;
 
 /** Translation keys accepted by the typed `t()` helper. */
@@ -237,7 +254,7 @@ const germanTranslations: Record<TranslationKey, string> = {
   'about.description':
     'Via Helvetica ist eine kostenlose Open-Source-Webanwendung. Sie können eine Route erstellen oder importieren, Distanz, Höhenunterschiede und Höhenprofil prüfen und die Route als GPX exportieren.',
   'about.privacy':
-    'Es ist kein Konto erforderlich. Routen werden nicht auf einem Server von Via Helvetica gespeichert.',
+    'Es ist kein Konto erforderlich. Routen werden nicht auf einem Server von Via Helvetica gespeichert, ausser wenn Sie die Übertragung zu swisstopo wählen. In diesem Fall wird die GPX-Datei 24 Stunden lang gehostet, ohne mit Ihrer Identität verknüpft zu werden.',
   'about.safetyTitle': 'Hinweis',
   'about.safety':
     'Die vorgeschlagenen Routen und Kartendaten dienen nur zur Orientierung und können Fehler enthalten. Die Bedingungen vor Ort können sich ändern: Prüfen Sie vor dem Aufbruch stets Sperrungen, Gefahren und offizielle Hinweise. Sie sind selbst dafür verantwortlich, Ihre Route auszuwählen und sie an Ihre Fähigkeiten sowie die vorgefundenen Bedingungen anzupassen.',
@@ -429,7 +446,24 @@ const germanTranslations: Record<TranslationKey, string> = {
   'gpx.nameLabel': 'Name der Route',
   'gpx.nameHint':
     'Dieser Name wird in der GPX-Datei und in Anwendungen verwendet, die sie importieren.',
-  'gpx.cancel': 'Abbrechen',
+  'gpx.close': 'Schliessen',
+  'gpx.download': 'GPX-Datei exportieren',
+  'gpx.createSwisstopoQr': 'QR-Code zum Import in swisstopo erstellen',
+  'gpx.openSwisstopoApp': 'In der swisstopo-App öffnen',
+  'gpx.prepareSwisstopoMobile': 'Öffnen in swisstopo vorbereiten',
+  'gpx.swisstopoStorageNotice':
+    'Für die Übertragung zu swisstopo wird die GPX-Datei 24 Stunden lang bereitgestellt, ohne mit Ihrer Identität verknüpft zu werden.',
+  'gpx.preparingSwisstopo': 'Wird vorbereitet…',
+  'gpx.swisstopoReady': 'Route für swisstopo bereit',
+  'gpx.swisstopoScanHint':
+    'Scannen Sie diesen QR-Code mit Ihrem Telefon, um die Route in der swisstopo-App zu öffnen.',
+  'gpx.swisstopoQrAria': 'QR-Code zum Öffnen der Route in swisstopo',
+  'gpx.swisstopoTooLarge':
+    'Diese Route überschreitet die 2-MB-Grenze für die Übertragung zu swisstopo. Exportieren Sie stattdessen die GPX-Datei.',
+  'gpx.swisstopoUnsupported':
+    'Diese GPX-Datei kann in Via Helvetica angezeigt, in diesem Format aber nicht an swisstopo übertragen werden.',
+  'gpx.swisstopoError':
+    'Die Route konnte nicht für swisstopo vorbereitet werden. Versuchen Sie es erneut.',
 };
 
 const italianTranslations: Record<TranslationKey, string> = {
@@ -442,7 +476,7 @@ const italianTranslations: Record<TranslationKey, string> = {
   'about.description':
     'Via Helvetica è un’applicazione web gratuita e open source. Permette di creare o importare un itinerario, consultarne distanza, dislivello e profilo altimetrico, quindi esportarlo in formato GPX.',
   'about.privacy':
-    'Non è necessario alcun account. Gli itinerari non vengono salvati su un server di Via Helvetica.',
+    'Non è necessario alcun account. Gli itinerari non vengono salvati su un server di Via Helvetica, salvo quando scegli il trasferimento a swisstopo. In questo caso, il file GPX viene ospitato per 24 ore senza essere associato alla tua identità.',
   'about.safetyTitle': 'Da sapere',
   'about.safety':
     'Gli itinerari e i dati cartografici sono forniti a titolo indicativo e possono contenere errori. Le condizioni sul terreno possono cambiare: prima di partire, verifica sempre chiusure, pericoli e avvisi ufficiali. Sei responsabile della scelta del tuo itinerario e del suo adattamento alle tue capacità e alle condizioni incontrate.',
@@ -635,7 +669,24 @@ const italianTranslations: Record<TranslationKey, string> = {
   'gpx.nameLabel': 'Nome dell’itinerario',
   'gpx.nameHint':
     'Questo nome verrà usato nel file GPX e nelle applicazioni che lo importano.',
-  'gpx.cancel': 'Annulla',
+  'gpx.close': 'Chiudi',
+  'gpx.download': 'Esporta il file GPX',
+  'gpx.createSwisstopoQr': 'Crea un codice QR per importare in swisstopo',
+  'gpx.openSwisstopoApp': 'Apri nell’app swisstopo',
+  'gpx.prepareSwisstopoMobile': 'Prepara l’apertura in swisstopo',
+  'gpx.swisstopoStorageNotice':
+    'Per il trasferimento a swisstopo, il file GPX viene ospitato per 24 ore senza essere associato alla tua identità.',
+  'gpx.preparingSwisstopo': 'Preparazione…',
+  'gpx.swisstopoReady': 'Itinerario pronto per swisstopo',
+  'gpx.swisstopoScanHint':
+    'Scansiona questo codice QR con il telefono per aprire l’itinerario nell’app swisstopo.',
+  'gpx.swisstopoQrAria': 'Codice QR per aprire l’itinerario in swisstopo',
+  'gpx.swisstopoTooLarge':
+    'Questo itinerario supera il limite di 2 MB per il trasferimento a swisstopo. Esporta invece il file GPX.',
+  'gpx.swisstopoUnsupported':
+    'Questo file GPX può essere visualizzato in Via Helvetica, ma il suo formato non può essere trasferito a swisstopo.',
+  'gpx.swisstopoError':
+    'Impossibile preparare l’itinerario per swisstopo. Riprova.',
 };
 
 const englishTranslations: Record<TranslationKey, string> = {
@@ -648,7 +699,7 @@ const englishTranslations: Record<TranslationKey, string> = {
   'about.description':
     'Via Helvetica is a free, open-source web application. It lets you create or import a route, review its distance, elevation gain and profile, and export it as GPX.',
   'about.privacy':
-    'No account is required. Routes are not stored on a server operated by Via Helvetica.',
+    'No account is required. Routes are not stored on a Via Helvetica server unless you choose the swisstopo transfer. In that case, the GPX file is hosted for 24 hours without being associated with your identity.',
   'about.safetyTitle': 'Important',
   'about.safety':
     'Routes and map data are provided for guidance only and may contain errors. Conditions on the ground can change: always check closures, hazards, and official notices before setting out. You remain responsible for choosing your route and adapting it to your abilities and the conditions encountered.',
@@ -839,7 +890,24 @@ const englishTranslations: Record<TranslationKey, string> = {
   'gpx.nameLabel': 'Route name',
   'gpx.nameHint':
     'This name will be used in the GPX file and by applications that import it.',
-  'gpx.cancel': 'Cancel',
+  'gpx.close': 'Close',
+  'gpx.download': 'Export the GPX file',
+  'gpx.createSwisstopoQr': 'Create a QR code to import into swisstopo',
+  'gpx.openSwisstopoApp': 'Open in the swisstopo app',
+  'gpx.prepareSwisstopoMobile': 'Prepare to open in swisstopo',
+  'gpx.swisstopoStorageNotice':
+    'For the swisstopo transfer, the GPX file is hosted for 24 hours without being associated with your identity.',
+  'gpx.preparingSwisstopo': 'Preparing…',
+  'gpx.swisstopoReady': 'Route ready for swisstopo',
+  'gpx.swisstopoScanHint':
+    'Scan this QR code with your phone to open the route in the swisstopo app.',
+  'gpx.swisstopoQrAria': 'QR code for opening the route in swisstopo',
+  'gpx.swisstopoTooLarge':
+    'This route exceeds the 2 MB limit for transfer to swisstopo. Export the GPX file instead.',
+  'gpx.swisstopoUnsupported':
+    'This GPX file can be displayed in Via Helvetica, but its format cannot be transferred to swisstopo.',
+  'gpx.swisstopoError':
+    'The route could not be prepared for swisstopo. Please try again.',
 };
 
 /** Complete translation dictionaries keyed by supported language. */

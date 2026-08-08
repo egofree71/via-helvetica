@@ -1,11 +1,27 @@
 /**
- * Business context: asks for the route name before GPX generation so the
- * downloaded filename and the track name imported by external applications
- * remain consistent. The dialog is temporary and keeps the map-focused layout
- * free of permanent form controls.
+ * Business context: names the current itinerary once, then offers the two
+ * transfer paths useful after planning: a normal local GPX download or a
+ * temporary swisstopo hand-off (desktop QR, direct mobile link). The dialog
+ * remains transient so these export details do not consume permanent map space.
  */
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import { useI18n } from '../i18n/I18nContext';
+import {
+  createQrCodeMatrix,
+  createQrCodeSvgPath,
+} from '../share/qrCode';
+import {
+  SwisstopoShareError,
+  type SwisstopoShare,
+  type SwisstopoShareErrorCode,
+} from '../share/swisstopoShare';
 
 /** Controlled visibility and callbacks for the route-export dialog. */
 interface RouteExportDialogProps {
@@ -13,21 +29,42 @@ interface RouteExportDialogProps {
   isOpen: boolean;
   /** Localized name proposed when the dialog opens. */
   defaultName: string;
-  /** Closes the dialog without exporting. */
+  /** Whether the optional temporary swisstopo share service is configured. */
+  canShareWithSwisstopo: boolean;
+  /** Closes the dialog. */
   onCancel: () => void;
-  /** Exports the route with the trimmed name entered by the user. */
-  onConfirm: (routeName: string) => void;
+  /** Downloads the route with the trimmed name entered by the user. */
+  onExportGpx: (routeName: string) => void;
+  /** Uploads the named GPX temporarily and returns its swisstopo hand-off URL. */
+  onCreateSwisstopoShare: (routeName: string) => Promise<SwisstopoShare>;
 }
 
 /** Maximum route-name length accepted by the export form. */
 const ROUTE_NAME_MAX_LENGTH = 120;
+/**
+ * Mobile hand-off should avoid showing a QR code on the same device that must
+ * scan it. Combining viewport size with a coarse pointer avoids treating most
+ * touch-enabled laptops as phones or tablets.
+ */
+const MOBILE_SWISSTOPO_MEDIA_QUERY =
+  '(max-width: 64rem) and (hover: none) and (pointer: coarse)';
 
-/** Renders an accessible modal form for naming a GPX route before download. */
+/** Reads the current device characteristics without assuming `matchMedia` exists. */
+function isMobileSwisstopoHandoff(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia(MOBILE_SWISSTOPO_MEDIA_QUERY).matches
+  );
+}
+
+/** Renders an accessible modal for local GPX export and swisstopo transfer. */
 export default function RouteExportDialog({
   isOpen,
   defaultName,
+  canShareWithSwisstopo,
   onCancel,
-  onConfirm,
+  onExportGpx,
+  onCreateSwisstopoShare,
 }: RouteExportDialogProps) {
   const { t } = useI18n();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -36,6 +73,26 @@ export default function RouteExportDialog({
   const openingNameRef = useRef(defaultName);
   const selectionPendingRef = useRef(false);
   const [routeName, setRouteName] = useState(defaultName);
+  const [share, setShare] = useState<SwisstopoShare | null>(null);
+  const [isSharePending, setIsSharePending] = useState(false);
+  const [shareError, setShareError] = useState<SwisstopoShareErrorCode | null>(null);
+  const [useDirectSwisstopoHandoff, setUseDirectSwisstopoHandoff] = useState(
+    isMobileSwisstopoHandoff,
+  );
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia(MOBILE_SWISSTOPO_MEDIA_QUERY);
+    const updateMode = () => setUseDirectSwisstopoHandoff(mediaQuery.matches);
+
+    updateMode();
+    mediaQuery.addEventListener('change', updateMode);
+
+    return () => mediaQuery.removeEventListener('change', updateMode);
+  }, []);
 
   useLayoutEffect(() => {
     const wasOpen = wasOpenRef.current;
@@ -45,6 +102,9 @@ export default function RouteExportDialog({
       openingNameRef.current = defaultName;
       selectionPendingRef.current = true;
       setRouteName(defaultName);
+      setShare(null);
+      setShareError(null);
+      setIsSharePending(false);
     }
   }, [defaultName, isOpen]);
 
@@ -90,12 +150,49 @@ export default function RouteExportDialog({
     selectionPendingRef.current = false;
   }, [isOpen, routeName]);
 
+  const trimmedRouteName = routeName.trim();
+  const qrCode = useMemo(() => {
+    if (!share) {
+      return null;
+    }
+
+    const matrix = createQrCodeMatrix(share.swisstopoUrl);
+
+    return {
+      path: createQrCodeSvgPath(matrix),
+      viewBoxSize: matrix.viewBoxSize,
+    };
+  }, [share]);
+
+  /** Keeps Enter equivalent to the long-standing GPX download action. */
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const trimmedName = routeName.trim();
 
-    if (trimmedName) {
-      onConfirm(trimmedName);
+    if (trimmedRouteName && !isSharePending) {
+      onExportGpx(trimmedRouteName);
+    }
+  };
+
+  /** Creates a fresh temporary transfer after validating the current name. */
+  const createShare = async () => {
+    if (!trimmedRouteName || isSharePending) {
+      return;
+    }
+
+    setIsSharePending(true);
+    setShare(null);
+    setShareError(null);
+
+    try {
+      const nextShare = await onCreateSwisstopoShare(trimmedRouteName);
+      setShare(nextShare);
+    } catch (error) {
+      console.error('Unable to prepare the route for swisstopo.', error);
+      setShareError(
+        error instanceof SwisstopoShareError ? error.code : 'temporary',
+      );
+    } finally {
+      setIsSharePending(false);
     }
   };
 
@@ -107,16 +204,31 @@ export default function RouteExportDialog({
       aria-describedby="route-export-dialog-hint"
       onCancel={(event) => {
         event.preventDefault();
-        onCancel();
+
+        if (!isSharePending) {
+          onCancel();
+        }
       }}
       onPointerDown={(event) => {
-        if (event.target === event.currentTarget) {
+        if (event.target === event.currentTarget && !isSharePending) {
           onCancel();
         }
       }}
     >
       <form className="route-export-dialog-form" onSubmit={submit}>
-        <h2 id="route-export-dialog-title">{t('route.export')}</h2>
+        <div className="route-export-dialog-header">
+          <h2 id="route-export-dialog-title">{t('route.export')}</h2>
+          <button
+            type="button"
+            className="route-export-dialog-close"
+            aria-label={t('gpx.close')}
+            title={t('gpx.close')}
+            disabled={isSharePending}
+            onClick={onCancel}
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
 
         <label htmlFor="route-export-name">{t('gpx.nameLabel')}</label>
         <input
@@ -127,26 +239,100 @@ export default function RouteExportDialog({
           maxLength={ROUTE_NAME_MAX_LENGTH}
           autoComplete="off"
           required
-          onChange={(event) => setRouteName(event.target.value)}
+          disabled={isSharePending}
+          onChange={(event) => {
+            setRouteName(event.target.value);
+            // A generated QR belongs to the exact named GPX that was uploaded.
+            setShare(null);
+            setShareError(null);
+          }}
         />
         <p id="route-export-dialog-hint">{t('gpx.nameHint')}</p>
 
-        <div className="route-export-dialog-actions">
-          <button
-            type="button"
-            className="route-export-dialog-button route-export-dialog-button--secondary"
-            onClick={onCancel}
+        {share && qrCode && !useDirectSwisstopoHandoff && (
+          <section
+            className="route-export-dialog-share"
+            aria-labelledby="route-export-dialog-share-title"
+            role="status"
+            aria-live="polite"
           >
-            {t('gpx.cancel')}
-          </button>
-          <button
-            type="submit"
-            className="route-export-dialog-button route-export-dialog-button--primary"
-            disabled={!routeName.trim()}
+            <div className="route-export-dialog-share-copy">
+              <strong id="route-export-dialog-share-title">
+                {t('gpx.swisstopoReady')}
+              </strong>
+              <span>{t('gpx.swisstopoScanHint')}</span>
+            </div>
+            <svg
+              className="route-export-dialog-qr"
+              viewBox={`0 0 ${qrCode.viewBoxSize} ${qrCode.viewBoxSize}`}
+              role="img"
+              aria-label={t('gpx.swisstopoQrAria')}
+              shapeRendering="crispEdges"
+            >
+              <rect width="100%" height="100%" fill="#ffffff" />
+              <path d={qrCode.path} fill="#000000" />
+            </svg>
+          </section>
+        )}
+
+        {share && useDirectSwisstopoHandoff && (
+          <div
+            className="route-export-dialog-mobile-result"
+            role="status"
+            aria-live="polite"
           >
-            {t('route.export')}
-          </button>
-        </div>
+            <a
+              className="route-export-dialog-button route-export-dialog-mobile-fallback"
+              href={share.swisstopoUrl}
+            >
+              {t('gpx.openSwisstopoApp')}
+            </a>
+          </div>
+        )}
+
+        {shareError && (
+          <p className="route-export-dialog-error" role="alert">
+            {t(
+              shareError === 'tooLarge'
+                ? 'gpx.swisstopoTooLarge'
+                : shareError === 'unsupported'
+                  ? 'gpx.swisstopoUnsupported'
+                  : 'gpx.swisstopoError',
+            )}
+          </p>
+        )}
+
+        {!share && (
+          <div className="route-export-dialog-options">
+            <button
+              type="submit"
+              className="route-export-dialog-button"
+              disabled={!trimmedRouteName || isSharePending}
+            >
+              {t('gpx.download')}
+            </button>
+
+            {canShareWithSwisstopo && (
+              <div className="route-export-dialog-swisstopo-option">
+                <button
+                  type="button"
+                  className="route-export-dialog-button"
+                  disabled={!trimmedRouteName || isSharePending}
+                  onClick={() => void createShare()}
+                >
+                  {isSharePending
+                    ? t('gpx.preparingSwisstopo')
+                    : useDirectSwisstopoHandoff
+                      ? t('gpx.prepareSwisstopoMobile')
+                      : t('gpx.createSwisstopoQr')}
+                </button>
+                <p className="route-export-dialog-storage-note">
+                  {t('gpx.swisstopoStorageNotice')}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </form>
     </dialog>
   );

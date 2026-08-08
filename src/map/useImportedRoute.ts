@@ -29,7 +29,11 @@ import { IMPORTED_ROUTE_MAX_ZOOM } from './config';
 import { updateImportedRouteDisplay } from './importedRoute';
 import { calculateResponsiveMapFitPadding } from './viewFit';
 import type { MapRuntime } from './mapRuntime';
-import { fromWgs84Coordinates } from './projection';
+import {
+  fromWgs84Coordinates,
+  LV95_STANDARD_SOURCE_MATRIX_INDICES,
+  LV95_VIEW_RESOLUTIONS,
+} from './projection';
 
 /** Inputs required by the imported-GPX workflow. */
 export interface UseImportedRouteOptions {
@@ -43,10 +47,20 @@ export interface UseImportedRouteOptions {
   onImportError: (message: string) => void;
 }
 
+/** Retained source document for export and explicit swisstopo transfer. */
+export interface ImportedRouteSource {
+  /** Parsed itinerary name proposed by the export dialog. */
+  name: string;
+  /** Complete original GPX XML retained only while this read-only route is current. */
+  gpxDocument: string;
+}
+
 /** State and actions exposed to the application shell and metrics pipeline. */
 export interface ImportedRouteController {
   /** Independent projected GPX segments; an empty array means no imported route. */
   segments: Coordinate[][];
+  /** Original GPX source retained only while the imported route remains current. */
+  source: ImportedRouteSource | null;
   /** Embedded GPX profile summary, or null when GeoAdmin must provide elevations. */
   elevationSummary: RouteElevationSummary | null;
   /** Validates and loads one browser-selected GPX file. */
@@ -103,6 +117,49 @@ export function calculateImportedRouteFitPadding(
   );
 }
 
+/** Finest native national-map resolution allowed by imported-route framing. */
+const IMPORTED_ROUTE_MIN_FIT_RESOLUTION =
+  LV95_VIEW_RESOLUTIONS[IMPORTED_ROUTE_MAX_ZOOM];
+
+/**
+ * Snaps one calculated fit resolution to a matrix actually published by the
+ * standard swisstopo backgrounds. OpenLayers normally permits intermediate
+ * resolutions, which can leave a raster background visibly resampled after
+ * successive GPX fits. Choosing the next coarser native matrix keeps the whole
+ * itinerary visible without stretching a tile level.
+ *
+ * @param requiredResolution - Resolution in LV95 metres per CSS pixel needed to fit the route.
+ * @returns A native standard-map resolution that still contains the complete route.
+ */
+export function snapImportedRouteFitResolution(
+  requiredResolution: number,
+): number {
+  const boundedResolution = Math.max(
+    requiredResolution,
+    IMPORTED_ROUTE_MIN_FIT_RESOLUTION,
+  );
+  let snappedResolution = LV95_VIEW_RESOLUTIONS[
+    LV95_STANDARD_SOURCE_MATRIX_INDICES[0]
+  ];
+
+  for (const matrixIndex of LV95_STANDARD_SOURCE_MATRIX_INDICES) {
+    if (matrixIndex > IMPORTED_ROUTE_MAX_ZOOM) {
+      break;
+    }
+
+    const nativeResolution = LV95_VIEW_RESOLUTIONS[matrixIndex];
+
+    if (nativeResolution >= boundedResolution) {
+      snappedResolution = nativeResolution;
+      continue;
+    }
+
+    break;
+  }
+
+  return snappedResolution;
+}
+
 /** Returns whether two OpenLayers size readings describe the same viewport. */
 function sizesMatch(first: Size | null, second: Size): boolean {
   return first !== null && first[0] === second[0] && first[1] === second[1];
@@ -112,6 +169,12 @@ function sizesMatch(first: Size | null, second: Size): boolean {
  * Frames a GPX only after the map has recovered from the native file picker.
  * Mobile browsers can briefly expose a stale or very small viewport while the
  * picker closes, so fitting immediately can animate to the national overview.
+ * The callback also stops silently when a newer import supersedes this one.
+ *
+ * @param map - Shared OpenLayers map whose viewport must be stable before fitting.
+ * @param extent - LV95 extent of the imported route to keep fully visible.
+ * @param isCurrentImport - Guard that becomes false when another import starts.
+ * @returns Nothing; the fit is scheduled through animation frames.
  */
 function fitImportedRouteWhenViewportSettles(
   map: Map,
@@ -141,11 +204,37 @@ function fitImportedRouteWhenViewportSettles(
         stableSizeReadings >= IMPORTED_ROUTE_REQUIRED_STABLE_SIZE_READINGS ||
         inspectedFrames >= IMPORTED_ROUTE_FIT_STABILIZATION_FRAME_LIMIT
       ) {
-        map.getView().fit(extent, {
+        const padding = calculateImportedRouteFitPadding(size);
+        const fitSize: Size = [
+          Math.max(1, size[0] - padding[1] - padding[3]),
+          Math.max(1, size[1] - padding[0] - padding[2]),
+        ];
+        const view = map.getView();
+        const rotation = view.getRotation();
+        const extentWidth = extent[2] - extent[0];
+        const extentHeight = extent[3] - extent[1];
+        const cosRotation = Math.abs(Math.cos(rotation));
+        const sinRotation = Math.abs(Math.sin(rotation));
+        const rotatedWidth =
+          extentWidth * cosRotation + extentHeight * sinRotation;
+        const rotatedHeight =
+          extentWidth * sinRotation + extentHeight * cosRotation;
+        const requiredResolution = Math.max(
+          rotatedWidth / fitSize[0],
+          rotatedHeight / fitSize[1],
+        );
+        const fitResolution =
+          snapImportedRouteFitResolution(requiredResolution);
+
+        // A previous GPX fit may still be animating when another file is
+        // selected. Starting from the current rendered state avoids competing
+        // target resolutions and stale interim tiles.
+        view.cancelAnimations();
+        view.fit(extent, {
           size,
           duration: IMPORTED_ROUTE_FIT_DURATION_MS,
-          maxZoom: IMPORTED_ROUTE_MAX_ZOOM,
-          padding: calculateImportedRouteFitPadding(size),
+          minResolution: fitResolution,
+          padding,
         });
         return;
       }
@@ -163,13 +252,14 @@ function fitImportedRouteWhenViewportSettles(
  * Coordinates local GPX file handling and the read-only map display.
  *
  * @param options - Shared runtime plus cross-workflow and message callbacks.
- * @returns Imported geometry, optional embedded elevations, and lifecycle actions.
+ * @returns Imported geometry, retained source GPX, optional elevations, and lifecycle actions.
  */
 export function useImportedRoute(
   options: UseImportedRouteOptions,
 ): ImportedRouteController {
   const importSessionRef = useRef(0);
   const [segments, setSegments] = useState<Coordinate[][]>([]);
+  const [source, setSource] = useState<ImportedRouteSource | null>(null);
   const [elevationSummary, setElevationSummary] =
     useState<RouteElevationSummary | null>(null);
 
@@ -185,6 +275,7 @@ export function useImportedRoute(
     }
 
     setSegments([]);
+    setSource(null);
     setElevationSummary(null);
   }, [options.mapRuntimeRef]);
 
@@ -205,7 +296,8 @@ export function useImportedRoute(
       }
 
       try {
-        const importedRoute = parseGpxRoute(await file.text(), file.name);
+        const gpxDocument = await file.text();
+        const importedRoute = parseGpxRoute(gpxDocument, file.name);
 
         // A slower previous file read must not replace a newer selection or a
         // route-creation action that explicitly cleared the imported workflow.
@@ -243,6 +335,10 @@ export function useImportedRoute(
         options.onImportAccepted();
         updateImportedRouteDisplay(display, projectedSegments);
         setSegments(projectedSegments);
+        setSource({
+          name: importedRoute.name,
+          gpxDocument,
+        });
         setElevationSummary(embeddedElevationSummary);
 
         const sourceExtent = display.source.getExtent();
@@ -284,6 +380,7 @@ export function useImportedRoute(
 
   return {
     segments,
+    source,
     elevationSummary,
     importRouteFile,
     clearImportedRoute,

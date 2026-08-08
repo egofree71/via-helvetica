@@ -21,10 +21,17 @@ import TrailClosurePopup from './components/TrailClosurePopup';
 import SwitzerlandMobilityHikingPanel from './components/SwitzerlandMobilityHikingPanel';
 import RouteStatistics from './components/RouteStatistics';
 import {
-  downloadRouteGpx,
-  downloadRouteSegmentsGpx,
+  createNamedImportedGpxDocument,
+  createRouteGpx,
+  createRouteSegmentsGpx,
+  downloadGpxDocument,
 } from './export/gpx';
 import { useI18n } from './i18n/I18nContext';
+import {
+  createSwisstopoShare,
+  isSwisstopoShareConfigured,
+  type SwisstopoShare,
+} from './share/swisstopoShare';
 import {
   COORDINATE_SEARCH_ZOOM,
   isWgs84CoordinateInsideMapBounds,
@@ -61,7 +68,7 @@ import {
 } from './releases/releaseHistory';
 
 /** Itinerary source named by the shared GPX export dialog. */
-type RouteExportSource = 'editable' | 'switzerlandMobility';
+type RouteExportSource = 'editable' | 'imported' | 'switzerlandMobility';
 
 /**
  * Builds an unambiguous local timestamp for the proposed GPX name. The ISO-like
@@ -247,6 +254,7 @@ export default function App() {
 
   const {
     segments: importedRouteSegments,
+    source: importedRouteSource,
     elevationSummary: importedRouteElevationSummary,
     importRouteFile,
     clearImportedRoute,
@@ -407,9 +415,17 @@ export default function App() {
     });
   };
 
-  /** Opens the route-name dialog before any GPX content is generated. */
-  const requestRouteExport = () => {
+  /** Opens the export/share dialog for the current editable or imported route. */
+  const requestCurrentItineraryExport = () => {
+    if (importedRouteSource) {
+      setRouteExportDefaultName(importedRouteSource.name);
+      setRouteExportSource('imported');
+      setIsRouteExportDialogOpen(true);
+      return;
+    }
+
     if (
+      !isRouteCreationActive ||
       isRouteOperationPending ||
       routeHistory.steps.length < 2
     ) {
@@ -451,32 +467,56 @@ export default function App() {
     setIsRouteExportDialogOpen(true);
   };
 
-  /** Downloads the exact displayed route geometry under the chosen route name. */
-  const exportRoute = (routeName: string) => {
-    try {
-      if (routeExportSource === 'switzerlandMobility') {
-        if (switzerlandMobilityHikingPanel?.state !== 'ready') {
-          return;
-        }
+  /** Builds the exact GPX document used by both download and swisstopo transfer. */
+  const createCurrentRouteGpxDocument = (routeName: string): string => {
+    const generatedAt = new Date();
 
-        downloadRouteSegmentsGpx(
-          switzerlandMobilityHikingPanel.route.segments,
-          routeName,
-          switzerlandMobilityHikingPanel.elevation?.points ?? [],
-        );
-      } else {
-        if (isRouteOperationPending) {
-          return;
-        }
-
-        downloadRouteGpx(
-          routeHistory.steps,
-          routeName,
-          routeElevation?.points ?? [],
-          routeHistory.closure,
-        );
+    if (routeExportSource === 'switzerlandMobility') {
+      if (switzerlandMobilityHikingPanel?.state !== 'ready') {
+        throw new Error('The selected SwitzerlandMobility route is unavailable.');
       }
 
+      return createRouteSegmentsGpx(
+        switzerlandMobilityHikingPanel.route.segments,
+        generatedAt,
+        routeName,
+        switzerlandMobilityHikingPanel.elevation?.points ?? [],
+      );
+    }
+
+    if (routeExportSource === 'imported') {
+      if (!importedRouteSource) {
+        throw new Error('The imported GPX route is unavailable.');
+      }
+
+      // Keep provider-specific metadata and extensions from the source GPX;
+      // only the user-facing itinerary name may change in the shared dialog.
+      return createNamedImportedGpxDocument(
+        importedRouteSource.gpxDocument,
+        routeName,
+      );
+    }
+
+    if (isRouteOperationPending) {
+      throw new Error('The editable route is still being updated.');
+    }
+
+    return createRouteGpx(
+      routeHistory.steps,
+      generatedAt,
+      routeName,
+      routeElevation?.points ?? [],
+      routeHistory.closure,
+    );
+  };
+
+  /** Downloads the exact GPX document also used by the swisstopo transfer. */
+  const exportRoute = (routeName: string) => {
+    try {
+      downloadGpxDocument(
+        createCurrentRouteGpxDocument(routeName),
+        routeName,
+      );
       setIsRouteExportDialogOpen(false);
     } catch (error) {
       console.error('Unable to export the route as GPX.', error);
@@ -487,6 +527,13 @@ export default function App() {
     }
   };
 
+  /** Uploads the named GPX only on explicit request and returns its QR hand-off. */
+  const shareRouteWithSwisstopo = async (
+    routeName: string,
+  ): Promise<SwisstopoShare> => {
+    const gpxDocument = createCurrentRouteGpxDocument(routeName);
+    return createSwisstopoShare(gpxDocument);
+  };
 
   return (
     <main
@@ -555,9 +602,6 @@ export default function App() {
           canDelete={
             !isRouteOperationPending && routeHistory.steps.length > 0
           }
-          canExport={
-            !isRouteOperationPending && routeHistory.steps.length > 1
-          }
           onToggle={handleToggleRouteCreation}
           onUndo={undoRoutePoint}
           onRedo={redoRoutePoint}
@@ -565,8 +609,27 @@ export default function App() {
           onReverse={reverseRoute}
           onToggleLoop={toggleRouteLoop}
           onDelete={deleteRoute}
-          onExport={requestRouteExport}
         />
+
+        {(isRouteCreationActive || importedRouteSource) && (
+          <button
+            type="button"
+            className="map-control-button map-control-button--route-export"
+            aria-label={t('route.export')}
+            title={t('route.export')}
+            disabled={
+              isRouteCreationActive &&
+              (isRouteOperationPending || routeHistory.steps.length < 2)
+            }
+            onClick={requestCurrentItineraryExport}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 3v12" />
+              <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+              <path d="M5 18v2h14v-2" />
+            </svg>
+          </button>
+        )}
 
         <RouteImportControl
           onOpen={closeMapInformationPopup}
@@ -783,8 +846,10 @@ export default function App() {
       <RouteExportDialog
         isOpen={isRouteExportDialogOpen}
         defaultName={routeExportDefaultName}
+        canShareWithSwisstopo={isSwisstopoShareConfigured()}
         onCancel={() => setIsRouteExportDialogOpen(false)}
-        onConfirm={exportRoute}
+        onExportGpx={exportRoute}
+        onCreateSwisstopoShare={shareRouteWithSwisstopo}
       />
 
       {status === 'loading' && (

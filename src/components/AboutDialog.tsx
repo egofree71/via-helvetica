@@ -82,13 +82,24 @@ export default function AboutDialog({
     >
       <article className="about-dialog-panel">
         <header className="about-dialog-header">
-          <h2
-            ref={titleRef}
-            id="about-dialog-title"
-            tabIndex={-1}
-          >
-            {t('about.title')}
-          </h2>
+          <div className="about-dialog-heading-row">
+            <h2
+              ref={titleRef}
+              id="about-dialog-title"
+              tabIndex={-1}
+            >
+              {t('about.title')}
+            </h2>
+            <button
+              type="button"
+              className="about-dialog-icon-close"
+              aria-label={t('about.close')}
+              title={t('about.close')}
+              onClick={onClose}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
           <p className="about-dialog-tagline">{t('about.tagline')}</p>
         </header>
 
@@ -226,15 +237,6 @@ export default function AboutDialog({
           </section>
         </div>
 
-        <footer className="about-dialog-footer">
-          <button
-            type="button"
-            className="about-dialog-close"
-            onClick={onClose}
-          >
-            {t('about.close')}
-          </button>
-        </footer>
       </article>
     </dialog>
   );

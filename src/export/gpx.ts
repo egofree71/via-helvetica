@@ -1,10 +1,11 @@
 /**
- * Business context: exports the itinerary currently presented by Via Helvetica
- * as a standalone GPX 1.1 track. Editable sections and independent read-only
- * route segments are simplified within a sub-metre tolerance while preserving
- * endpoints and deliberate gaps. Smoothed elevation samples are embedded when
- * available so compatible applications do not need to rebuild a noisier terrain
- * profile.
+ * Business context: prepares the itinerary currently presented by Via Helvetica
+ * for GPX download or swisstopo transfer. Editable and selected public-route
+ * geometry is serialized as compact GPX 1.1, with each continuous section
+ * simplified within a sub-metre tolerance while preserving endpoints and
+ * deliberate gaps. Imported GPX follows a separate preservation path so its
+ * provider-specific metadata and extensions are not rebuilt unnecessarily.
+ * Smoothed elevation samples are embedded in generated GPX when available.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 import { getDistance } from 'ol/sphere.js';
@@ -105,6 +106,103 @@ function escapeXml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;');
+}
+
+/** Returns one direct child by local name without matching nested GPX nodes. */
+function directChildElement(
+  parent: Element,
+  localName: string,
+): Element | null {
+  for (let index = 0; index < parent.children.length; index += 1) {
+    const child = parent.children.item(index);
+
+    if (child?.localName === localName) {
+      return child;
+    }
+  }
+
+  return null;
+}
+
+/** Creates a GPX element in the same namespace as its parent document. */
+function createGpxElement(document: Document, localName: string): Element {
+  const namespace = document.documentElement.namespaceURI;
+  return namespace
+    ? document.createElementNS(namespace, localName)
+    : document.createElement(localName);
+}
+
+/** Updates or inserts the direct `<name>` child used by GPX itinerary containers. */
+function setDirectGpxName(parent: Element, routeName: string): boolean {
+  const currentName = directChildElement(parent, 'name');
+
+  if (currentName?.textContent?.trim() === routeName) {
+    return false;
+  }
+
+  if (currentName) {
+    currentName.textContent = routeName;
+    return true;
+  }
+
+  const nameElement = createGpxElement(parent.ownerDocument, 'name');
+  nameElement.textContent = routeName;
+  parent.insertBefore(nameElement, parent.firstChild);
+  return true;
+}
+
+/**
+ * Preserves an imported GPX document while applying the name chosen in the
+ * export dialog. Geometry, timestamps, extensions, and provider-specific nodes
+ * remain untouched; only itinerary-level metadata/track/route names are added
+ * or replaced. If the document already carries the requested name everywhere,
+ * the original XML string is returned byte-for-byte.
+ *
+ * @param gpxDocument - Previously validated imported GPX XML.
+ * @param routeName - Name chosen for download or swisstopo transfer.
+ * @returns Original XML or a semantically equivalent GPX with updated names.
+ * @throws {Error} If the retained source is unexpectedly no longer valid GPX.
+ */
+export function createNamedImportedGpxDocument(
+  gpxDocument: string,
+  routeName: string,
+): string {
+  const document = new DOMParser().parseFromString(
+    gpxDocument,
+    'application/xml',
+  );
+
+  if (document.getElementsByTagName('parsererror').length > 0) {
+    throw new Error('The retained imported GPX is invalid XML.');
+  }
+
+  const root = document.documentElement;
+
+  if (!root || root.localName.toLowerCase() !== 'gpx') {
+    throw new Error('The retained imported document is not GPX.');
+  }
+
+  let changed = false;
+  let metadata = directChildElement(root, 'metadata');
+
+  if (!metadata) {
+    metadata = createGpxElement(document, 'metadata');
+    // GPX 1.1 requires metadata before waypoints, routes, and tracks.
+    root.insertBefore(metadata, root.firstChild);
+    changed = true;
+  }
+
+  changed = setDirectGpxName(metadata, routeName) || changed;
+
+  for (let index = 0; index < root.children.length; index += 1) {
+    const child = root.children.item(index);
+
+    if (child && (child.localName === 'trk' || child.localName === 'rte')) {
+      changed = setDirectGpxName(child, routeName) || changed;
+    }
+  }
+
+  return changed ? new XMLSerializer().serializeToString(document) : gpxDocument;
 }
 
 /** Returns squared distance in map units without allocating an OpenLayers geometry. */
@@ -782,10 +880,10 @@ function serializeTrackPoint(point: GpxTrackPoint): string {
   const attributes = `lat="${latitude.toFixed(GPX_COORDINATE_PRECISION)}" lon="${longitude.toFixed(GPX_COORDINATE_PRECISION)}"`;
 
   if (point.elevationMeters === null) {
-    return `      <trkpt ${attributes} />`;
+    return `<trkpt ${attributes}/>`;
   }
 
-  return `      <trkpt ${attributes}>\n        <ele>${point.elevationMeters.toFixed(GPX_ELEVATION_PRECISION)}</ele>\n      </trkpt>`;
+  return `<trkpt ${attributes}><ele>${point.elevationMeters.toFixed(GPX_ELEVATION_PRECISION)}</ele></trkpt>`;
 }
 
 /**
@@ -793,23 +891,21 @@ function serializeTrackPoint(point: GpxTrackPoint): string {
  * source lines.
  *
  * @param segment - Ordered points belonging to one continuous geometry.
- * @returns XML for one `<trkseg>` node.
+ * @returns Compact XML for one `<trkseg>` node.
  */
 function serializeTrackSegment(segment: GpxTrackSegment): string {
-  const serializedTrackPoints = segment.points
-    .map(serializeTrackPoint)
-    .join('\n');
-
-  return `    <trkseg>\n${serializedTrackPoints}\n    </trkseg>`;
+  return `<trkseg>${segment.points.map(serializeTrackPoint).join('')}</trkseg>`;
 }
 
 /**
  * Builds the shared GPX 1.1 envelope around one or more continuous segments.
+ * Formatting whitespace is deliberately omitted because GPX is an interchange
+ * format and compact output reduces both local downloads and temporary uploads.
  *
  * @param trackSegments - Non-empty continuous geometries to serialize.
  * @param generatedAt - Timestamp written to GPX metadata.
  * @param routeName - Track name written to metadata and track nodes.
- * @returns Complete UTF-8 GPX 1.1 XML document.
+ * @returns Complete compact UTF-8 GPX 1.1 XML document.
  */
 function createGpxDocument(
   trackSegments: GpxTrackSegment[],
@@ -819,23 +915,17 @@ function createGpxDocument(
   const trackPoints = trackSegments.flatMap((segment) => segment.points);
   const serializedTrackSegments = trackSegments
     .map(serializeTrackSegment)
-    .join('\n');
+    .join('');
   const serializedBounds = serializeBounds(calculateTrackBounds(trackPoints));
   const escapedRouteName = escapeXml(routeName);
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Via Helvetica" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
-  <metadata>
-    <name>${escapedRouteName}</name>
-    <time>${generatedAt.toISOString()}</time>
-    ${serializedBounds}
-  </metadata>
-  <trk>
-    <name>${escapedRouteName}</name>
-${serializedTrackSegments}
-  </trk>
-</gpx>
-`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<gpx version="1.1" creator="Via Helvetica" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">` +
+    `<metadata><name>${escapedRouteName}</name><time>${generatedAt.toISOString()}</time>${serializedBounds}</metadata>` +
+    `<trk><name>${escapedRouteName}</name>${serializedTrackSegments}</trk>` +
+    `</gpx>`
+  );
 }
 
 /**
@@ -960,7 +1050,10 @@ export function createRouteSegmentsGpx(
  * @param gpxDocument - Complete GPX XML payload.
  * @param routeName - Name used to derive the portable download filename.
  */
-function downloadGpxDocument(gpxDocument: string, routeName: string): void {
+export function downloadGpxDocument(
+  gpxDocument: string,
+  routeName: string,
+): void {
   const blob = new Blob([gpxDocument], {
     type: 'application/gpx+xml;charset=utf-8',
   });

@@ -3,7 +3,10 @@
  * lose almost all usable map space to desktop-oriented fit padding.
  */
 import { describe, expect, it } from 'vitest';
-import { calculateImportedRouteFitPadding } from './useImportedRoute';
+import {
+  calculateImportedRouteFitPadding,
+  snapImportedRouteFitResolution,
+} from './useImportedRoute';
 
 describe('calculateImportedRouteFitPadding', () => {
   it('keeps the intended margins on a sufficiently large viewport', () => {
@@ -26,5 +29,20 @@ describe('calculateImportedRouteFitPadding', () => {
 
     expect(200 - padding[1] - padding[3]).toBeGreaterThanOrEqual(160);
     expect(200 - padding[0] - padding[2]).toBeGreaterThanOrEqual(160);
+  });
+});
+
+describe('snapImportedRouteFitResolution', () => {
+  it('uses the next coarser native WMTS matrix so the complete route still fits', () => {
+    expect(snapImportedRouteFitResolution(3.2)).toBe(5);
+    expect(snapImportedRouteFitResolution(0.8)).toBe(1);
+  });
+
+  it('skips unpublished matrix 24 instead of resampling the standard base map', () => {
+    expect(snapImportedRouteFitResolution(1.4)).toBe(2);
+  });
+
+  it('never frames a short GPX beyond the configured native maximum zoom', () => {
+    expect(snapImportedRouteFitResolution(0.2)).toBe(0.5);
   });
 });

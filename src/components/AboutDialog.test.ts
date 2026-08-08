@@ -1,5 +1,5 @@
 /**
- * Business context: protects the About dialog's single explicit dismissal and
+ * Business context: protects the About dialog's consistent header dismissal and
  * ensures its initial focus announces the information panel instead of making
  * the first project link appear preselected.
  */
@@ -81,7 +81,7 @@ describe('AboutDialog', () => {
     vi.restoreAllMocks();
   });
 
-  it('focuses the title and exposes one explicit close button', async () => {
+  it('focuses the title and exposes one header close button', async () => {
     const onClose = vi.fn();
 
     await act(async () => {
@@ -100,15 +100,19 @@ describe('AboutDialog', () => {
     expect(document.activeElement).toBe(
       container.querySelector('#about-dialog-title'),
     );
-    expect(container.querySelector('.about-dialog-icon-close')).toBeNull();
+    expect(container.querySelector('.about-dialog-footer')).toBeNull();
     expect(container.querySelectorAll('.about-dialog button')).toHaveLength(1);
-    expect(container.textContent).toContain('1.3.0');
-
-    const closeButton = container.querySelector<HTMLButtonElement>(
-      '.about-dialog-close',
+    expect(container.textContent).toContain('1.4.0');
+    expect(container.textContent).toContain(
+      'le fichier GPX est hébergé pendant 24 heures, sans être associé à votre identité',
     );
 
-    expect(closeButton?.textContent).toBe('Fermer');
+    const closeButton = container.querySelector<HTMLButtonElement>(
+      '.about-dialog-icon-close',
+    );
+
+    expect(closeButton?.getAttribute('aria-label')).toBe('Fermer');
+    expect(closeButton?.textContent).toBe('×');
 
     await act(async () => {
       closeButton?.click();
