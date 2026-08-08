@@ -21,10 +21,16 @@ import TrailClosurePopup from './components/TrailClosurePopup';
 import SwitzerlandMobilityHikingPanel from './components/SwitzerlandMobilityHikingPanel';
 import RouteStatistics from './components/RouteStatistics';
 import {
-  downloadRouteGpx,
-  downloadRouteSegmentsGpx,
+  createRouteGpx,
+  createRouteSegmentsGpx,
+  downloadGpxDocument,
 } from './export/gpx';
 import { useI18n } from './i18n/I18nContext';
+import {
+  createSwisstopoShare,
+  isSwisstopoShareConfigured,
+  type SwisstopoShare,
+} from './share/swisstopoShare';
 import {
   COORDINATE_SEARCH_ZOOM,
   isWgs84CoordinateInsideMapBounds,
@@ -451,32 +457,43 @@ export default function App() {
     setIsRouteExportDialogOpen(true);
   };
 
-  /** Downloads the exact displayed route geometry under the chosen route name. */
-  const exportRoute = (routeName: string) => {
-    try {
-      if (routeExportSource === 'switzerlandMobility') {
-        if (switzerlandMobilityHikingPanel?.state !== 'ready') {
-          return;
-        }
+  /** Builds the exact GPX document used by both download and swisstopo transfer. */
+  const createCurrentRouteGpxDocument = (routeName: string): string => {
+    const generatedAt = new Date();
 
-        downloadRouteSegmentsGpx(
-          switzerlandMobilityHikingPanel.route.segments,
-          routeName,
-          switzerlandMobilityHikingPanel.elevation?.points ?? [],
-        );
-      } else {
-        if (isRouteOperationPending) {
-          return;
-        }
-
-        downloadRouteGpx(
-          routeHistory.steps,
-          routeName,
-          routeElevation?.points ?? [],
-          routeHistory.closure,
-        );
+    if (routeExportSource === 'switzerlandMobility') {
+      if (switzerlandMobilityHikingPanel?.state !== 'ready') {
+        throw new Error('The selected SwitzerlandMobility route is unavailable.');
       }
 
+      return createRouteSegmentsGpx(
+        switzerlandMobilityHikingPanel.route.segments,
+        generatedAt,
+        routeName,
+        switzerlandMobilityHikingPanel.elevation?.points ?? [],
+      );
+    }
+
+    if (isRouteOperationPending) {
+      throw new Error('The editable route is still being updated.');
+    }
+
+    return createRouteGpx(
+      routeHistory.steps,
+      generatedAt,
+      routeName,
+      routeElevation?.points ?? [],
+      routeHistory.closure,
+    );
+  };
+
+  /** Downloads the exact GPX document also used by the swisstopo transfer. */
+  const exportRoute = (routeName: string) => {
+    try {
+      downloadGpxDocument(
+        createCurrentRouteGpxDocument(routeName),
+        routeName,
+      );
       setIsRouteExportDialogOpen(false);
     } catch (error) {
       console.error('Unable to export the route as GPX.', error);
@@ -487,6 +504,13 @@ export default function App() {
     }
   };
 
+  /** Uploads the named GPX only on explicit request and returns its QR hand-off. */
+  const shareRouteWithSwisstopo = async (
+    routeName: string,
+  ): Promise<SwisstopoShare> => {
+    const gpxDocument = createCurrentRouteGpxDocument(routeName);
+    return createSwisstopoShare(gpxDocument);
+  };
 
   return (
     <main
@@ -783,8 +807,10 @@ export default function App() {
       <RouteExportDialog
         isOpen={isRouteExportDialogOpen}
         defaultName={routeExportDefaultName}
+        canShareWithSwisstopo={isSwisstopoShareConfigured()}
         onCancel={() => setIsRouteExportDialogOpen(false)}
-        onConfirm={exportRoute}
+        onExportGpx={exportRoute}
+        onCreateSwisstopoShare={shareRouteWithSwisstopo}
       />
 
       {status === 'loading' && (

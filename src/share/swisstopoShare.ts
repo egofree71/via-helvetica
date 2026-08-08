@@ -1,0 +1,132 @@
+/**
+ * Business context: bridges a locally generated Via Helvetica GPX document to
+ * swisstopo's documented `/u/` hand-off. The GPX is uploaded only when the user
+ * explicitly requests swisstopo transfer; the configured Worker returns a
+ * temporary public URL that swisstopo can fetch from the phone.
+ */
+import { QR_MAX_TEXT_BYTES } from './qrCode';
+
+/** Official web hand-off prefix documented by swisstopo for external GPX URLs. */
+const SWISSTOPO_IMPORT_URL_PREFIX = 'https://swisstopo.app/u/';
+/** One upload should fail quickly instead of leaving the export dialog busy indefinitely. */
+const SWISSTOPO_SHARE_REQUEST_TIMEOUT_MS = 15_000;
+
+/** Temporary route hand-off returned after a successful GPX upload. */
+export interface SwisstopoShare {
+  /** Public temporary GPX URL consumed by swisstopo. */
+  gpxUrl: string;
+  /** Official swisstopo hand-off URL encoded into the QR code. */
+  swisstopoUrl: string;
+  /** ISO expiration time supplied by the Worker, or `null` if omitted. */
+  expiresAt: string | null;
+}
+
+/** Worker response contract intentionally kept smaller than the GPX payload. */
+interface ShareUploadResponse {
+  gpxUrl?: unknown;
+  expiresAt?: unknown;
+}
+
+/** Reads the optional Worker base URL at call time so Vite test env stubs work. */
+function getShareServiceBaseUrl(): string {
+  return (import.meta.env.VITE_SWISSTOPO_SHARE_SERVICE_URL ?? '')
+    .trim()
+    .replace(/\/+$/, '');
+}
+
+/** Returns whether the optional swisstopo hand-off Worker is configured. */
+export function isSwisstopoShareConfigured(): boolean {
+  return getShareServiceBaseUrl().length > 0;
+}
+
+/** Encodes an ordinary URL with RFC 4648 base64url without padding. */
+export function encodeBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return window
+    .btoa(binary)
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/u, '');
+}
+
+/** Builds the official swisstopo `/u/` URL for one temporary public GPX URL. */
+export function createSwisstopoImportUrl(gpxUrl: string): string {
+  const parsedUrl = new URL(gpxUrl);
+
+  if (parsedUrl.protocol !== 'https:') {
+    throw new Error('The temporary GPX URL must use HTTPS.');
+  }
+
+  const swisstopoUrl = `${SWISSTOPO_IMPORT_URL_PREFIX}${encodeBase64Url(parsedUrl.toString())}`;
+  const payloadLength = new TextEncoder().encode(swisstopoUrl).length;
+
+  if (payloadLength > QR_MAX_TEXT_BYTES) {
+    throw new Error(
+      'The configured GPX share URL is too long for the built-in QR encoder.',
+    );
+  }
+
+  return swisstopoUrl;
+}
+
+/**
+ * Uploads one already-generated GPX document and prepares its swisstopo QR URL.
+ *
+ * @param gpxDocument - Complete GPX 1.1 XML produced by the existing exporter.
+ * @returns Temporary GPX URL, swisstopo import URL, and optional expiration time.
+ * @throws {Error} If the Worker is not configured, rejects the upload, returns
+ * malformed data, or produces a URL that cannot be encoded safely.
+ */
+export async function createSwisstopoShare(
+  gpxDocument: string,
+): Promise<SwisstopoShare> {
+  const serviceBaseUrl = getShareServiceBaseUrl();
+
+  if (!serviceBaseUrl) {
+    throw new Error('The swisstopo GPX share service is not configured.');
+  }
+
+  const abortController = new AbortController();
+  const timeoutId = window.setTimeout(
+    () => abortController.abort(),
+    SWISSTOPO_SHARE_REQUEST_TIMEOUT_MS,
+  );
+
+  try {
+    const response = await fetch(`${serviceBaseUrl}/gpx`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/gpx+xml;charset=utf-8',
+      },
+      body: gpxDocument,
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: abortController.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`GPX share upload failed with HTTP ${response.status}.`);
+    }
+
+    const payload = (await response.json()) as ShareUploadResponse;
+
+    if (typeof payload.gpxUrl !== 'string' || payload.gpxUrl.length === 0) {
+      throw new Error('The GPX share service returned no public URL.');
+    }
+
+    return {
+      gpxUrl: payload.gpxUrl,
+      swisstopoUrl: createSwisstopoImportUrl(payload.gpxUrl),
+      expiresAt:
+        typeof payload.expiresAt === 'string' ? payload.expiresAt : null,
+    };
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}

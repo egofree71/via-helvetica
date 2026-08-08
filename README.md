@@ -5,8 +5,11 @@
 
 Via Helvetica is a free, open-source web application for planning hiking
 routes in Switzerland with official swisstopo maps and geodata. It stays
-focused on one route at a time and runs entirely in the browser, so the public
-application can remain usable without an account or a project-owned backend.
+focused on one route at a time. Core planning and normal GPX export run entirely
+in the browser; an optional tiny Cloudflare Worker can host a GPX temporarily
+when the user explicitly asks to transfer it to the swisstopo app: desktop
+users get a QR code, while small touch devices open the swisstopo hand-off
+directly.
 
 Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 
@@ -36,7 +39,7 @@ Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 | Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, persistent visibility and opacity controls for information layers, place and WGS 84/LV95 coordinate search, geolocation, scale, and fullscreen mode |
 | Route planning | Editable ordered waypoints, start and finish markers, sparse direction arrows, optional swissTLM3D snapping in a dedicated routing Worker, undo, redo, reversal, loop closure, route deletion, and straight fallback segments when no routable path is found |
 | Route information | Distance, ascent, descent, Swiss hiking-time estimate, and a collapsible elevation profile with pointer synchronisation between the chart and the map |
-| Import and export | Read-only GPX loading with route statistics and elevation profile, plus named GPX export for editable and selected SwitzerlandMobility routes with simplified geometry and smoothed elevations when available |
+| Import and export | Read-only GPX loading with route statistics and elevation profile, named GPX export for editable and selected SwitzerlandMobility routes, plus an optional swisstopo hand-off that temporarily exposes the same GPX, using a QR code on desktop and a direct app link on small touch devices |
 | Safety | Official hiking-trail closures and detours, plus military shooting notices and danger zones with localized details |
 | Public transport | Passenger-relevant stops, mode-specific symbols, next departures grouped by date, and links to the official SBB/CFF/FFS timetable |
 | Interface | Compact floating controls, no permanent toolbar, French, German, Italian, and English translations with shareable localized URLs, a one-time release-highlights dialog, and localized About and static release-history pages |
@@ -44,11 +47,14 @@ Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 ## Project principles
 
 Via Helvetica deliberately keeps route planning in the browser. Users do not
-need to register, routes are not uploaded to a project-owned server, and static
-hosting keeps recurring operating costs as low as possible. Routes are not
-saved locally; the browser stores only interface preferences and release
-acknowledgements. External official services still receive the bounded requests
-required for maps, geodata, elevation, routing fallback, and departures.
+need to register, routes are not persistently stored by the project, and static
+hosting keeps recurring operating costs as low as possible. Normal GPX download
+remains local. If the optional swisstopo hand-off is configured, the exact GPX
+is uploaded only after an explicit user action, receives an unguessable temporary
+URL, and is deleted after a short lifetime. The browser otherwise stores only
+interface preferences and release acknowledgements. External official services
+still receive the bounded requests required for maps, geodata, elevation,
+routing fallback, and departures.
 
 The router is an interactive planning aid rather than an autonomous navigation
 system. The official hiking portrayal remains visible on the map, and users can
@@ -76,7 +82,10 @@ http://localhost:5173/
 No local routing-data configuration is required for a normal development start:
 GeoAdmin remains available as a fallback. To test the published precomputed
 routing dataset locally, set `VITE_ROUTING_DATA_BASE_URL` in `.env.local`; see
-[Offline routing-data generation](#offline-routing-data-generation).
+[Offline routing-data generation](#offline-routing-data-generation). To test the
+optional swisstopo hand-off, deploy the Worker example below
+`workers/swisstopo-gpx-share/` and set `VITE_SWISSTOPO_SHARE_SERVICE_URL` to its
+public HTTPS origin. Without that variable the extra action stays hidden.
 
 ## Offline routing-data generation
 
@@ -140,6 +149,9 @@ Machine-specific infrastructure and credentials remain outside version control.
 - Imported GPX routes reuse embedded elevations when available, otherwise the
   profile is requested from GeoAdmin.
 - Export the current editable route as a named GPX file with route statistics.
+- When the optional share Worker is configured, use **Open in swisstopo** to
+  upload that same named GPX temporarily and display a QR code for the official
+  `swisstopo.app/u/` hand-off. The normal GPX export remains purely local.
 - Starting a new route replaces the imported itinerary.
 
 ### Inspect route and map information
@@ -208,8 +220,9 @@ retries, and session fallback are documented in
   route calculation.
 - Imported GPX and selected SwitzerlandMobility routes are read-only and replace
   the previous current itinerary.
-- Routes are not persisted locally or remotely. Export the current itinerary
-  as GPX before leaving or reloading the application if you want to keep it.
+- Routes are not saved as a local or remote route library. Export the current
+  itinerary as GPX before leaving or reloading the application if you want to
+  keep it; swisstopo hand-off objects are temporary transfer files only.
 - External map, elevation, routing, and timetable services can be temporarily
   unavailable or incomplete.
 
@@ -228,7 +241,7 @@ retries, and session fallback are documented in
 ## Regression tests
 
 The focused Vitest suite covers immutable route transformations, route editing,
-GPX parsing and export, route metrics, directional-arrow placement,
+GPX parsing and export, swisstopo hand-off URL and QR generation, route metrics, directional-arrow placement,
 location-search provider normalization, local WGS 84/LV95 coordinate parsing,
 rendered-layer provider contracts, default opacity and persistence,
 release acknowledgement and localized history content, passenger-stop filtering
@@ -269,7 +282,9 @@ The repository includes a GitHub Actions workflow that builds and deploys the
 application to GitHub Pages after a push to `main`. GitHub Pages must use
 **GitHub Actions** as its deployment source. The production site is served from
 the custom domain root at [viahelvetica.ch](https://viahelvetica.ch/), so Vite
-uses `base: '/'` for generated assets.
+uses `base: '/'` for generated assets. `VITE_SWISSTOPO_SHARE_SERVICE_URL` is an
+optional GitHub Actions variable; if absent, production behaves exactly as the
+frontend-only application and the swisstopo transfer action is not rendered.
 
 ## Contributing
 

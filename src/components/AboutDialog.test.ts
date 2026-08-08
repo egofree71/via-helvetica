@@ -103,6 +103,9 @@ describe('AboutDialog', () => {
     expect(container.querySelector('.about-dialog-icon-close')).toBeNull();
     expect(container.querySelectorAll('.about-dialog button')).toHaveLength(1);
     expect(container.textContent).toContain('1.3.0');
+    expect(container.textContent).toContain(
+      'le fichier GPX est hébergé pendant 24 heures, sans être associé à votre identité',
+    );
 
     const closeButton = container.querySelector<HTMLButtonElement>(
       '.about-dialog-close',

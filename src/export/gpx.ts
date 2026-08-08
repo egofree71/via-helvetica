@@ -960,7 +960,10 @@ export function createRouteSegmentsGpx(
  * @param gpxDocument - Complete GPX XML payload.
  * @param routeName - Name used to derive the portable download filename.
  */
-function downloadGpxDocument(gpxDocument: string, routeName: string): void {
+export function downloadGpxDocument(
+  gpxDocument: string,
+  routeName: string,
+): void {
   const blob = new Blob([gpxDocument], {
     type: 'application/gpx+xml;charset=utf-8',
   });

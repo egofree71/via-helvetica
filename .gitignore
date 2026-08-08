@@ -41,3 +41,6 @@ Thumbs.db
 
 # Maintainer-only routing publication notes
 /docs/ROUTING_DATA_PUBLICATION_RUNBOOK.local.md
+
+# Local Cloudflare Worker deployment configuration
+/workers/swisstopo-gpx-share/wrangler.toml

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../i18n/I18nContext';
 import RouteExportDialog from './RouteExportDialog';
 
-describe('RouteExportDialog initial selection', () => {
+describe('RouteExportDialog', () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
   let originalShowModal: PropertyDescriptor | undefined;
@@ -88,8 +88,10 @@ describe('RouteExportDialog initial selection', () => {
             createElement(RouteExportDialog, {
               isOpen,
               defaultName,
+              canShareWithSwisstopo: false,
               onCancel: vi.fn(),
-              onConfirm: vi.fn(),
+              onExportGpx: vi.fn(),
+              onCreateSwisstopoShare: vi.fn(),
             }),
           ),
         );
@@ -109,5 +111,115 @@ describe('RouteExportDialog initial selection', () => {
     expect(document.activeElement).toBe(input);
     expect(input?.selectionStart).toBe(0);
     expect(input?.selectionEnd).toBe(generatedName.length);
+  });
+
+  it('presents two stacked peer actions and reveals a QR after an explicit desktop request', async () => {
+    const onExportGpx = vi.fn();
+    const onCreateSwisstopoShare = vi.fn().mockResolvedValue({
+      gpxUrl:
+        'https://share.example.org/gpx/12345678-1234-1234-1234-123456789abc.gpx',
+      swisstopoUrl:
+        'https://swisstopo.app/u/aHR0cHM6Ly9zaGFyZS5leGFtcGxlLm9yZy9ncHgvMTIzNDU2NzgtMTIzNC0xMjM0LTEyMzQtMTIzNDU2Nzg5YWJjLmdweA',
+      expiresAt: '2026-08-09T12:00:00.000Z',
+    });
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(RouteExportDialog, {
+            isOpen: true,
+            defaultName: 'Test route',
+            canShareWithSwisstopo: true,
+            onCancel: vi.fn(),
+            onExportGpx,
+            onCreateSwisstopoShare,
+          }),
+        ),
+      );
+    });
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const closeButton = container.querySelector<HTMLButtonElement>(
+      '.route-export-dialog-close',
+    );
+    const exportButton = buttons.find(
+      (button) => button.textContent === 'Export the GPX file',
+    );
+    const shareButton = buttons.find(
+      (button) =>
+        button.textContent === 'Create a QR code to import into swisstopo',
+    );
+
+    expect(closeButton?.getAttribute('aria-label')).toBe('Close');
+    expect(exportButton).toBeDefined();
+    expect(shareButton).toBeDefined();
+    expect(exportButton?.className).toBe('route-export-dialog-button');
+    expect(shareButton?.className).toBe('route-export-dialog-button');
+    expect(
+      container.querySelector('.route-export-dialog-storage-note')?.textContent,
+    ).toContain('hosted for 24 hours without being associated with your identity');
+
+    await act(async () => {
+      shareButton?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(onCreateSwisstopoShare).toHaveBeenCalledWith('Test route');
+    expect(container.querySelector('.route-export-dialog-qr')).not.toBeNull();
+    expect(
+      container.querySelector('.route-export-dialog-share-copy')?.textContent,
+    ).not.toContain('hosted for 24 hours');
+    expect(
+      Array.from(container.querySelectorAll('button')).some(
+        (button) =>
+          button.textContent === 'Create a QR code to import into swisstopo',
+      ),
+    ).toBe(false);
+  });
+
+  it('offers a direct swisstopo app action on a small coarse-pointer device', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        matches: true,
+        media: '',
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(RouteExportDialog, {
+            isOpen: true,
+            defaultName: 'Mobile route',
+            canShareWithSwisstopo: true,
+            onCancel: vi.fn(),
+            onExportGpx: vi.fn(),
+            onCreateSwisstopoShare: vi.fn(),
+          }),
+        ),
+      );
+    });
+
+    const buttonLabels = Array.from(container.querySelectorAll('button')).map(
+      (button) => button.textContent,
+    );
+
+    expect(buttonLabels).toContain('Open in the swisstopo app');
+    expect(buttonLabels).not.toContain(
+      'Create a QR code to import into swisstopo',
+    );
   });
 });

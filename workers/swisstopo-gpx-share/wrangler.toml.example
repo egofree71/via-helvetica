@@ -1,0 +1,22 @@
+# Copy this file to wrangler.toml before deploying the optional swisstopo share Worker.
+name = "via-helvetica-swisstopo-share"
+main = "src/index.js"
+compatibility_date = "2026-08-08"
+
+# Bind either a dedicated R2 bucket or the existing Via Helvetica R2 bucket.
+# Temporary objects stay isolated below the `swisstopo-share/` prefix.
+[[r2_buckets]]
+binding = "GPX_BUCKET"
+bucket_name = "REPLACE_WITH_R2_BUCKET_NAME"
+
+[vars]
+# Comma-separated origins allowed to POST GPX files. Add other local ports only when needed.
+ALLOWED_ORIGINS = "http://localhost:5173,https://viahelvetica.ch"
+# Optional. Leave empty when the Worker origin itself is the public GPX origin.
+GPX_PUBLIC_BASE_URL = ""
+# Prototype default: 24 hours. The Worker caps this value at seven days.
+SHARE_TTL_SECONDS = "86400"
+
+[triggers]
+# Removes expired temporary objects even when nobody requests them again.
+crons = ["17 * * * *"]

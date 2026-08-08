@@ -1710,7 +1710,7 @@ select {
 }
 
 .route-export-dialog {
-  width: min(28rem, calc(100vw - 2rem));
+  width: min(31rem, calc(100vw - 2rem));
   max-width: none;
   padding: 0;
   border: 0;
@@ -1728,18 +1728,58 @@ select {
 .route-export-dialog-form {
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
-  padding: 1.2rem;
+  gap: 0.75rem;
+  padding: 1.25rem;
   border: 1px solid rgb(32 47 60 / 22%);
   border-radius: 12px;
   background: rgb(255 255 255 / 98%);
   box-shadow: 0 14px 42px rgb(0 0 0 / 28%);
 }
 
+.route-export-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.2rem;
+}
+
 .route-export-dialog-form h2 {
-  margin: 0 0 0.25rem;
+  margin: 0;
   font-size: 1.15rem;
   line-height: 1.3;
+}
+
+.route-export-dialog-close {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  color: #4f5d67;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.route-export-dialog-close:hover {
+  color: #17212b;
+  background: rgb(32 47 60 / 8%);
+}
+
+.route-export-dialog-close:focus-visible {
+  outline: 3px solid rgb(23 105 224 / 38%);
+  outline-offset: 2px;
+}
+
+.route-export-dialog-close:disabled {
+  color: #a7adb2;
+  background: transparent;
+  cursor: not-allowed;
 }
 
 .route-export-dialog-form label {
@@ -1770,20 +1810,38 @@ select {
   line-height: 1.4;
 }
 
-.route-export-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.65rem;
+.route-export-dialog-options {
+  display: grid;
+  gap: 0.9rem;
   margin-top: 0.45rem;
 }
 
+.route-export-dialog-swisstopo-option {
+  display: grid;
+  gap: 0.45rem;
+}
+
 .route-export-dialog-button {
-  min-width: 6.5rem;
-  height: 2.65rem;
-  padding: 0 1rem;
+  display: inline-flex;
+  width: 100%;
+  min-height: 3rem;
+  height: auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  border: 1px solid #1769e0;
   border-radius: 8px;
+  color: #ffffff;
+  background: #1769e0;
   cursor: pointer;
   font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+}
+
+.route-export-dialog-button:hover {
+  background: #125ac2;
 }
 
 .route-export-dialog-button:focus-visible {
@@ -1791,31 +1849,93 @@ select {
   outline-offset: 2px;
 }
 
-.route-export-dialog-button--secondary {
-  border: 1px solid rgb(32 47 60 / 26%);
-  color: #27343e;
-  background: #ffffff;
-}
-
-.route-export-dialog-button--secondary:hover {
-  background: #f3f5f6;
-}
-
-.route-export-dialog-button--primary {
-  border: 1px solid #1769e0;
-  color: #ffffff;
-  background: #1769e0;
-}
-
-.route-export-dialog-button--primary:hover {
-  background: #125ac2;
-}
-
-.route-export-dialog-button--primary:disabled {
+.route-export-dialog-button:disabled {
   border-color: #c8ccd0;
   color: #8a9299;
   background: #e6e8ea;
   cursor: not-allowed;
+}
+
+.route-export-dialog-form .route-export-dialog-storage-note {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  padding: 0 0.15rem;
+  color: #475569;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.route-export-dialog-storage-note-icon {
+  flex: 0 0 auto;
+  margin-top: 0.02rem;
+  color: #475569;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.route-export-dialog-share {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 9rem;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 0.2rem;
+  padding: 0.9rem;
+  border: 1px solid rgb(32 47 60 / 18%);
+  border-radius: 10px;
+  background: #f5f8fb;
+}
+
+.route-export-dialog-share-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+  color: #33414c;
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.route-export-dialog-share-copy strong {
+  color: #17212b;
+  font-size: 0.95rem;
+}
+
+.route-export-dialog-qr {
+  display: block;
+  width: 9rem;
+  height: 9rem;
+  border: 1px solid rgb(32 47 60 / 18%);
+  background: #ffffff;
+}
+
+.route-export-dialog-mobile-fallback {
+  margin-top: 0.2rem;
+}
+
+.route-export-dialog-form .route-export-dialog-error {
+  color: #b42318;
+  font-weight: 600;
+}
+
+@media (max-width: 36rem) {
+  .route-export-dialog {
+    width: min(100% - 1rem, 31rem);
+  }
+
+  .route-export-dialog-form {
+    padding: 1rem;
+  }
+
+  .route-export-dialog-share {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .route-export-dialog-share-copy {
+    align-items: center;
+    text-align: center;
+  }
 }
 
 .route-message {
