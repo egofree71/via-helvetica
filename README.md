@@ -39,7 +39,7 @@ Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 | Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, persistent visibility and opacity controls for information layers, place and WGS 84/LV95 coordinate search, geolocation, scale, and fullscreen mode |
 | Route planning | Editable ordered waypoints, start and finish markers, sparse direction arrows, optional swissTLM3D snapping in a dedicated routing Worker, undo, redo, reversal, loop closure, route deletion, and straight fallback segments when no routable path is found |
 | Route information | Distance, ascent, descent, Swiss hiking-time estimate, and a collapsible elevation profile with pointer synchronisation between the chart and the map |
-| Import and export | Read-only GPX loading with route statistics and elevation profile, named GPX export for editable and selected SwitzerlandMobility routes, plus an optional swisstopo hand-off that temporarily exposes the same GPX, using a QR code on desktop and a direct app link on small touch devices |
+| Import and export | Read-only GPX loading with route statistics and elevation profile, named GPX export for editable, imported, and selected SwitzerlandMobility routes, plus an optional swisstopo hand-off that temporarily exposes the current GPX, using a QR code on desktop and a direct app link on small touch devices |
 | Safety | Official hiking-trail closures and detours, plus military shooting notices and danger zones with localized details |
 | Public transport | Passenger-relevant stops, mode-specific symbols, next departures grouped by date, and links to the official SBB/CFF/FFS timetable |
 | Interface | Compact floating controls, no permanent toolbar, French, German, Italian, and English translations with shareable localized URLs, a one-time release-highlights dialog, and localized About and static release-history pages |
@@ -148,7 +148,9 @@ Machine-specific infrastructure and credentials remain outside version control.
 - Load a GPX file as the current purple, read-only itinerary.
 - Imported GPX routes reuse embedded elevations when available, otherwise the
   profile is requested from GeoAdmin.
-- Export the current editable route as a named GPX file with route statistics.
+- Export the current editable route or loaded GPX as a named GPX file. Imported
+  GPX content is retained only while it is the current read-only itinerary so its
+  original metadata and extensions can be preserved when exporting or sharing it.
 - When the optional share Worker is configured, use **Open in swisstopo** to
   upload that same named GPX temporarily and display a QR code for the official
   `swisstopo.app/u/` hand-off. The normal GPX export remains purely local.

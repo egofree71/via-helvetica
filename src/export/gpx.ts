@@ -107,6 +107,103 @@ function escapeXml(value: string): string {
     .replaceAll("'", '&apos;');
 }
 
+/** Returns one direct child by local name without matching nested GPX nodes. */
+function directChildElement(
+  parent: Element,
+  localName: string,
+): Element | null {
+  for (let index = 0; index < parent.children.length; index += 1) {
+    const child = parent.children.item(index);
+
+    if (child?.localName === localName) {
+      return child;
+    }
+  }
+
+  return null;
+}
+
+/** Creates a GPX element in the same namespace as its parent document. */
+function createGpxElement(document: Document, localName: string): Element {
+  const namespace = document.documentElement.namespaceURI;
+  return namespace
+    ? document.createElementNS(namespace, localName)
+    : document.createElement(localName);
+}
+
+/** Updates or inserts the direct `<name>` child used by GPX itinerary containers. */
+function setDirectGpxName(parent: Element, routeName: string): boolean {
+  const currentName = directChildElement(parent, 'name');
+
+  if (currentName?.textContent?.trim() === routeName) {
+    return false;
+  }
+
+  if (currentName) {
+    currentName.textContent = routeName;
+    return true;
+  }
+
+  const nameElement = createGpxElement(parent.ownerDocument, 'name');
+  nameElement.textContent = routeName;
+  parent.insertBefore(nameElement, parent.firstChild);
+  return true;
+}
+
+/**
+ * Preserves an imported GPX document while applying the name chosen in the
+ * export dialog. Geometry, timestamps, extensions, and provider-specific nodes
+ * remain untouched; only itinerary-level metadata/track/route names are added
+ * or replaced. If the document already carries the requested name everywhere,
+ * the original XML string is returned byte-for-byte.
+ *
+ * @param gpxDocument - Previously validated imported GPX XML.
+ * @param routeName - Name chosen for download or swisstopo transfer.
+ * @returns Original XML or a semantically equivalent GPX with updated names.
+ * @throws {Error} If the retained source is unexpectedly no longer valid GPX.
+ */
+export function createNamedImportedGpxDocument(
+  gpxDocument: string,
+  routeName: string,
+): string {
+  const document = new DOMParser().parseFromString(
+    gpxDocument,
+    'application/xml',
+  );
+
+  if (document.getElementsByTagName('parsererror').length > 0) {
+    throw new Error('The retained imported GPX is invalid XML.');
+  }
+
+  const root = document.documentElement;
+
+  if (!root || root.localName.toLowerCase() !== 'gpx') {
+    throw new Error('The retained imported document is not GPX.');
+  }
+
+  let changed = false;
+  let metadata = directChildElement(root, 'metadata');
+
+  if (!metadata) {
+    metadata = createGpxElement(document, 'metadata');
+    // GPX 1.1 requires metadata before waypoints, routes, and tracks.
+    root.insertBefore(metadata, root.firstChild);
+    changed = true;
+  }
+
+  changed = setDirectGpxName(metadata, routeName) || changed;
+
+  for (let index = 0; index < root.children.length; index += 1) {
+    const child = root.children.item(index);
+
+    if (child && (child.localName === 'trk' || child.localName === 'rte')) {
+      changed = setDirectGpxName(child, routeName) || changed;
+    }
+  }
+
+  return changed ? new XMLSerializer().serializeToString(document) : gpxDocument;
+}
+
 /** Returns squared distance in map units without allocating an OpenLayers geometry. */
 function coordinateDistanceSquared(
   first: Coordinate,

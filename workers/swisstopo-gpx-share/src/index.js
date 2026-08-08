@@ -6,7 +6,7 @@
  * Routing, user state, and normal GPX export remain entirely browser-side.
  */
 
-/** Prefix isolates temporary shares from immutable routing objects in the same bucket. */
+/** Prefix keeps temporary shares grouped inside the dedicated GPX share bucket. */
 const SHARE_PREFIX = 'swisstopo-share/';
 /** GPX payloads are small; this cap blocks use as a generic file-hosting endpoint. */
 const MAX_GPX_BYTES = 2 * 1024 * 1024;
@@ -70,10 +70,14 @@ function shareTtlSeconds(env) {
 
 /** Performs shallow GPX validation without turning the Worker into an XML parser. */
 function isPlausibleGpx(document) {
+  const hasTrack =
+    /<trk(?:\s|>)/iu.test(document) && /<trkpt(?:\s|>)/iu.test(document);
+  const hasRoute =
+    /<rte(?:\s|>)/iu.test(document) && /<rtept(?:\s|>)/iu.test(document);
+
   return (
     /<gpx(?:\s|>)/iu.test(document) &&
-    /<trk(?:\s|>)/iu.test(document) &&
-    /<trkpt(?:\s|>)/iu.test(document) &&
+    (hasTrack || hasRoute) &&
     !/<!DOCTYPE/iu.test(document) &&
     !/<!ENTITY/iu.test(document)
   );

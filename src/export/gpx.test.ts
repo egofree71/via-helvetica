@@ -8,7 +8,11 @@ import { describe, expect, it } from 'vitest';
 import type { RouteClosure, RouteStep } from '../map/routeState';
 import { toWgs84 } from '../map/projection';
 import { calculateRouteDistance } from '../metrics/routeMetrics';
-import { createRouteGpx, createRouteSegmentsGpx } from './gpx';
+import {
+  createNamedImportedGpxDocument,
+  createRouteGpx,
+  createRouteSegmentsGpx,
+} from './gpx';
 
 const START: Coordinate = [2_600_000, 1_200_000];
 const EAST: Coordinate = [2_601_000, 1_200_000];
@@ -283,5 +287,52 @@ describe('createRouteSegmentsGpx', () => {
 
     expect(firstSegmentPoints.at(-1)?.elevationMeters).toBe(550);
     expect(secondSegmentPoints[0]?.elevationMeters).toBe(700);
+  });
+});
+
+
+describe('createNamedImportedGpxDocument', () => {
+  it('returns the original XML unchanged when itinerary names already match', () => {
+    const xml = `<gpx><metadata><name>Imported hike</name></metadata><trk><name>Imported hike</name><trkseg><trkpt lat="46" lon="7"/><trkpt lat="46.1" lon="7.1"/></trkseg></trk></gpx>`;
+
+    expect(createNamedImportedGpxDocument(xml, 'Imported hike')).toBe(xml);
+  });
+
+  it('changes only itinerary names while preserving imported metadata and extensions', () => {
+    const xml = `<?xml version="1.0"?>
+      <gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:vendor="https://example.test/vendor">
+        <metadata>
+          <time>2026-08-08T12:00:00Z</time>
+          <extensions><vendor:token>keep-me</vendor:token></extensions>
+        </metadata>
+        <rte>
+          <name>Old route</name>
+          <rtept lat="46" lon="7"><ele>500</ele></rtept>
+          <rtept lat="46.1" lon="7.1"><ele>550</ele></rtept>
+        </rte>
+      </gpx>`;
+
+    const document = parseGpx(
+      createNamedImportedGpxDocument(xml, 'Shared route'),
+    );
+    const metadata = document.getElementsByTagNameNS('*', 'metadata')[0];
+    const route = document.getElementsByTagNameNS('*', 'rte')[0];
+
+    expect(metadata.getElementsByTagNameNS('*', 'name')[0]?.textContent).toBe(
+      'Shared route',
+    );
+    expect(route.getElementsByTagNameNS('*', 'name')[0]?.textContent).toBe(
+      'Shared route',
+    );
+    expect(document.getElementsByTagNameNS('*', 'time')[0]?.textContent).toBe(
+      '2026-08-08T12:00:00Z',
+    );
+    expect(
+      document.getElementsByTagNameNS(
+        'https://example.test/vendor',
+        'token',
+      )[0]?.textContent,
+    ).toBe('keep-me');
+    expect(document.getElementsByTagNameNS('*', 'rtept')).toHaveLength(2);
   });
 });

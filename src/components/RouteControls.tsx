@@ -1,7 +1,7 @@
 /**
  * Business context: renders the compact route-editing toolbar without taking
  * permanent space away from the map. It exposes route-mode state, undo/redo,
- * the straight-versus-network choice, route reversal, loop closure, deletion, and GPX export.
+ * the straight-versus-network choice, route reversal, loop closure, and deletion.
  */
 import { useI18n } from '../i18n/I18nContext';
 
@@ -28,8 +28,6 @@ interface RouteControlsProps {
   isLoopClosed: boolean;
   /** Whether a current route exists and can be cleared. */
   canDelete: boolean;
-  /** Whether the route contains enough geometry for GPX export. */
-  canExport: boolean;
   /** Enters or leaves route-creation mode. */
   onToggle: () => void;
   /** Restores the route state before the latest edit. */
@@ -47,8 +45,6 @@ interface RouteControlsProps {
   onToggleLoop: () => void;
   /** Clears the complete route. */
   onDelete: () => void;
-  /** Downloads the complete route as GPX. */
-  onExport: () => void;
 }
 
 /**
@@ -65,7 +61,6 @@ export default function RouteControls({
   canToggleLoop,
   isLoopClosed,
   canDelete,
-  canExport,
   onToggle,
   onUndo,
   onRedo,
@@ -73,7 +68,6 @@ export default function RouteControls({
   onReverse,
   onToggleLoop,
   onDelete,
-  onExport,
 }: RouteControlsProps) {
   const { t } = useI18n();
   const toggleLabel = isActive
@@ -219,21 +213,6 @@ export default function RouteControls({
                 stroke="none"
                 d="M439.115 64.517s-34.078-5.664-43.34-8.479c-8.301-2.526-80.795-13.566-80.795-13.566l-2.722-19.297C310.388 9.857 299.484 0 286.642 0H225.34c-12.825 0-23.728 9.857-25.616 23.175l-2.721 19.297s-72.469 11.039-80.778 13.566c-9.261 2.815-43.357 8.479-43.357 8.479C62.544 67.365 55.332 77.172 55.332 88.38v21.926h401.336V88.38c0-11.208-7.212-21.015-17.553-23.863zM276.318 38.824h-40.636c-3.606 0-6.532-2.925-6.532-6.532s2.926-6.532 6.532-6.532h40.636c3.606 0 6.532 2.925 6.532 6.532s-2.926 6.532-6.532 6.532z"
               />
-            </svg>
-          </button>
-
-          <button
-            type="button"
-            className="map-control-button map-control-button--route-action"
-            aria-label={t('route.export')}
-            title={t('route.export')}
-            disabled={!canExport}
-            onClick={onExport}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M12 3v12" />
-              <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
-              <path d="M5 18v2h14v-2" />
             </svg>
           </button>
         </div>

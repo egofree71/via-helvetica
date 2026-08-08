@@ -21,6 +21,7 @@ import TrailClosurePopup from './components/TrailClosurePopup';
 import SwitzerlandMobilityHikingPanel from './components/SwitzerlandMobilityHikingPanel';
 import RouteStatistics from './components/RouteStatistics';
 import {
+  createNamedImportedGpxDocument,
   createRouteGpx,
   createRouteSegmentsGpx,
   downloadGpxDocument,
@@ -67,7 +68,7 @@ import {
 } from './releases/releaseHistory';
 
 /** Itinerary source named by the shared GPX export dialog. */
-type RouteExportSource = 'editable' | 'switzerlandMobility';
+type RouteExportSource = 'editable' | 'imported' | 'switzerlandMobility';
 
 /**
  * Builds an unambiguous local timestamp for the proposed GPX name. The ISO-like
@@ -253,6 +254,7 @@ export default function App() {
 
   const {
     segments: importedRouteSegments,
+    source: importedRouteSource,
     elevationSummary: importedRouteElevationSummary,
     importRouteFile,
     clearImportedRoute,
@@ -413,9 +415,17 @@ export default function App() {
     });
   };
 
-  /** Opens the route-name dialog before any GPX content is generated. */
-  const requestRouteExport = () => {
+  /** Opens the export/share dialog for the current editable or imported route. */
+  const requestCurrentItineraryExport = () => {
+    if (importedRouteSource) {
+      setRouteExportDefaultName(importedRouteSource.name);
+      setRouteExportSource('imported');
+      setIsRouteExportDialogOpen(true);
+      return;
+    }
+
     if (
+      !isRouteCreationActive ||
       isRouteOperationPending ||
       routeHistory.steps.length < 2
     ) {
@@ -471,6 +481,19 @@ export default function App() {
         generatedAt,
         routeName,
         switzerlandMobilityHikingPanel.elevation?.points ?? [],
+      );
+    }
+
+    if (routeExportSource === 'imported') {
+      if (!importedRouteSource) {
+        throw new Error('The imported GPX route is unavailable.');
+      }
+
+      // Keep provider-specific metadata and extensions from the source GPX;
+      // only the user-facing itinerary name may change in the shared dialog.
+      return createNamedImportedGpxDocument(
+        importedRouteSource.gpxDocument,
+        routeName,
       );
     }
 
@@ -579,9 +602,6 @@ export default function App() {
           canDelete={
             !isRouteOperationPending && routeHistory.steps.length > 0
           }
-          canExport={
-            !isRouteOperationPending && routeHistory.steps.length > 1
-          }
           onToggle={handleToggleRouteCreation}
           onUndo={undoRoutePoint}
           onRedo={redoRoutePoint}
@@ -589,8 +609,27 @@ export default function App() {
           onReverse={reverseRoute}
           onToggleLoop={toggleRouteLoop}
           onDelete={deleteRoute}
-          onExport={requestRouteExport}
         />
+
+        {(isRouteCreationActive || importedRouteSource) && (
+          <button
+            type="button"
+            className="map-control-button map-control-button--route-export"
+            aria-label={t('route.export')}
+            title={t('route.export')}
+            disabled={
+              isRouteCreationActive &&
+              (isRouteOperationPending || routeHistory.steps.length < 2)
+            }
+            onClick={requestCurrentItineraryExport}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 3v12" />
+              <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+              <path d="M5 18v2h14v-2" />
+            </svg>
+          </button>
+        )}
 
         <RouteImportControl
           onOpen={closeMapInformationPopup}

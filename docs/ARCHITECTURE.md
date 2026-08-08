@@ -233,7 +233,7 @@ flowchart TB
 |---|---|---|
 | Application composition | `src/App.tsx` | Connects focused hooks, resolves which temporary workflow owns the current itinerary, and owns modal state |
 | Map lifetime | `src/map/mapRuntime.ts`, `src/map/useMapRuntime.ts` | Creates and disposes the single OpenLayers runtime; synchronizes startup and fullscreen state |
-| Map controls | `src/map/useMapViewControls.ts`, `src/map/useMapLayerOpacities.ts`, `src/components/MapLayersSelector.tsx` | Background choice, persisted overlay visibility and opacity, zoom, fullscreen, and explicit geolocation |
+| Map controls | `src/map/useMapViewControls.ts`, `src/map/useMapLayerOpacities.ts`, `src/components/MapLayersSelector.tsx` | Background choice, persisted overlay visibility and opacity, zoom, fullscreen, and explicit geolocation; redundant +/- zoom buttons are hidden on small coarse-pointer devices |
 | Information overlays | `src/map/useMapInformationLayers.ts`, `src/map/mapInformationViewport.ts`, `src/map/useSwitzerlandMobilityHikingSelection.ts`, `src/switzerlandMobility/hikingRoutes.ts` | Visibility, loading, inspection priority, click-anchor visibility beside temporary panels, public-route selection and fitting, popup state, caching, and cancellation |
 | Editable-route domain | `src/map/routeState.ts`, `src/map/useEditableRoute.ts` | Immutable route state, history, snap mode, serialized mutations, and route actions |
 | Pointer interaction | `src/map/useRouteInteractions.ts`, `src/map/routePointerInteraction.ts` | Waypoint and section hit detection, drag previews, click/drag lifecycle, and semantic edit requests |
@@ -332,6 +332,8 @@ The import workflow owns:
 
 - file-size validation;
 - local XML parsing;
+- retention of the original GPX XML only while that read-only itinerary is current,
+  so export and swisstopo transfer can preserve provider-specific metadata;
 - stale-read protection;
 - batched WGS 84 to LV95 projection;
 - optional embedded elevations;
@@ -477,12 +479,18 @@ physical point while travel direction changes.
 Loop closure adds a dedicated final section and does not duplicate the start
 waypoint. Closing and reopening are undoable snapshots.
 
-GPX export and swisstopo hand-off share the same naming and serialization path:
+GPX export and swisstopo hand-off share the same naming workflow:
 
+- the contextual export/share control appears below route creation only while an
+  editable route is active or an imported GPX is the current itinerary;
 - the dialog asks for a route name once;
-- each section is simplified independently so every waypoint remains exact;
-- independent read-only geometry remains separate GPX track segments, so provider
-  gaps are not connected artificially;
+- editable and selected public routes use Via Helvetica's GPX serializer; each
+  section is simplified independently so every waypoint remains exact;
+- an imported GPX keeps its original XML, metadata, extensions, geometry, and
+  track/route structure; only itinerary-level names are added or changed when the
+  user edits the proposed name;
+- independent read-only geometry remains separate GPX track segments when Via
+  Helvetica serializes it, so provider gaps are not connected artificially;
 - valid elevation samples are merged without creating centimetre-scale duplicate
   points;
 - LV95 geometry is converted to WGS 84;
@@ -510,8 +518,8 @@ sequenceDiagram
 
     User->>Import: Select local GPX file
     Import->>Parser: Validate and parse locally
-    Parser-->>Import: Independent WGS 84 segments and elevations
-    Import->>Import: Batch-project to LV95
+    Parser-->>Import: Independent WGS 84 segments, elevations, and route name
+    Import->>Import: Retain source XML while current; batch-project to LV95
     Import->>Route: Leave editing and clear editable history
     Import->>Map: Replace current itinerary with purple read-only display
     Import->>Map: Fit geometry after viewport stabilizes
@@ -520,7 +528,8 @@ sequenceDiagram
 
 A slower file read is ignored after a newer selection, route creation, or
 unmount invalidates its session. Invalid imports leave the current itinerary
-untouched.
+untouched. The retained source XML is cleared together with the imported route and
+is never converted into editable route history.
 
 ### 5.6 Information-layer inspection
 
@@ -969,13 +978,13 @@ manual checks include:
 - mouse, pen, and touch route editing, including edge auto-pan while moving or
   inserting a waypoint and cancellation after focus or pointer loss;
 - responsive control collisions, translated layer-label wrapping, the release
-  and About dialogs, and the expandable opacity sliders on narrow and short
-  viewports;
+  and About dialogs, expandable opacity sliders, and layer-menu stacking above
+  itinerary profiles on narrow and short viewports;
 - official hiking and SwitzerlandMobility portrayals across useful zooms and
   restored opacity preferences after a reload;
 - selection, overlap choice, highlighting, full-route fitting, and profile
   synchronization for named SwitzerlandMobility routes;
-- GPX fitting on narrow viewports;
+- repeated GPX fitting on desktop and narrow viewports, including crisp native-scale raster backgrounds;
 - local GPX export versus explicit swisstopo upload, desktop QR scanning, direct
   mobile hand-off, and expiry behaviour of the temporary GPX URL;
 - map/profile pointer synchronisation;

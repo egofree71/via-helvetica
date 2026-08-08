@@ -273,7 +273,9 @@ select {
 
 .map-controls {
   position: absolute;
-  z-index: 20;
+  /* Transient control menus must cover bottom itinerary panels when narrow
+     viewports force both regions to overlap. */
+  z-index: 26;
   top: 1rem;
   right: 1rem;
   display: flex;
@@ -624,6 +626,7 @@ select {
 .map-control-button--fullscreen svg,
 .map-control-button--map-layers svg,
 .map-control-button--route-import svg,
+.map-control-button--route-export svg,
 .map-control-button--route-action svg,
 .map-control-button--route-toggle svg {
   width: 1.55rem;
@@ -676,7 +679,8 @@ select {
   }
 }
 
-.map-control-button--route-action:disabled {
+.map-control-button--route-action:disabled,
+.map-control-button--route-export:disabled {
   border-color: #d4d4cf;
   color: #9b9b96;
   background: #ecece8;
@@ -685,7 +689,8 @@ select {
   opacity: 1;
 }
 
-.map-control-button--route-action:disabled:hover {
+.map-control-button--route-action:disabled:hover,
+.map-control-button--route-export:disabled:hover {
   background: #ecece8;
 }
 
@@ -2001,6 +2006,14 @@ select {
     position: static;
     right: auto;
     bottom: auto;
+  }
+}
+
+@media (max-width: 700px) and (hover: none) and (pointer: coarse) {
+  /* Pinch-to-zoom is the native map gesture on phones and small tablets. Hiding
+     the redundant +/- pair keeps the permanent right-side stack compact. */
+  .zoom-controls {
+    display: none;
   }
 }
 

@@ -3,11 +3,11 @@ name = "via-helvetica-swisstopo-share"
 main = "src/index.js"
 compatibility_date = "2026-08-08"
 
-# Bind either a dedicated R2 bucket or the existing Via Helvetica R2 bucket.
-# Temporary objects stay isolated below the `swisstopo-share/` prefix.
+# Bind the dedicated temporary GPX bucket. Keeping it separate from immutable
+# routing data prevents share cleanup or write permissions from touching tiles.
 [[r2_buckets]]
 binding = "GPX_BUCKET"
-bucket_name = "REPLACE_WITH_R2_BUCKET_NAME"
+bucket_name = "via-helvetica-gpx-share"
 
 [vars]
 # Comma-separated origins allowed to POST GPX files. Add other local ports only when needed.
