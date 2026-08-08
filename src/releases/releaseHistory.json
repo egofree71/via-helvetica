@@ -44,8 +44,7 @@
               "description": "Plusieurs ajustements améliorent l’utilisation des GPX importés et l’interface sur les petits écrans.",
               "details": [
                 "Lors d’imports successifs de GPX, le cadrage utilise désormais un niveau de zoom natif de swisstopo afin d’éviter un fond de carte flou.",
-                "Les boutons de zoom + et − sont masqués sur les petits écrans tactiles, où le geste de pincement reste disponible.",
-                "Sur les écrans étroits, le panneau des couches reste affiché au-dessus du profil d’altitude."
+                "Sur les petits écrans, les boutons de zoom + et − sont masqués, le profil d’altitude reste entièrement visible à côté des contrôles et le panneau des couches reste accessible lorsque l’espace disponible est réduit."
               ],
               "showInDialog": false
             }
@@ -187,8 +186,7 @@
               "description": "Mehrere Anpassungen verbessern den Umgang mit importierten GPX-Dateien und die Bedienung auf kleinen Bildschirmen.",
               "details": [
                 "Bei mehreren GPX-Importen nacheinander verwendet der Kartenausschnitt nun eine native swisstopo-Zoomstufe, damit der Kartenhintergrund scharf bleibt.",
-                "Die Zoomtasten + und − werden auf kleinen Touchscreens ausgeblendet; Zoomen per Zwei-Finger-Geste bleibt verfügbar.",
-                "Auf schmalen Bildschirmen bleibt das Ebenenfenster über dem Höhenprofil sichtbar."
+                "Auf kleinen Bildschirmen werden die Zoomtasten + und − ausgeblendet, das Höhenprofil bleibt neben den Bedienelementen vollständig sichtbar und das Ebenenfenster bleibt auch bei begrenztem Platz zugänglich."
               ],
               "showInDialog": false
             }
@@ -330,8 +328,7 @@
               "description": "Diversi ritocchi migliorano l’uso dei GPX importati e l’interfaccia sugli schermi piccoli.",
               "details": [
                 "Dopo più importazioni GPX consecutive, l’inquadratura utilizza ora un livello di zoom nativo di swisstopo per evitare uno sfondo cartografico sfocato.",
-                "I pulsanti di zoom + e − sono nascosti sui piccoli schermi touch, dove resta disponibile il gesto di pizzicamento.",
-                "Sugli schermi stretti, il pannello dei livelli rimane visibile sopra il profilo altimetrico."
+                "Sugli schermi piccoli, i pulsanti di zoom + e − sono nascosti, il profilo altimetrico rimane interamente visibile accanto ai controlli e il pannello dei livelli resta accessibile anche quando lo spazio disponibile è ridotto."
               ],
               "showInDialog": false
             }
@@ -473,8 +470,7 @@
               "description": "Several small adjustments improve imported GPX handling and the interface on smaller screens.",
               "details": [
                 "After successive GPX imports, the map fit now uses a native swisstopo zoom level to avoid a blurred map background.",
-                "The + and − zoom buttons are hidden on small touchscreens, where pinch-to-zoom remains available.",
-                "On narrow screens, the layers panel stays visible above the elevation profile."
+                "On small screens, the + and − zoom buttons are hidden, the elevation profile remains fully visible beside the controls, and the layers panel stays accessible when space is limited."
               ],
               "showInDialog": false
             }
