@@ -1811,8 +1811,8 @@ select {
 .route-export-dialog-form p {
   margin: 0;
   color: #64717b;
-  font-size: 0.82rem;
-  line-height: 1.4;
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .route-export-dialog-options {
@@ -1897,8 +1897,8 @@ select {
   gap: 0.4rem;
   min-width: 0;
   color: #33414c;
-  font-size: 0.84rem;
-  line-height: 1.4;
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .route-export-dialog-share-copy strong {
