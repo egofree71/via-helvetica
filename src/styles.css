@@ -1876,17 +1876,9 @@ select {
   line-height: 1.45;
 }
 
-.route-export-dialog-storage-note-icon {
-  flex: 0 0 auto;
-  margin-top: 0.02rem;
-  color: #475569;
-  font-size: 1rem;
-  line-height: 1.25;
-}
-
 .route-export-dialog-share {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 9rem;
+  grid-template-columns: minmax(0, 1fr) 12rem;
   gap: 1rem;
   align-items: center;
   margin-top: 0.2rem;
@@ -1913,14 +1905,19 @@ select {
 
 .route-export-dialog-qr {
   display: block;
-  width: 9rem;
-  height: 9rem;
+  width: 12rem;
+  height: 12rem;
   border: 1px solid rgb(32 47 60 / 18%);
   background: #ffffff;
 }
 
-.route-export-dialog-mobile-fallback {
+.route-export-dialog-mobile-result {
+  display: grid;
   margin-top: 0.2rem;
+}
+
+.route-export-dialog-mobile-fallback {
+  width: 100%;
 }
 
 .route-export-dialog-form .route-export-dialog-error {

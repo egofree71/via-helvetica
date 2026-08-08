@@ -11,6 +11,8 @@ import { QR_MAX_TEXT_BYTES } from './qrCode';
 const SWISSTOPO_IMPORT_URL_PREFIX = 'https://swisstopo.app/u/';
 /** One upload should fail quickly instead of leaving the export dialog busy indefinitely. */
 const SWISSTOPO_SHARE_REQUEST_TIMEOUT_MS = 15_000;
+/** Keep in sync with the Worker cap; oversized imported recordings stay locally exportable. */
+export const SWISSTOPO_SHARE_MAX_GPX_BYTES = 2 * 1024 * 1024;
 
 /** Temporary route hand-off returned after a successful GPX upload. */
 export interface SwisstopoShare {
@@ -26,6 +28,24 @@ export interface SwisstopoShare {
 interface ShareUploadResponse {
   gpxUrl?: unknown;
   expiresAt?: unknown;
+}
+
+/** User-actionable failure categories exposed by the temporary share contract. */
+export type SwisstopoShareErrorCode =
+  | 'tooLarge'
+  | 'unsupported'
+  | 'temporary';
+
+/** Expected share failure carrying a stable category for localized UI messages. */
+export class SwisstopoShareError extends Error {
+  /** Stable category used by the export dialog. */
+  readonly code: SwisstopoShareErrorCode;
+
+  constructor(code: SwisstopoShareErrorCode, message: string) {
+    super(message);
+    this.name = 'SwisstopoShareError';
+    this.code = code;
+  }
 }
 
 /** Reads the optional Worker base URL at call time so Vite test env stubs work. */
@@ -89,12 +109,12 @@ export function createSwisstopoImportUrl(gpxUrl: string): string {
 }
 
 /**
- * Uploads one already-generated GPX document and prepares its swisstopo QR URL.
+ * Uploads the current named GPX document and prepares its swisstopo hand-off URL.
  *
- * @param gpxDocument - Complete GPX 1.1 XML produced by the existing exporter.
+ * @param gpxDocument - Complete GPX XML generated locally or retained from import.
  * @returns Temporary GPX URL, swisstopo import URL, and optional expiration time.
- * @throws {Error} If the Worker is not configured, rejects the upload, returns
- * malformed data, or produces a URL that cannot be encoded safely.
+ * @throws {SwisstopoShareError} If the document is too large, the Worker rejects
+ * its format, the service is unavailable, or the returned URL is unusable.
  */
 export async function createSwisstopoShare(
   gpxDocument: string,
@@ -102,7 +122,19 @@ export async function createSwisstopoShare(
   const serviceBaseUrl = getShareServiceBaseUrl();
 
   if (!serviceBaseUrl) {
-    throw new Error('The swisstopo GPX share service is not configured.');
+    throw new SwisstopoShareError(
+      'temporary',
+      'The swisstopo GPX share service is not configured.',
+    );
+  }
+
+  const gpxBytes = new TextEncoder().encode(gpxDocument).byteLength;
+
+  if (gpxBytes > SWISSTOPO_SHARE_MAX_GPX_BYTES) {
+    throw new SwisstopoShareError(
+      'tooLarge',
+      'The GPX document exceeds the swisstopo share size limit.',
+    );
   }
 
   const abortController = new AbortController();
@@ -124,21 +156,43 @@ export async function createSwisstopoShare(
     });
 
     if (!response.ok) {
-      throw new Error(`GPX share upload failed with HTTP ${response.status}.`);
+      const code: SwisstopoShareErrorCode =
+        response.status === 413
+          ? 'tooLarge'
+          : response.status === 400
+            ? 'unsupported'
+            : 'temporary';
+
+      throw new SwisstopoShareError(
+        code,
+        `GPX share upload failed with HTTP ${response.status}.`,
+      );
     }
 
     const payload = (await response.json()) as ShareUploadResponse;
 
     if (typeof payload.gpxUrl !== 'string' || payload.gpxUrl.length === 0) {
-      throw new Error('The GPX share service returned no public URL.');
+      throw new SwisstopoShareError(
+        'temporary',
+        'The GPX share service returned no public URL.',
+      );
     }
 
-    return {
-      gpxUrl: payload.gpxUrl,
-      swisstopoUrl: createSwisstopoImportUrl(payload.gpxUrl),
-      expiresAt:
-        typeof payload.expiresAt === 'string' ? payload.expiresAt : null,
-    };
+    try {
+      return {
+        gpxUrl: payload.gpxUrl,
+        swisstopoUrl: createSwisstopoImportUrl(payload.gpxUrl),
+        expiresAt:
+          typeof payload.expiresAt === 'string' ? payload.expiresAt : null,
+      };
+    } catch (error) {
+      throw new SwisstopoShareError(
+        'temporary',
+        error instanceof Error
+          ? error.message
+          : 'The swisstopo hand-off URL could not be prepared.',
+      );
+    }
   } finally {
     window.clearTimeout(timeoutId);
   }

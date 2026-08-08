@@ -17,7 +17,11 @@ import {
   createQrCodeMatrix,
   createQrCodeSvgPath,
 } from '../share/qrCode';
-import type { SwisstopoShare } from '../share/swisstopoShare';
+import {
+  SwisstopoShareError,
+  type SwisstopoShare,
+  type SwisstopoShareErrorCode,
+} from '../share/swisstopoShare';
 
 /** Controlled visibility and callbacks for the route-export dialog. */
 interface RouteExportDialogProps {
@@ -71,7 +75,7 @@ export default function RouteExportDialog({
   const [routeName, setRouteName] = useState(defaultName);
   const [share, setShare] = useState<SwisstopoShare | null>(null);
   const [isSharePending, setIsSharePending] = useState(false);
-  const [shareError, setShareError] = useState(false);
+  const [shareError, setShareError] = useState<SwisstopoShareErrorCode | null>(null);
   const [useDirectSwisstopoHandoff, setUseDirectSwisstopoHandoff] = useState(
     isMobileSwisstopoHandoff,
   );
@@ -99,7 +103,7 @@ export default function RouteExportDialog({
       selectionPendingRef.current = true;
       setRouteName(defaultName);
       setShare(null);
-      setShareError(false);
+      setShareError(null);
       setIsSharePending(false);
     }
   }, [defaultName, isOpen]);
@@ -177,20 +181,16 @@ export default function RouteExportDialog({
 
     setIsSharePending(true);
     setShare(null);
-    setShareError(false);
+    setShareError(null);
 
     try {
       const nextShare = await onCreateSwisstopoShare(trimmedRouteName);
       setShare(nextShare);
-
-      // A phone can use the universal swisstopo link directly; showing a QR on
-      // the same screen would force the user to find a second device to scan it.
-      if (useDirectSwisstopoHandoff) {
-        window.location.assign(nextShare.swisstopoUrl);
-      }
     } catch (error) {
       console.error('Unable to prepare the route for swisstopo.', error);
-      setShareError(true);
+      setShareError(
+        error instanceof SwisstopoShareError ? error.code : 'temporary',
+      );
     } finally {
       setIsSharePending(false);
     }
@@ -244,7 +244,7 @@ export default function RouteExportDialog({
             setRouteName(event.target.value);
             // A generated QR belongs to the exact named GPX that was uploaded.
             setShare(null);
-            setShareError(false);
+            setShareError(null);
           }}
         />
         <p id="route-export-dialog-hint">{t('gpx.nameHint')}</p>
@@ -253,6 +253,8 @@ export default function RouteExportDialog({
           <section
             className="route-export-dialog-share"
             aria-labelledby="route-export-dialog-share-title"
+            role="status"
+            aria-live="polite"
           >
             <div className="route-export-dialog-share-copy">
               <strong id="route-export-dialog-share-title">
@@ -274,17 +276,29 @@ export default function RouteExportDialog({
         )}
 
         {share && useDirectSwisstopoHandoff && (
-          <a
-            className="route-export-dialog-button route-export-dialog-mobile-fallback"
-            href={share.swisstopoUrl}
+          <div
+            className="route-export-dialog-mobile-result"
+            role="status"
+            aria-live="polite"
           >
-            {t('gpx.openSwisstopoApp')}
-          </a>
+            <a
+              className="route-export-dialog-button route-export-dialog-mobile-fallback"
+              href={share.swisstopoUrl}
+            >
+              {t('gpx.openSwisstopoApp')}
+            </a>
+          </div>
         )}
 
         {shareError && (
           <p className="route-export-dialog-error" role="alert">
-            {t('gpx.swisstopoError')}
+            {t(
+              shareError === 'tooLarge'
+                ? 'gpx.swisstopoTooLarge'
+                : shareError === 'unsupported'
+                  ? 'gpx.swisstopoUnsupported'
+                  : 'gpx.swisstopoError',
+            )}
           </p>
         )}
 
@@ -309,7 +323,7 @@ export default function RouteExportDialog({
                   {isSharePending
                     ? t('gpx.preparingSwisstopo')
                     : useDirectSwisstopoHandoff
-                      ? t('gpx.openSwisstopoApp')
+                      ? t('gpx.prepareSwisstopoMobile')
                       : t('gpx.createSwisstopoQr')}
                 </button>
                 <p className="route-export-dialog-storage-note">

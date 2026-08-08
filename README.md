@@ -8,8 +8,8 @@ routes in Switzerland with official swisstopo maps and geodata. It stays
 focused on one route at a time. Core planning and normal GPX export run entirely
 in the browser; an optional tiny Cloudflare Worker can host a GPX temporarily
 when the user explicitly asks to transfer it to the swisstopo app: desktop
-users get a QR code, while small touch devices open the swisstopo hand-off
-directly.
+users get a QR code, while small touch devices receive a direct app-opening
+action after the temporary share is prepared.
 
 Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 
@@ -39,7 +39,7 @@ Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 | Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, persistent visibility and opacity controls for information layers, place and WGS 84/LV95 coordinate search, geolocation, scale, and fullscreen mode |
 | Route planning | Editable ordered waypoints, start and finish markers, sparse direction arrows, optional swissTLM3D snapping in a dedicated routing Worker, undo, redo, reversal, loop closure, route deletion, and straight fallback segments when no routable path is found |
 | Route information | Distance, ascent, descent, Swiss hiking-time estimate, and a collapsible elevation profile with pointer synchronisation between the chart and the map |
-| Import and export | Read-only GPX loading with route statistics and elevation profile, named GPX export for editable, imported, and selected SwitzerlandMobility routes, plus an optional swisstopo hand-off that temporarily exposes the current GPX, using a QR code on desktop and a direct app link on small touch devices |
+| Import and export | Read-only GPX loading with route statistics and elevation profile, named GPX export for editable, imported, and selected SwitzerlandMobility routes, plus an optional swisstopo hand-off that temporarily exposes the current GPX, using a QR code on desktop and an explicit direct app link on small touch devices |
 | Safety | Official hiking-trail closures and detours, plus military shooting notices and danger zones with localized details |
 | Public transport | Passenger-relevant stops, mode-specific symbols, next departures grouped by date, and links to the official SBB/CFF/FFS timetable |
 | Interface | Compact floating controls, no permanent toolbar, French, German, Italian, and English translations with shareable localized URLs, a one-time release-highlights dialog, and localized About and static release-history pages |
@@ -86,6 +86,9 @@ routing dataset locally, set `VITE_ROUTING_DATA_BASE_URL` in `.env.local`; see
 optional swisstopo hand-off, deploy the Worker example below
 `workers/swisstopo-gpx-share/` and set `VITE_SWISSTOPO_SHARE_SERVICE_URL` to its
 public HTTPS origin. Without that variable the extra action stays hidden.
+For production, pair the dedicated GPX bucket with a one-day R2 lifecycle
+deletion rule and enable the example Worker rate-limiting binding for `POST /gpx`;
+the CORS allow-list is a browser policy, not an authentication mechanism.
 
 ## Offline routing-data generation
 
@@ -152,9 +155,10 @@ Machine-specific infrastructure and credentials remain outside version control.
   GPX content is retained only while it is the current read-only itinerary so its
   original metadata and extensions can be preserved when exporting or sharing it.
 - When the optional share Worker is configured, use **Open in swisstopo** to
-  upload that same named GPX for up to 24 hours by default and display a QR code
-  for the official `swisstopo.app/u/` hand-off. The normal GPX export remains
-  purely local.
+  upload that same named GPX for up to 24 hours by default. Desktop shows a QR
+  code for the official `swisstopo.app/u/` hand-off; small touch devices expose
+  an explicit app-opening link after preparation. Temporary transfer is limited
+  to 2 MiB; larger GPX files remain available through the normal local export.
 - Starting a new route replaces the imported itinerary.
 
 ### Inspect route and map information
@@ -244,7 +248,8 @@ retries, and session fallback are documented in
 ## Regression tests
 
 The focused Vitest suite covers immutable route transformations, route editing,
-GPX parsing and export, swisstopo hand-off URL and QR generation, route metrics, directional-arrow placement,
+GPX parsing and export, swisstopo hand-off URL and QR generation, temporary
+share validation/expiry rules, route metrics, directional-arrow placement,
 location-search provider normalization, local WGS 84/LV95 coordinate parsing,
 rendered-layer provider contracts, default opacity and persistence,
 release acknowledgement and localized history content, passenger-stop filtering

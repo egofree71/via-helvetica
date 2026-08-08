@@ -225,6 +225,7 @@ const frenchTranslations = {
   'gpx.download': 'Exporter le fichier GPX',
   'gpx.createSwisstopoQr': 'Créer un QR code pour importer dans swisstopo',
   'gpx.openSwisstopoApp': 'Ouvrir dans l’application swisstopo',
+  'gpx.prepareSwisstopoMobile': 'Préparer l’ouverture dans swisstopo',
   'gpx.swisstopoStorageNotice':
     'Pour le transfert vers swisstopo, le fichier GPX est hébergé pendant 24 heures, sans être associé à votre identité.',
   'gpx.preparingSwisstopo': 'Préparation…',
@@ -232,6 +233,10 @@ const frenchTranslations = {
   'gpx.swisstopoScanHint':
     'Scannez ce code QR avec votre téléphone pour ouvrir l’itinéraire dans l’app swisstopo.',
   'gpx.swisstopoQrAria': 'Code QR pour ouvrir l’itinéraire dans swisstopo',
+  'gpx.swisstopoTooLarge':
+    'Cet itinéraire dépasse la limite de 2 Mo pour le transfert vers swisstopo. Exportez le fichier GPX à la place.',
+  'gpx.swisstopoUnsupported':
+    'Ce fichier GPX peut être affiché dans Via Helvetica, mais son format ne peut pas être transféré vers swisstopo.',
   'gpx.swisstopoError':
     'Impossible de préparer l’itinéraire pour swisstopo. Réessayez.',
 } as const;
@@ -445,6 +450,7 @@ const germanTranslations: Record<TranslationKey, string> = {
   'gpx.download': 'GPX-Datei exportieren',
   'gpx.createSwisstopoQr': 'QR-Code zum Import in swisstopo erstellen',
   'gpx.openSwisstopoApp': 'In der swisstopo-App öffnen',
+  'gpx.prepareSwisstopoMobile': 'Öffnen in swisstopo vorbereiten',
   'gpx.swisstopoStorageNotice':
     'Für die Übertragung zu swisstopo wird die GPX-Datei 24 Stunden lang bereitgestellt, ohne mit Ihrer Identität verknüpft zu werden.',
   'gpx.preparingSwisstopo': 'Wird vorbereitet…',
@@ -452,6 +458,10 @@ const germanTranslations: Record<TranslationKey, string> = {
   'gpx.swisstopoScanHint':
     'Scannen Sie diesen QR-Code mit Ihrem Telefon, um die Route in der swisstopo-App zu öffnen.',
   'gpx.swisstopoQrAria': 'QR-Code zum Öffnen der Route in swisstopo',
+  'gpx.swisstopoTooLarge':
+    'Diese Route überschreitet die 2-MB-Grenze für die Übertragung zu swisstopo. Exportieren Sie stattdessen die GPX-Datei.',
+  'gpx.swisstopoUnsupported':
+    'Diese GPX-Datei kann in Via Helvetica angezeigt, in diesem Format aber nicht an swisstopo übertragen werden.',
   'gpx.swisstopoError':
     'Die Route konnte nicht für swisstopo vorbereitet werden. Versuchen Sie es erneut.',
 };
@@ -663,6 +673,7 @@ const italianTranslations: Record<TranslationKey, string> = {
   'gpx.download': 'Esporta il file GPX',
   'gpx.createSwisstopoQr': 'Crea un codice QR per importare in swisstopo',
   'gpx.openSwisstopoApp': 'Apri nell’app swisstopo',
+  'gpx.prepareSwisstopoMobile': 'Prepara l’apertura in swisstopo',
   'gpx.swisstopoStorageNotice':
     'Per il trasferimento a swisstopo, il file GPX viene ospitato per 24 ore senza essere associato alla tua identità.',
   'gpx.preparingSwisstopo': 'Preparazione…',
@@ -670,6 +681,10 @@ const italianTranslations: Record<TranslationKey, string> = {
   'gpx.swisstopoScanHint':
     'Scansiona questo codice QR con il telefono per aprire l’itinerario nell’app swisstopo.',
   'gpx.swisstopoQrAria': 'Codice QR per aprire l’itinerario in swisstopo',
+  'gpx.swisstopoTooLarge':
+    'Questo itinerario supera il limite di 2 MB per il trasferimento a swisstopo. Esporta invece il file GPX.',
+  'gpx.swisstopoUnsupported':
+    'Questo file GPX può essere visualizzato in Via Helvetica, ma il suo formato non può essere trasferito a swisstopo.',
   'gpx.swisstopoError':
     'Impossibile preparare l’itinerario per swisstopo. Riprova.',
 };
@@ -879,6 +894,7 @@ const englishTranslations: Record<TranslationKey, string> = {
   'gpx.download': 'Export the GPX file',
   'gpx.createSwisstopoQr': 'Create a QR code to import into swisstopo',
   'gpx.openSwisstopoApp': 'Open in the swisstopo app',
+  'gpx.prepareSwisstopoMobile': 'Prepare to open in swisstopo',
   'gpx.swisstopoStorageNotice':
     'For the swisstopo transfer, the GPX file is hosted for 24 hours without being associated with your identity.',
   'gpx.preparingSwisstopo': 'Preparing…',
@@ -886,6 +902,10 @@ const englishTranslations: Record<TranslationKey, string> = {
   'gpx.swisstopoScanHint':
     'Scan this QR code with your phone to open the route in the swisstopo app.',
   'gpx.swisstopoQrAria': 'QR code for opening the route in swisstopo',
+  'gpx.swisstopoTooLarge':
+    'This route exceeds the 2 MB limit for transfer to swisstopo. Export the GPX file instead.',
+  'gpx.swisstopoUnsupported':
+    'This GPX file can be displayed in Via Helvetica, but its format cannot be transferred to swisstopo.',
   'gpx.swisstopoError':
     'The route could not be prepared for swisstopo. Please try again.',
 };

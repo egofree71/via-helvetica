@@ -10,12 +10,25 @@ binding = "GPX_BUCKET"
 bucket_name = "via-helvetica-gpx-share"
 
 [vars]
-# Comma-separated origins allowed to POST GPX files. Add other local ports only when needed.
+# Browser CORS allow-list for POST /gpx; this is not authentication or abuse protection.
+# Add other production origins or local ports only when they are genuinely served.
 ALLOWED_ORIGINS = "http://localhost:5173,https://viahelvetica.ch"
 # Optional. Leave empty when the Worker origin itself is the public GPX origin.
 GPX_PUBLIC_BASE_URL = ""
 # Prototype default: 24 hours. The Worker caps this value at seven days.
 SHARE_TTL_SECONDS = "86400"
+
+
+# Optional abuse guard. Namespace IDs are account-local; choose another positive
+# integer if 1001 is already used by a different rate-limiting binding.
+[[ratelimits]]
+name = "GPX_RATE_LIMITER"
+namespace_id = "1001"
+
+[ratelimits.simple]
+# Deliberately generous because several legitimate users can share one public IP.
+limit = 20
+period = 60
 
 [triggers]
 # Removes expired temporary objects even when nobody requests them again.

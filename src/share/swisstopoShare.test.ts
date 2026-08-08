@@ -5,6 +5,7 @@ import {
   createSwisstopoShare,
   encodeBase64Url,
   isSwisstopoShareConfigured,
+  SWISSTOPO_SHARE_MAX_GPX_BYTES,
 } from './swisstopoShare';
 
 afterEach(() => {
@@ -65,4 +66,40 @@ describe('createSwisstopoShare', () => {
     expect(share.gpxUrl).toBe('https://share.example.org/gpx/route.gpx');
     expect(share.swisstopoUrl).toMatch(/^https:\/\/swisstopo\.app\/u\//u);
   });
+  it('rejects an oversized GPX locally before making any request', async () => {
+    vi.stubEnv(
+      'VITE_SWISSTOPO_SHARE_SERVICE_URL',
+      'https://share.example.org',
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const oversizedDocument =
+      '<gpx><trk><trkpt /></trk></gpx>' +
+      'x'.repeat(SWISSTOPO_SHARE_MAX_GPX_BYTES);
+
+    await expect(createSwisstopoShare(oversizedDocument)).rejects.toMatchObject({
+      code: 'tooLarge',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('maps permanent Worker validation failures to actionable error categories', async () => {
+    vi.stubEnv(
+      'VITE_SWISSTOPO_SHARE_SERVICE_URL',
+      'https://share.example.org',
+    );
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(null, { status: 400 })),
+    );
+
+    await expect(
+      createSwisstopoShare('<gpx><trk><trkpt /></trk></gpx>'),
+    ).rejects.toMatchObject({
+      code: 'unsupported',
+    });
+  });
+
 });

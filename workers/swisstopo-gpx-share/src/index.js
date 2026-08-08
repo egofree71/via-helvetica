@@ -9,8 +9,12 @@
 
 /** Prefix keeps temporary shares grouped inside the dedicated GPX share bucket. */
 const SHARE_PREFIX = 'swisstopo-share/';
-/** GPX payloads are small; this cap blocks use as a generic file-hosting endpoint. */
+/** GPX payloads are small; keep this in sync with the browser-side share limit. */
 const MAX_GPX_BYTES = 2 * 1024 * 1024;
+/** Official swisstopo hand-off prefix encoded into the browser QR code. */
+const SWISSTOPO_IMPORT_URL_PREFIX = 'https://swisstopo.app/u/';
+/** Built-in QR encoder capacity in UTF-8 bytes for its fixed Version 8 symbol. */
+const QR_MAX_TEXT_BYTES = 192;
 /** Default lifetime is long enough to transfer a route without creating route storage. */
 const DEFAULT_SHARE_TTL_SECONDS = 24 * 60 * 60;
 /** A prototype share should never become multi-week persistence by configuration mistake. */
@@ -50,6 +54,26 @@ function withCors(response, corsOrigin) {
   });
 }
 
+/**
+ * Applies the optional Cloudflare Rate Limiting binding before any GPX body is
+ * buffered. The anonymous service has no user identifier, so the Cloudflare
+ * client IP is used with a deliberately generous limit to reduce NAT collisions.
+ *
+ * @param {Request} request - Incoming upload request.
+ * @param {object} env - Worker bindings; the limiter is optional for local use.
+ * @returns {Promise<boolean>} True when the request may continue.
+ */
+async function isUploadAllowedByRateLimit(request, env) {
+  if (!env.GPX_RATE_LIMITER) {
+    return true;
+  }
+
+  const clientKey =
+    request.headers.get('CF-Connecting-IP') || 'unknown-client';
+  const { success } = await env.GPX_RATE_LIMITER.limit({ key: clientKey });
+  return success;
+}
+
 /** Creates a compact JSON error while preserving the upload endpoint's CORS policy. */
 function jsonError(message, status, corsOrigin = null) {
   return withCors(
@@ -69,15 +93,24 @@ function shareTtlSeconds(env) {
   return Math.min(configured, MAX_SHARE_TTL_SECONDS);
 }
 
-/** Performs shallow GPX validation without turning the Worker into an XML parser. */
+/**
+ * Performs shallow GPX validation without turning the Worker into an XML parser.
+ * Optional namespace prefixes are accepted because the browser importer is
+ * namespace-agnostic and the Worker must not reject GPX already accepted there.
+ *
+ * @param {string} document - Decoded GPX XML text.
+ * @returns {boolean} True when supported track or route geometry is present.
+ */
 function isPlausibleGpx(document) {
   const hasTrack =
-    /<trk(?:\s|>)/iu.test(document) && /<trkpt(?:\s|>)/iu.test(document);
+    /<(?:[\w.-]+:)?trk(?:\s|\/|>)/iu.test(document) &&
+    /<(?:[\w.-]+:)?trkpt(?:\s|\/|>)/iu.test(document);
   const hasRoute =
-    /<rte(?:\s|>)/iu.test(document) && /<rtept(?:\s|>)/iu.test(document);
+    /<(?:[\w.-]+:)?rte(?:\s|\/|>)/iu.test(document) &&
+    /<(?:[\w.-]+:)?rtept(?:\s|\/|>)/iu.test(document);
 
   return (
-    /<gpx(?:\s|>)/iu.test(document) &&
+    /<(?:[\w.-]+:)?gpx(?:\s|\/|>)/iu.test(document) &&
     (hasTrack || hasRoute) &&
     !/<!DOCTYPE/iu.test(document) &&
     !/<!ENTITY/iu.test(document)
@@ -88,14 +121,47 @@ function isPlausibleGpx(document) {
 function publicGpxUrl(request, env, key) {
   const configuredBase = (env.GPX_PUBLIC_BASE_URL || '').trim();
   const baseUrl = configuredBase || new URL(request.url).origin;
-  return new URL(`/gpx/${key.slice(SHARE_PREFIX.length)}`, baseUrl).toString();
+  const publicUrl = new URL(
+    `/gpx/${key.slice(SHARE_PREFIX.length)}`,
+    baseUrl,
+  );
+
+  if (publicUrl.protocol !== 'https:') {
+    throw new Error('The public GPX base URL must use HTTPS.');
+  }
+
+  return publicUrl.toString();
 }
 
-/** Rejects expired objects even if the scheduled cleanup has not run yet. */
+/**
+ * Checks whether the resulting swisstopo hand-off still fits the built-in QR.
+ * Base64url expands arbitrary UTF-8 bytes to ceil(n * 8 / 6) ASCII characters,
+ * so the Worker can reject an unsuitable public origin before writing to R2.
+ *
+ * @param {string} gpxUrl - Public HTTPS URL that swisstopo will fetch.
+ * @returns {boolean} True when the complete `/u/` hand-off fits Version 8-L.
+ */
+function fitsBuiltInQr(gpxUrl) {
+  const gpxUrlBytes = new TextEncoder().encode(gpxUrl).length;
+  const base64UrlBytes = Math.ceil((gpxUrlBytes * 8) / 6);
+  return (
+    SWISSTOPO_IMPORT_URL_PREFIX.length + base64UrlBytes <= QR_MAX_TEXT_BYTES
+  );
+}
+
+/**
+ * Rejects expired objects even if the scheduled cleanup has not run yet.
+ *
+ * @param {object} object - R2 object or listing entry with custom metadata.
+ * @returns {boolean} True when expiry is reached, absent, or not parseable.
+ */
 function isExpired(object) {
   const expiresAt = object.customMetadata?.expiresAt;
   const timestamp = expiresAt ? Date.parse(expiresAt) : Number.NaN;
-  return Number.isFinite(timestamp) && timestamp <= Date.now();
+
+  // A temporary object without trustworthy expiry metadata must never become
+  // permanent merely because metadata is absent or malformed.
+  return !Number.isFinite(timestamp) || timestamp <= Date.now();
 }
 
 /**
@@ -134,6 +200,22 @@ async function uploadGpx(request, env, corsOrigin) {
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
   const key = `${SHARE_PREFIX}${crypto.randomUUID()}.gpx`;
 
+  let gpxUrl;
+
+  try {
+    gpxUrl = publicGpxUrl(request, env, key);
+  } catch {
+    return jsonError('Public GPX URL configuration is invalid.', 500, corsOrigin);
+  }
+
+  if (!fitsBuiltInQr(gpxUrl)) {
+    return jsonError(
+      'Public GPX URL is too long for the built-in QR encoder.',
+      500,
+      corsOrigin,
+    );
+  }
+
   await env.GPX_BUCKET.put(key, bytes, {
     httpMetadata: {
       contentType: 'application/gpx+xml; charset=utf-8',
@@ -146,7 +228,7 @@ async function uploadGpx(request, env, corsOrigin) {
   return withCors(
     Response.json(
       {
-        gpxUrl: publicGpxUrl(request, env, key),
+        gpxUrl,
         expiresAt,
       },
       {
@@ -184,9 +266,12 @@ async function serveGpx(request, env, key) {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set('Content-Type', 'application/gpx+xml; charset=utf-8');
-  headers.set('Cache-Control', 'public, max-age=300');
+  headers.set('Content-Disposition', 'attachment; filename="route.gpx"');
+  headers.set('Cache-Control', 'private, no-store');
   headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Content-Security-Policy', "sandbox; default-src 'none'");
   headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'DENY');
 
   if (request.method === 'HEAD') {
     return new Response(null, { headers });
@@ -242,6 +327,10 @@ export default {
         return jsonError('Origin is not allowed.', 403);
       }
 
+      if (!(await isUploadAllowedByRateLimit(request, env))) {
+        return jsonError('Too many GPX share requests.', 429, corsOrigin);
+      }
+
       return uploadGpx(request, env, corsOrigin);
     }
 
@@ -255,6 +344,16 @@ export default {
   },
 
   async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(deleteExpiredShares(env));
+    ctx.waitUntil(
+      deleteExpiredShares(env).catch((error) => {
+        console.error('Unable to clean expired swisstopo GPX shares.', error);
+      }),
+    );
   },
+};
+
+export {
+  isExpired,
+  isPlausibleGpx,
+  shareTtlSeconds,
 };
