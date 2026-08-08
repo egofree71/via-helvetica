@@ -273,9 +273,7 @@ select {
 
 .map-controls {
   position: absolute;
-  /* Transient control menus must cover bottom itinerary panels when narrow
-     viewports force both regions to overlap. */
-  z-index: 26;
+  z-index: 20;
   top: 1rem;
   right: 1rem;
   display: flex;
@@ -626,7 +624,6 @@ select {
 .map-control-button--fullscreen svg,
 .map-control-button--map-layers svg,
 .map-control-button--route-import svg,
-.map-control-button--route-export svg,
 .map-control-button--route-action svg,
 .map-control-button--route-toggle svg {
   width: 1.55rem;
@@ -679,8 +676,7 @@ select {
   }
 }
 
-.map-control-button--route-action:disabled,
-.map-control-button--route-export:disabled {
+.map-control-button--route-action:disabled {
   border-color: #d4d4cf;
   color: #9b9b96;
   background: #ecece8;
@@ -689,8 +685,7 @@ select {
   opacity: 1;
 }
 
-.map-control-button--route-action:disabled:hover,
-.map-control-button--route-export:disabled:hover {
+.map-control-button--route-action:disabled:hover {
   background: #ecece8;
 }
 
@@ -1479,6 +1474,13 @@ select {
   border-bottom: 1px solid rgb(32 47 60 / 12%);
 }
 
+.about-dialog-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .about-dialog-header h2 {
   margin: 0;
   font-size: 1.5rem;
@@ -1496,7 +1498,7 @@ select {
   outline: none;
 }
 
-.about-dialog-close:focus-visible,
+.about-dialog-icon-close:focus-visible,
 .about-dialog a:focus-visible {
   outline: 3px solid rgb(23 105 224 / 38%);
   outline-offset: 2px;
@@ -1571,27 +1573,25 @@ select {
   color: #125cb8;
 }
 
-.about-dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0.9rem 1.35rem 1.1rem;
-  border-top: 1px solid rgb(32 47 60 / 12%);
-}
-
-.about-dialog-close {
-  min-width: 6.5rem;
-  height: 2.65rem;
-  padding: 0 1rem;
-  border: 1px solid #1769e0;
-  border-radius: 8px;
-  color: #ffffff;
-  background: #1769e0;
+.about-dialog-icon-close {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  color: #4f5d67;
+  background: transparent;
   cursor: pointer;
-  font-weight: 600;
+  font-size: 1.65rem;
+  line-height: 1;
 }
 
-.about-dialog-close:hover {
-  background: #125ac2;
+.about-dialog-icon-close:hover {
+  color: #17212b;
+  background: rgb(32 47 60 / 8%);
 }
 
 .release-notes-dialog {
@@ -1811,8 +1811,8 @@ select {
 .route-export-dialog-form p {
   margin: 0;
   color: #64717b;
-  font-size: 0.88rem;
-  line-height: 1.45;
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .route-export-dialog-options {
@@ -1897,8 +1897,8 @@ select {
   gap: 0.4rem;
   min-width: 0;
   color: #33414c;
-  font-size: 0.88rem;
-  line-height: 1.45;
+  font-size: 0.84rem;
+  line-height: 1.4;
 }
 
 .route-export-dialog-share-copy strong {
@@ -2006,14 +2006,6 @@ select {
     position: static;
     right: auto;
     bottom: auto;
-  }
-}
-
-@media (max-width: 700px) and (hover: none) and (pointer: coarse) {
-  /* Pinch-to-zoom is the native map gesture on phones and small tablets. Hiding
-     the redundant +/- pair keeps the permanent right-side stack compact. */
-  .zoom-controls {
-    display: none;
   }
 }
 
