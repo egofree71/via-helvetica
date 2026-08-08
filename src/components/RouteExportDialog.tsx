@@ -288,35 +288,37 @@ export default function RouteExportDialog({
           </p>
         )}
 
-        <div className="route-export-dialog-options">
-          <button
-            type="submit"
-            className="route-export-dialog-button"
-            disabled={!trimmedRouteName || isSharePending}
-          >
-            {t('gpx.download')}
-          </button>
+        {!share && (
+          <div className="route-export-dialog-options">
+            <button
+              type="submit"
+              className="route-export-dialog-button"
+              disabled={!trimmedRouteName || isSharePending}
+            >
+              {t('gpx.download')}
+            </button>
 
-          {canShareWithSwisstopo && !share && (
-            <div className="route-export-dialog-swisstopo-option">
-              <button
-                type="button"
-                className="route-export-dialog-button"
-                disabled={!trimmedRouteName || isSharePending}
-                onClick={() => void createShare()}
-              >
-                {isSharePending
-                  ? t('gpx.preparingSwisstopo')
-                  : useDirectSwisstopoHandoff
-                    ? t('gpx.openSwisstopoApp')
-                    : t('gpx.createSwisstopoQr')}
-              </button>
-              <p className="route-export-dialog-storage-note">
-                {t('gpx.swisstopoStorageNotice')}
-              </p>
-            </div>
-          )}
-        </div>
+            {canShareWithSwisstopo && (
+              <div className="route-export-dialog-swisstopo-option">
+                <button
+                  type="button"
+                  className="route-export-dialog-button"
+                  disabled={!trimmedRouteName || isSharePending}
+                  onClick={() => void createShare()}
+                >
+                  {isSharePending
+                    ? t('gpx.preparingSwisstopo')
+                    : useDirectSwisstopoHandoff
+                      ? t('gpx.openSwisstopoApp')
+                      : t('gpx.createSwisstopoQr')}
+                </button>
+                <p className="route-export-dialog-storage-note">
+                  {t('gpx.swisstopoStorageNotice')}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </form>
     </dialog>
   );

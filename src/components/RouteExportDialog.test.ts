@@ -173,11 +173,15 @@ describe('RouteExportDialog', () => {
     expect(
       container.querySelector('.route-export-dialog-share-copy')?.textContent,
     ).not.toContain('hosted for 24 hours');
+    const resultButtons = Array.from(container.querySelectorAll('button'));
     expect(
-      Array.from(container.querySelectorAll('button')).some(
+      resultButtons.some(
         (button) =>
           button.textContent === 'Create a QR code to import into swisstopo',
       ),
+    ).toBe(false);
+    expect(
+      resultButtons.some((button) => button.textContent === 'Export the GPX file'),
     ).toBe(false);
   });
 
