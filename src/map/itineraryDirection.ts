@@ -14,15 +14,17 @@ const DIRECTION_ARROW_SPACING_PX = 150;
 /** Route must occupy this many screen pixels before an arrow adds useful information. */
 const MINIMUM_VISIBLE_ROUTE_LENGTH_PX = 105;
 /**
- * Direction is deliberately hidden above the detailed planning scale. At broad
- * scales, small bends collapse visually and a local tangent can suggest a
- * direction that the displayed route no longer makes apparent.
+ * Direction remains available on regional views, but is hidden once the map is
+ * so broad that local bends collapse and a tangent could become misleading.
  */
-const MAX_DIRECTION_ARROW_RESOLUTION = 20;
+const MAX_DIRECTION_ARROW_RESOLUTION = 40;
 /** Keeps arrows clear of route endpoints and disconnected GPX segment ends. */
 const LINE_END_MARGIN_PX = 38;
-/** Keeps arrows from covering editable waypoints and A/B endpoint badges. */
-const AVOID_COORDINATE_MARGIN_PX = 30;
+/**
+ * Keeps arrows clear of visible waypoint handles and A/B badges while leaving
+ * enough usable route between kilometre-scale anchors for direction symbols.
+ */
+const AVOID_COORDINATE_MARGIN_PX = 24;
 /** Defensive cap for unusually long routes or very wide displays. */
 const MAX_DIRECTION_ARROWS_PER_LINE = 16;
 /**
@@ -86,8 +88,11 @@ export interface DirectionalLineStyleOptions {
   coordinates: Coordinate[];
   /** Route colour used for the arrowhead outline. */
   color: string;
-  /** Visible points that arrows must not cover. */
-  avoidCoordinates?: Coordinate[];
+  /**
+   * Visible points that arrows must not cover. A resolver lets route waypoint
+   * decluttering and arrow avoidance react to the same map resolution.
+   */
+  avoidCoordinates?: Coordinate[] | ((resolution: number) => Coordinate[]);
 }
 
 /** Accepted symbol position and final rotation in map-rendering radians. */
@@ -521,7 +526,9 @@ export function createDirectionalLineStyle({
 
     const arrowStyles = createDirectionSamples(
       lineIndex,
-      avoidCoordinates,
+      typeof avoidCoordinates === 'function'
+        ? avoidCoordinates(resolution)
+        : avoidCoordinates,
       resolution,
     ).map(
       ({ coordinate, rotation }) =>

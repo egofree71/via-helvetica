@@ -24,6 +24,7 @@ interface CapturedRouteInteractions {
 const loaderState = vi.hoisted(() => ({
   instances: [] as Array<{
     disposed: boolean;
+    snapCalls: number;
     routeCalls: number;
     emit: (notice: RoutingNotice) => void;
   }>,
@@ -45,6 +46,7 @@ vi.mock('../routing/dynamicRoutingNetwork', () => {
       (notice: RoutingNotice) => void
     >();
     disposed = false;
+    snapCalls = 0;
     routeCalls = 0;
 
     constructor() {
@@ -65,6 +67,7 @@ vi.mock('../routing/dynamicRoutingNetwork', () => {
     }
 
     snap(): Promise<null> {
+      this.snapCalls += 1;
       return Promise.resolve(null);
     }
 
@@ -217,6 +220,7 @@ describe('useEditableRoute orchestration', () => {
     expect(controllerState.current?.routeHistory.steps).toBe(importedState.steps);
     expect(controllerState.current?.routeHistory.undoStates).toEqual([]);
     expect(controllerState.current?.routeHistory.redoStates).toEqual([]);
+    expect(loaderState.instances[0].snapCalls).toBe(0);
     expect(loaderState.instances[0].routeCalls).toBe(0);
   });
 

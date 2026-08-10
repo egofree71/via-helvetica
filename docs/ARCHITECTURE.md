@@ -255,8 +255,9 @@ flowchart TB
 | Information overlays | `src/map/useMapInformationLayers.ts`, `src/map/mapInformationViewport.ts`, `src/map/useSwitzerlandMobilityHikingSelection.ts`, `src/switzerlandMobility/hikingRoutes.ts` | Visibility, loading, inspection priority, click-anchor visibility beside temporary panels, public-route selection and fitting, popup state, caching, and cancellation |
 | Editable-route domain | `src/map/routeState.ts`, `src/map/useEditableRoute.ts`, `src/map/importedRouteConversion.ts` | Immutable route state and section provenance, history, lossless single-trace GPX conversion, snap mode, serialized mutations, and route actions |
 | Pointer interaction | `src/map/useRouteInteractions.ts`, `src/map/routePointerInteraction.ts` | Waypoint and section hit detection, drag previews, click/drag lifecycle, and semantic edit requests |
-| Route presentation | `src/map/routeDisplay.ts`, `src/map/itineraryDirection.ts`, `src/map/itineraryEndpoints.ts` | Committed geometry, previews, direction arrows, and A/B markers |
+| Route presentation | `src/map/routeDisplay.ts`, `src/map/itineraryDirection.ts`, `src/map/itineraryEndpoints.ts` | Committed geometry, previews, zoom-aware waypoint decluttering, direction arrows, and A/B markers |
 | Imported GPX | `src/import/gpx.ts`, `src/map/useImportedRoute.ts`, `src/map/importedRoute.ts` | Local parsing, projection, initial read-only display, retained source XML/elevation, and responsive view fitting |
+| GPX export | `src/export/gpx.ts`, `src/export/itineraryExportSource.ts` | Generated GPX serialization plus regression-tested selection of exact imported XML while converted geometry remains pristine |
 | Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts`, `src/map/useRouteProfileSynchronization.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and exclusive map/profile synchronisation for the active itinerary or selected public route |
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
 | Offline routing data | `routing-data.config.example.json`, `scripts/generate-routing-geometry-cells.py`, `scripts/generate-precomputed-binary-routing-graph.mjs`, `scripts/verify-routing-dataset.mjs`, `scripts/upload-routing-dataset-r2.ps1` | External source/work/release paths, national import, binary compilation, verification, and immutable R2 publication |
@@ -369,24 +370,39 @@ The import workflow owns:
 
 For one continuous segment entirely inside `MAP_EXTENT`, the statistics bar
 exposes a contextual pencil action. `importedRouteConversion.ts` then creates
-sparse editable anchors on existing source vertices. The spacing is adaptive:
+editable anchors on existing source vertices. The spacing is adaptive:
 longer routes prefer about 1 km between anchors, while routes shorter than about
 3 km aim for at least three editable sections so short traces still expose useful
-interior handles. A cap of 60 anchors prevents dense controls on very long GPX
-files. Every incoming section is a copied slice of
+interior handles. Around 500 editable sections (roughly 501 anchors on an open route) is a preference rather than a hard limit:
+very long traces may use more anchors so imported sections remain comfortably
+below the 15 km network-routing limit. The editable workflow currently rejects
+continuous traces above 20,000 projected source vertices instead of silently
+thinning them. GPX files above that ceiling remain available in read-only mode.
+Every incoming section is a copied slice of
 the original projected geometry marked `origin: 'imported'`. Conversion performs
 no snapping, routing, interpolation, or simplification, so the displayed line is
 identical to the imported geometry before the first edit.
 
 The read-only OpenLayers representation is removed after conversion and the
-normal editable-route controls become active. `App.tsx` nevertheless retains the
+normal editable-route controls become active. Waypoint display density is then
+resolved in screen space: route state keeps every anchor, while the presentation
+threshold grows progressively on regional views and shrinks again for detailed
+editing. Hidden anchors reappear automatically on zoom. Start, finish, and the
+actively dragged waypoint always remain visible. The same visible-anchor set
+feeds direction-arrow avoidance, so arrows do not reserve space around hidden
+handles. Direction arrows remain eligible on moderately broader regional views
+than before, with a smaller exclusion margin around visible handles; curvature
+checks and the existing per-line cap still prevent misleading or excessive
+symbols. `App.tsx` nevertheless retains the
 source XML, embedded elevation summary, and the exact pristine `RouteState`
 references. Reference identity therefore determines whether an undo has returned
 to the untouched imported state without maintaining a separate modified flag.
 While pristine, export can still use the original GPX document and metrics can
 still reuse embedded elevations. Once an edit commits different route-state
 references, normal generated-route export and GeoAdmin elevation processing take
-over.
+over. `src/export/itineraryExportSource.ts` keeps the imported-versus-generated
+export decision pure and regression-tested so a modified route cannot silently
+fall back to stale source XML.
 
 Multi-segment GPX files remain read-only in this first implementation rather
 than inventing links across deliberate gaps or expanding the editable domain to
@@ -1058,8 +1074,9 @@ manual checks include:
   synchronization for named SwitzerlandMobility routes;
 - repeated GPX fitting on desktop and narrow viewports, including crisp native-scale raster backgrounds;
 - editable-GPX conversion with no visual geometry shift, local section edits,
-  undo back to the pristine trace, and a dense real-world GPX to check drag and
-  hit-testing responsiveness;
+  undo back to the pristine trace, adaptive waypoint decluttering across zoom
+  levels, arrow separation from visible handles, and a dense real-world GPX to
+  check drag and hit-testing responsiveness;
 - the contextual pencil position beside the statistics bar on desktop and its
   collision-free narrow-layout placement;
 - local GPX export versus explicit swisstopo upload, desktop QR scanning, direct

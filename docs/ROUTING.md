@@ -760,6 +760,21 @@ required. A GPX converted for editing enters the same workflow: untouched
 sections remain marked `imported`, while every section actually rebuilt by a
 move becomes a normal `generated` network or straight section.
 
+Imported-GPX conversion targets about 1 km between anchors for ordinary traces
+and adapts to shorter routes so they still expose interior handles. For very long
+traces the preferred anchor count may be exceeded rather than letting imported
+sections approach the 15 km network-section boundary. The initial conversion is
+limited to 20,000 source vertices; denser GPX files remain read-only. Because
+anchors must be existing GPX vertices, a trace whose source points are themselves
+more than 15 km apart is also kept read-only instead of inventing interpolation
+points that would violate lossless conversion.
+
+Anchor count and map clutter are deliberately separate concerns. Every anchor
+remains in immutable route state, but broad map resolutions show only handles
+that are sufficiently separated in screen space. Hidden anchors are not rendered
+or waypoint-hit-tested until zoom makes them visible again. Direction arrows use
+that same visible-anchor set as their avoidance coordinates.
+
 ### 13.3 Insertion
 
 Dragging a stored section inserts one waypoint and replaces that section with

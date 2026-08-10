@@ -26,6 +26,12 @@ import {
   createRouteSegmentsGpx,
   downloadGpxDocument,
 } from './export/gpx';
+import {
+  isEditableImportedRoutePristine as isEditableImportedRoutePristineState,
+  resolveExactImportedRouteSource,
+  resolveItineraryExportSource,
+  type EditableImportedRouteExportOrigin,
+} from './export/itineraryExportSource';
 import { useI18n } from './i18n/I18nContext';
 import {
   createSwisstopoShare,
@@ -39,13 +45,14 @@ import {
   MAP_EXTENT,
 } from './map/config';
 import { fromWgs84 } from './map/projection';
-import { createEditableRouteFromImportedGeometry } from './map/importedRouteConversion';
-import { routeStateMatches, type RouteState } from './map/routeState';
-import { useEditableRoute } from './map/useEditableRoute';
 import {
-  useImportedRoute,
-  type ImportedRouteSource,
-} from './map/useImportedRoute';
+  createEditableRouteFromImportedGeometry,
+  ImportedRouteSparseGeometryError,
+  ImportedRouteTooManyVerticesError,
+  MAX_EDITABLE_IMPORTED_VERTEX_COUNT,
+} from './map/importedRouteConversion';
+import { useEditableRoute } from './map/useEditableRoute';
+import { useImportedRoute } from './map/useImportedRoute';
 import {
   resolveInitialMapInformationLayerVisibility,
   useMapInformationLayers,
@@ -77,13 +84,9 @@ import {
 type RouteExportSource = 'editable' | 'imported' | 'switzerlandMobility';
 
 /** Original GPX resources retained while a converted editable route may return to pristine. */
-interface EditableImportedRouteOrigin {
-  /** Original source used for exact pristine export. */
-  source: ImportedRouteSource;
+interface EditableImportedRouteOrigin extends EditableImportedRouteExportOrigin {
   /** Embedded GPX profile retained while geometry remains pristine. */
   elevationSummary: RouteElevationSummary | null;
-  /** Exact state created by lossless GPX conversion. */
-  pristineState: RouteState;
 }
 
 /**
@@ -286,10 +289,9 @@ export default function App() {
   });
 
   const isEditableImportedRoutePristine =
-    editableImportedRouteOrigin !== null &&
-    routeStateMatches(
+    isEditableImportedRoutePristineState(
       routeHistory,
-      editableImportedRouteOrigin.pristineState,
+      editableImportedRouteOrigin,
     );
 
   /** Converts the current continuous GPX to editable state without rerouting. */
@@ -303,6 +305,16 @@ export default function App() {
     }
 
     const coordinates = importedRouteSegments[0];
+
+    if (coordinates.length > MAX_EDITABLE_IMPORTED_VERTEX_COUNT) {
+      showTemporaryRouteMessage(
+        t('route.editImportedTooManyPoints', {
+          maximum: MAX_EDITABLE_IMPORTED_VERTEX_COUNT.toLocaleString(locale),
+        }),
+        'error',
+      );
+      return;
+    }
 
     if (
       coordinates.some(
@@ -325,6 +337,26 @@ export default function App() {
       clearImportedRoute();
       startEditingFromRouteState(state);
     } catch (error) {
+      if (error instanceof ImportedRouteTooManyVerticesError) {
+        showTemporaryRouteMessage(
+          t('route.editImportedTooManyPoints', {
+            maximum: error.maximumVertexCount.toLocaleString(locale),
+          }),
+          'error',
+        );
+        return;
+      }
+
+      if (error instanceof ImportedRouteSparseGeometryError) {
+        showTemporaryRouteMessage(
+          t('route.editImportedSparseGeometry', {
+            maximum: error.maximumDistanceMeters / 1_000,
+          }),
+          'error',
+        );
+        return;
+      }
+
       console.error(
         'Unable to convert the imported GPX to an editable route.',
         error,
@@ -337,6 +369,7 @@ export default function App() {
     importedRouteElevationSummary,
     importedRouteSegments,
     importedRouteSource,
+    locale,
     showTemporaryRouteMessage,
     startEditingFromRouteState,
     t,
@@ -383,9 +416,14 @@ export default function App() {
   ]);
 
   const handleToggleRouteCreation = useCallback(() => {
-    if (!isRouteCreationActive && importedRouteSource) {
+    if (!isRouteCreationActive) {
+      // Invalidate a pending File.text() read even before an imported source is
+      // available, otherwise a late GPX result could replace a newly started route.
       clearImportedRoute();
-      setEditableImportedRouteOrigin(null);
+
+      if (importedRouteSource) {
+        setEditableImportedRouteOrigin(null);
+      }
     }
 
     toggleRouteCreation();
@@ -507,23 +545,22 @@ export default function App() {
 
   /** Opens the export/share dialog for the current editable or imported route. */
   const requestCurrentItineraryExport = () => {
-    const pristineImportedSource = isEditableImportedRoutePristine
-      ? editableImportedRouteOrigin?.source ?? null
-      : null;
-    const exactImportedSource = importedRouteSource ?? pristineImportedSource;
+    const source = resolveItineraryExportSource({
+      importedRouteSource,
+      editableImportedRouteOrigin,
+      routeHistory,
+      isRouteEditingActive: isRouteCreationActive,
+      isRouteOperationPending,
+    });
 
-    if (exactImportedSource) {
-      setRouteExportDefaultName(exactImportedSource.name);
-      setRouteExportSource('imported');
-      setIsRouteExportDialogOpen(true);
+    if (!source) {
       return;
     }
 
-    if (
-      !isRouteCreationActive ||
-      isRouteOperationPending ||
-      routeHistory.steps.length < 2
-    ) {
+    if (source.kind === 'imported') {
+      setRouteExportDefaultName(source.source.name);
+      setRouteExportSource('imported');
+      setIsRouteExportDialogOpen(true);
       return;
     }
 
@@ -581,11 +618,11 @@ export default function App() {
     }
 
     if (routeExportSource === 'imported') {
-      const source =
-        importedRouteSource ??
-        (isEditableImportedRoutePristine
-          ? editableImportedRouteOrigin?.source ?? null
-          : null);
+      const source = resolveExactImportedRouteSource(
+        importedRouteSource,
+        editableImportedRouteOrigin,
+        routeHistory,
+      );
 
       if (!source) {
         throw new Error('The imported GPX route is unavailable.');

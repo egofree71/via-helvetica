@@ -151,8 +151,12 @@ Machine-specific infrastructure and credentials remain outside version control.
 - Load a GPX file as the current purple, read-only itinerary.
 - For a GPX containing one continuous segment inside the Swiss map extent, use
   the pencil action beside the statistics bar to make it editable. Conversion
-  creates sparse waypoints on existing GPX vertices and does not reroute or
-  simplify the initial geometry.
+  creates waypoints on existing GPX vertices and does not reroute or simplify
+  the initial geometry. Editable conversion is currently limited to 20,000
+  source vertices; denser files remain fully available in read-only mode.
+- Long converted routes may retain hundreds of editing anchors in route state.
+  At broad map scales, waypoint handles are automatically decluttered in screen
+  space and direction arrows avoid only the handles that are actually visible.
 - Imported GPX routes reuse embedded elevations when available, otherwise the
   profile is requested from GeoAdmin. A converted route keeps the embedded
   profile while its geometry is still pristine.

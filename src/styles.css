@@ -2020,15 +2020,16 @@ select {
   left: 0.6rem;
 }
 
-/* Once the centered statistics bar approaches the lower-right corner,
-   keep the summary on the bottom edge and move the compact About control into
-   the existing right-side stack instead of sacrificing a full strip of map
-   height. */
+/* Once the centered statistics bar no longer has safe space on its right,
+   move the contextual GPX edit action above the bar instead of shrinking the
+   statistics or pushing the action outside the viewport. */
 @media (max-width: 60rem) {
   .route-summary-edit-button {
+    top: auto;
     right: 0;
     bottom: calc(100% + 0.45rem);
     left: auto;
+    height: 3rem;
   }
 }
 
@@ -2230,8 +2231,8 @@ select {
   }
 
   .route-summary-edit-button {
-    left: calc(100% + 0.6rem);
     width: 2.85rem;
+    height: 2.85rem;
   }
 
   .route-summary-edit-button img {
