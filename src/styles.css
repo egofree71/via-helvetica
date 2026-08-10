@@ -1251,10 +1251,11 @@ select {
 }
 
 .route-summary-edit-button img {
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.6rem;
+  height: 1.6rem;
   display: block;
 }
+
 
 .route-statistics {
   display: grid;
@@ -1992,16 +1993,16 @@ select {
   left: 0.6rem;
 }
 
-/* Once the centered statistics bar no longer has safe space on its right,
-   move the contextual GPX edit action above the bar instead of shrinking the
-   statistics or pushing the action outside the viewport. */
+/* On intermediate widths, reserve a right-side gutter for the contextual GPX
+   edit action instead of moving it above the summary. Keeping the action beside
+   the same row at every breakpoint prevents it from covering the elevation
+   profile when that panel is open. */
 @media (max-width: 60rem) {
-  .route-summary-edit-button {
-    top: auto;
-    right: 0;
-    bottom: calc(100% + 0.45rem);
-    left: auto;
-    height: 3rem;
+  .route-summary {
+    left: 1rem;
+    width: min(50rem, calc(100vw - 6.35rem));
+    max-width: calc(100vw - 6.35rem);
+    transform: none;
   }
 }
 
@@ -2202,14 +2203,22 @@ select {
     width: 2.85rem;
   }
 
+  /* The compact summary intentionally leaves a control gutter on its right.
+     Keep the GPX edit action attached to that row so opening the elevation
+     profile cannot place the pencil over the chart. */
   .route-summary-edit-button {
+    display: grid;
+    top: 0;
+    right: auto;
+    bottom: 0;
+    left: calc(100% + 0.45rem);
     width: 2.85rem;
-    height: 2.85rem;
+    height: auto;
   }
 
   .route-summary-edit-button img {
-    width: 1.5rem;
-    height: 1.5rem;
+    width: 1.4rem;
+    height: 1.4rem;
   }
 
   .route-profile-toggle svg {

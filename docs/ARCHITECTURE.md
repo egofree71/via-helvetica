@@ -1079,8 +1079,9 @@ manual checks include:
   undo back to the pristine trace, adaptive waypoint decluttering across zoom
   levels, arrow separation from visible handles, and a dense real-world GPX to
   check drag and hit-testing responsiveness;
-- the contextual pencil position beside the statistics bar on desktop and its
-  collision-free narrow-layout placement;
+- the contextual pencil position beside the statistics bar at every responsive
+  width, including intermediate/tablet and compact narrow layouts with the
+  elevation profile open;
 - local GPX export versus explicit swisstopo upload, desktop QR scanning, direct
   mobile hand-off, and expiry behaviour of the temporary GPX URL;
 - map/profile pointer synchronisation;
