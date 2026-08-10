@@ -3,16 +3,35 @@
  * from React and OpenLayers rendering. The stored geometry is the source of
  * truth for undo, redo, reversal, GPX export, metrics, and route display, so
  * every transformation returns new coordinate arrays instead of sharing
- * mutable OpenLayers data.
+ * mutable OpenLayers data. Imported GPX sections may enter this domain without
+ * rerouting; their provenance remains attached to the section until an edit
+ * explicitly replaces that geometry.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 
-/** Geometry source used when one route section was created. */
+/** Geometry source used when Via Helvetica calculates one route section. */
 export type RouteMode =
   /** Direct line between waypoints. */
   | 'straight'
   /** Geometry calculated on the swissTLM3D routing network. */
   | 'network';
+
+/** Immutable geometry between two editable waypoints. */
+export type RouteSection =
+  | {
+      /** Via Helvetica generated this section through straight or network routing. */
+      readonly origin: 'generated';
+      /** Calculation mode that produced the stored geometry. */
+      readonly mode: RouteMode;
+      /** Exact displayed section geometry in LV95 coordinates. */
+      readonly coordinates: Coordinate[];
+    }
+  | {
+      /** The section is an untouched slice of an imported GPX geometry. */
+      readonly origin: 'imported';
+      /** Exact imported section geometry in LV95 coordinates. */
+      readonly coordinates: Coordinate[];
+    };
 
 /** Immutable history entry representing one user waypoint and its incoming section. */
 export interface RouteStep {
@@ -22,18 +41,11 @@ export interface RouteStep {
    */
   waypoint: Coordinate;
   /** Geometry from the previous waypoint to this one, or `null` for the first point. */
-  segment: Coordinate[] | null;
-  /** Whether the incoming section is straight or network-routed. */
-  mode: RouteMode;
+  section: RouteSection | null;
 }
 
 /** Optional final section that connects the last waypoint back to the first. */
-export interface RouteClosure {
-  /** Exact displayed geometry from the last waypoint to the first waypoint. */
-  segment: Coordinate[];
-  /** Whether the closing section is straight or network-routed. */
-  mode: RouteMode;
-}
+export type RouteClosure = RouteSection;
 
 /** Complete immutable route geometry shared by editing, display, metrics, and export. */
 export interface RouteState {
@@ -52,11 +64,11 @@ export interface RouteHistory extends RouteState {
 }
 
 /**
- * Squared distance in square LV95 metres below which consecutive display
- * vertices are treated as duplicates. Avoiding the square root keeps route
- * flattening cheap while the 10-centimetre threshold remains visually exact.
+ * Squared distance in LV95 square metres below which consecutive generated
+ * vertices are treated as duplicates. Imported geometry deliberately bypasses
+ * this tolerance so dense GPX samples remain lossless.
  */
-const DUPLICATE_COORDINATE_DISTANCE_SQUARED = 0.01;
+const GENERATED_DUPLICATE_COORDINATE_DISTANCE_SQUARED = 0.01;
 
 /**
  * Returns the immutable route portion of a history entry without its stacks.
@@ -103,8 +115,43 @@ export function coordinateDistanceSquared(
   return deltaX * deltaX + deltaY * deltaY;
 }
 
-/** Appends a coordinate unless it would create a sub-decimetre duplicate vertex. */
-function appendCoordinate(
+/** Appends one section coordinate with provenance-appropriate deduplication. */
+function appendSectionCoordinate(
+  coordinates: Coordinate[],
+  coordinate: Coordinate,
+  origin: RouteSection['origin'],
+): void {
+  const previousCoordinate = coordinates[coordinates.length - 1];
+
+  if (!previousCoordinate) {
+    coordinates.push([...coordinate]);
+    return;
+  }
+
+  if (origin === 'imported') {
+    // Imported GPX editing promises to preserve every source vertex. Only the
+    // exact boundary duplicated by adjacent section slices may disappear.
+    if (
+      previousCoordinate[0] !== coordinate[0] ||
+      previousCoordinate[1] !== coordinate[1]
+    ) {
+      coordinates.push([...coordinate]);
+    }
+    return;
+  }
+
+  // Preserve the pre-existing display behaviour for calculated geometry, which
+  // removes sub-decimetre artefacts around snapped section junctions.
+  if (
+    coordinateDistanceSquared(previousCoordinate, coordinate) >
+    GENERATED_DUPLICATE_COORDINATE_DISTANCE_SQUARED
+  ) {
+    coordinates.push([...coordinate]);
+  }
+}
+
+/** Appends a standalone waypoint while removing only an exact duplicate. */
+function appendWaypointCoordinate(
   coordinates: Coordinate[],
   coordinate: Coordinate,
 ): void {
@@ -112,8 +159,8 @@ function appendCoordinate(
 
   if (
     !previousCoordinate ||
-    coordinateDistanceSquared(previousCoordinate, coordinate) >
-      DUPLICATE_COORDINATE_DISTANCE_SQUARED
+    previousCoordinate[0] !== coordinate[0] ||
+    previousCoordinate[1] !== coordinate[1]
   ) {
     coordinates.push([...coordinate]);
   }
@@ -123,7 +170,7 @@ function appendCoordinate(
  * Flattens incoming step geometries into one continuous display line.
  * @param steps - Ordered immutable route steps.
  * @param closure - Optional final section back to the first waypoint.
- * @returns Deduplicated route coordinates in display order.
+ * @returns Route coordinates in display order with exact section junctions deduplicated.
  */
 export function collectRouteCoordinates(
   steps: RouteStep[],
@@ -132,22 +179,38 @@ export function collectRouteCoordinates(
   const coordinates: Coordinate[] = [];
 
   for (const step of steps) {
-    if (step.segment && step.segment.length >= 2) {
-      for (const coordinate of step.segment) {
-        appendCoordinate(coordinates, coordinate);
+    if (step.section && step.section.coordinates.length >= 2) {
+      for (const coordinate of step.section.coordinates) {
+        appendSectionCoordinate(coordinates, coordinate, step.section.origin);
       }
     } else {
-      appendCoordinate(coordinates, step.waypoint);
+      appendWaypointCoordinate(coordinates, step.waypoint);
     }
   }
 
-  if (closure?.segment && closure.segment.length >= 2) {
-    for (const coordinate of closure.segment) {
-      appendCoordinate(coordinates, coordinate);
+  if (closure?.coordinates && closure.coordinates.length >= 2) {
+    for (const coordinate of closure.coordinates) {
+      appendSectionCoordinate(coordinates, coordinate, closure.origin);
     }
   }
 
   return coordinates;
+}
+
+/** Reverses one section while preserving whether its geometry was imported. */
+function reverseSection(section: RouteSection): RouteSection {
+  const coordinates = section.coordinates
+    .slice()
+    .reverse()
+    .map((coordinate): Coordinate => [...coordinate]);
+
+  return section.origin === 'imported'
+    ? { origin: 'imported', coordinates }
+    : {
+        origin: 'generated',
+        mode: section.mode,
+        coordinates,
+      };
 }
 
 /**
@@ -169,37 +232,31 @@ export function reverseRouteSteps(steps: RouteStep[]): RouteStep[] {
   const reversedSteps: RouteStep[] = [
     {
       waypoint: [...lastStep.waypoint],
-      segment: null,
-      mode: lastStep.mode,
+      section: null,
     },
   ];
 
   for (let index = steps.length - 1; index > 0; index -= 1) {
     const sourceStep = steps[index];
     const destinationStep = steps[index - 1];
-    const reversedSegment = sourceStep.segment
-      ? sourceStep.segment
-          .slice()
-          .reverse()
-          .map((coordinate): Coordinate => [...coordinate])
-      : [[...sourceStep.waypoint], [...destinationStep.waypoint]];
+    const reversedSection = sourceStep.section
+      ? reverseSection(sourceStep.section)
+      : {
+          origin: 'generated' as const,
+          mode: 'straight' as const,
+          coordinates: [
+            [...sourceStep.waypoint],
+            [...destinationStep.waypoint],
+          ],
+        };
 
     reversedSteps.push({
       waypoint: [...destinationStep.waypoint],
-      segment: reversedSegment,
-      mode: sourceStep.mode,
+      section: reversedSection,
     });
   }
 
   return reversedSteps;
-}
-
-/** Reverses one coordinate sequence without sharing mutable point arrays. */
-function reverseSegment(segment: Coordinate[]): Coordinate[] {
-  return segment
-    .slice()
-    .reverse()
-    .map((coordinate): Coordinate => [...coordinate]);
 }
 
 /**
@@ -219,38 +276,46 @@ function reverseClosedRouteState(state: RouteState): RouteState {
 
   const reversedSteps: RouteStep[] = [
     {
-      ...steps[0],
       waypoint: [...steps[0].waypoint],
-      segment: null,
+      section: null,
     },
     {
       waypoint: [...steps[steps.length - 1].waypoint],
-      segment: reverseSegment(closure.segment),
-      mode: closure.mode,
+      section: reverseSection(closure),
     },
   ];
 
   for (let index = steps.length - 1; index > 1; index -= 1) {
     const sourceStep = steps[index];
     const destinationStep = steps[index - 1];
-    const reversedSegment = sourceStep.segment
-      ? reverseSegment(sourceStep.segment)
-      : [[...sourceStep.waypoint], [...destinationStep.waypoint]];
+    const reversedSection = sourceStep.section
+      ? reverseSection(sourceStep.section)
+      : {
+          origin: 'generated' as const,
+          mode: 'straight' as const,
+          coordinates: [
+            [...sourceStep.waypoint],
+            [...destinationStep.waypoint],
+          ],
+        };
 
     reversedSteps.push({
       waypoint: [...destinationStep.waypoint],
-      segment: reversedSegment,
-      mode: sourceStep.mode,
+      section: reversedSection,
     });
   }
 
   const firstNormalSection = steps[1];
-  const reversedClosure: RouteClosure = {
-    segment: firstNormalSection.segment
-      ? reverseSegment(firstNormalSection.segment)
-      : [[...firstNormalSection.waypoint], [...steps[0].waypoint]],
-    mode: firstNormalSection.mode,
-  };
+  const reversedClosure: RouteClosure = firstNormalSection.section
+    ? reverseSection(firstNormalSection.section)
+    : {
+        origin: 'generated',
+        mode: 'straight',
+        coordinates: [
+          [...firstNormalSection.waypoint],
+          [...steps[0].waypoint],
+        ],
+      };
 
   return {
     steps: reversedSteps,

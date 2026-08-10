@@ -24,6 +24,7 @@ interface CapturedRouteInteractions {
 const loaderState = vi.hoisted(() => ({
   instances: [] as Array<{
     disposed: boolean;
+    snapCalls: number;
     routeCalls: number;
     emit: (notice: RoutingNotice) => void;
   }>,
@@ -45,6 +46,7 @@ vi.mock('../routing/dynamicRoutingNetwork', () => {
       (notice: RoutingNotice) => void
     >();
     disposed = false;
+    snapCalls = 0;
     routeCalls = 0;
 
     constructor() {
@@ -65,6 +67,7 @@ vi.mock('../routing/dynamicRoutingNetwork', () => {
     }
 
     snap(): Promise<null> {
+      this.snapCalls += 1;
       return Promise.resolve(null);
     }
 
@@ -188,6 +191,39 @@ describe('useEditableRoute orchestration', () => {
     );
   });
 
+
+  it('seeds editable history from imported geometry without routing', async () => {
+    await act(async () => {
+      root?.render(createElement(Harness));
+    });
+
+    const importedState: RouteState = {
+      steps: [
+        { waypoint: [0, 0], section: null },
+        {
+          waypoint: [1_000, 0],
+          section: {
+            origin: 'imported',
+            coordinates: [[0, 0], [500, 20], [1_000, 0]],
+          },
+        },
+      ],
+      closure: null,
+    };
+
+    await act(async () => {
+      controllerState.current?.startEditingFromRouteState(importedState);
+    });
+
+    expect(controllerState.current?.isRouteCreationActive).toBe(true);
+    expect(controllerState.current?.isRouteSnapEnabled).toBe(true);
+    expect(controllerState.current?.routeHistory.steps).toBe(importedState.steps);
+    expect(controllerState.current?.routeHistory.undoStates).toEqual([]);
+    expect(controllerState.current?.routeHistory.redoStates).toEqual([]);
+    expect(loaderState.instances[0].snapCalls).toBe(0);
+    expect(loaderState.instances[0].routeCalls).toBe(0);
+  });
+
   it('rejects an overlong appended section before pending state or Worker routing', async () => {
     await act(async () => {
       root?.render(createElement(Harness));
@@ -197,8 +233,7 @@ describe('useEditableRoute orchestration', () => {
       steps: [
         {
           waypoint: [0, 0],
-          segment: null,
-          mode: 'network',
+          section: null,
         },
       ],
       closure: null,

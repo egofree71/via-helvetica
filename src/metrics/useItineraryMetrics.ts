@@ -28,8 +28,8 @@ export interface UseItineraryMetricsOptions {
   editableRouteCoordinates: Coordinate[];
   /** Independent read-only GPX segments, empty when a route is current. */
   importedRouteSegments: Coordinate[][];
-  /** Complete profile derived from embedded GPX elevations when available. */
-  importedRouteElevationSummary: RouteElevationSummary | null;
+  /** Complete embedded elevation profile that may be reused for current geometry. */
+  embeddedRouteElevationSummary: RouteElevationSummary | null;
   /** Whether a route drag currently owns pointer movement. */
   isRoutePointerInteractionActive: boolean;
   /** Whether the itinerary currently owns the shared profile marker. */
@@ -93,16 +93,13 @@ export function useItineraryMetrics(
     () => calculateRouteSegmentsDistance(activeRouteSegments),
     [activeRouteSegments],
   );
-  const embeddedImportedElevation =
-    options.editableRouteCoordinates.length < 2
-      ? options.importedRouteElevationSummary
-      : null;
+  const embeddedElevation = options.embeddedRouteElevationSummary;
   const currentRequestResult =
     elevationResult?.segments === activeRouteSegments
       ? elevationResult
       : null;
-  const elevation = embeddedImportedElevation ?? currentRequestResult?.summary ?? null;
-  const elevationStatus: RouteElevationStatus = embeddedImportedElevation
+  const elevation = embeddedElevation ?? currentRequestResult?.summary ?? null;
+  const elevationStatus: RouteElevationStatus = embeddedElevation
     ? 'ready'
     : currentRequestResult?.status ?? 'loading';
   const durationMinutes = elevation
@@ -136,7 +133,7 @@ export function useItineraryMetrics(
       return;
     }
 
-    if (embeddedImportedElevation !== null) {
+    if (embeddedElevation !== null) {
       return;
     }
 
@@ -183,7 +180,7 @@ export function useItineraryMetrics(
       window.clearTimeout(requestTimer);
       abortController.abort();
     };
-  }, [activeRouteSegments, distanceMeters, embeddedImportedElevation]);
+  }, [activeRouteSegments, distanceMeters, embeddedElevation]);
 
   return {
     activeRouteSegments,

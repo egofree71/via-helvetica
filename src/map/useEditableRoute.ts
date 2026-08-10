@@ -101,6 +101,11 @@ export interface EditableRouteController {
   /** Clears the editable route while keeping route creation active. */
   deleteRoute: () => void;
   /**
+   * Replaces current editable history with externally prepared geometry and
+   * enters editing without recalculating any section.
+   */
+  startEditingFromRouteState: (state: RouteState) => void;
+  /**
    * Exits editing and clears route history before a read-only itinerary becomes
    * current.
    */
@@ -472,8 +477,7 @@ export function useEditableRoute(
             step = snappedCoordinate
               ? {
                   waypoint: [...snappedCoordinate],
-                  segment: null,
-                  mode: 'network',
+                  section: null,
                 }
               : createStraightRouteStep(undefined, clickedCoordinate);
           } else {
@@ -504,8 +508,11 @@ export function useEditableRoute(
 
               step = {
                 waypoint: [...segment[segment.length - 1]],
-                segment,
-                mode: 'network',
+                section: {
+                  origin: 'generated',
+                  mode: 'network',
+                  coordinates: segment,
+                },
               };
             }
           }
@@ -812,9 +819,15 @@ export function useEditableRoute(
 
       if (isRouteSnapEnabled) {
         const { steps, closure } = expectedState;
+        const preservesImportedGeometry =
+          waypointIndex > 0 &&
+          waypointIndex < steps.length - 1 &&
+          steps[waypointIndex].section?.origin === 'imported' &&
+          steps[waypointIndex + 1].section?.origin === 'imported';
         let replacementSection: RouteSectionEndpoints | null = null;
 
         if (
+          !preservesImportedGeometry &&
           steps.length > 2 &&
           waypointIndex > 0 &&
           waypointIndex < steps.length - 1
@@ -896,6 +909,26 @@ export function useEditableRoute(
   const toggleRouteSnap = useCallback(() => {
     setIsRouteSnapEnabled((enabled) => !enabled);
   }, []);
+
+  const startEditingFromRouteState = useCallback(
+    (state: RouteState) => {
+      routingAbortControllerRef.current?.abort();
+      routingAbortControllerRef.current = null;
+      routeOperationPendingRef.current = false;
+      routeCreationActiveRef.current = true;
+      routeCreationSessionRef.current += 1;
+      setIsRouteOperationPending(false);
+      setIsRouteCreationActive(true);
+      setIsRouteSnapEnabled(true);
+      commitRouteHistory({
+        ...state,
+        undoStates: [],
+        redoStates: [],
+      });
+      clearRouteMessage();
+    },
+    [clearRouteMessage, commitRouteHistory],
+  );
 
   const replaceWithReadOnlyItinerary = useCallback(() => {
     routingAbortControllerRef.current?.abort();
@@ -991,6 +1024,7 @@ export function useEditableRoute(
     reverseRoute,
     toggleRouteLoop,
     deleteRoute,
+    startEditingFromRouteState,
     replaceWithReadOnlyItinerary,
     showTemporaryRouteMessage,
     isPointerInteractionActive,

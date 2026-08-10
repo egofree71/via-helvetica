@@ -11,6 +11,7 @@ import { assertNetworkRouteSectionDistance } from './routeSectionLimit';
 import {
   coordinateDistanceSquared,
   type RouteClosure,
+  type RouteSection,
   type RouteMode,
   type RouteState,
   type RouteStep,
@@ -38,8 +39,13 @@ export function createStraightRouteStep(
 
   return {
     waypoint,
-    segment: previousStep ? [[...previousStep.waypoint], waypoint] : null,
-    mode: 'straight',
+    section: previousStep
+      ? {
+          origin: 'generated',
+          mode: 'straight',
+          coordinates: [[...previousStep.waypoint], waypoint],
+        }
+      : null,
   };
 }
 
@@ -127,8 +133,9 @@ export function createStraightRouteClosure(
   }
 
   return {
-    segment: [[...lastStep.waypoint], [...firstStep.waypoint]],
+    origin: 'generated',
     mode: 'straight',
+    coordinates: [[...lastStep.waypoint], [...firstStep.waypoint]],
   };
 }
 
@@ -167,15 +174,17 @@ export async function rebuildFixedRouteSection(
       connectRoutedSegmentEndpoint(segment, endCoordinate, 'end');
 
       return {
-        segment,
+        origin: 'generated',
         mode: 'network',
+        coordinates: segment,
       };
     }
   }
 
   return {
-    segment: [[...startCoordinate], [...endCoordinate]],
+    origin: 'generated',
     mode: 'straight',
+    coordinates: [[...startCoordinate], [...endCoordinate]],
   };
 }
 
@@ -256,16 +265,14 @@ export async function rebuildRouteAfterWaypointMove(
         nextSteps[0] = {
           ...originalStep,
           waypoint: movedWaypoint,
-          segment: null,
-          mode: 'network',
+          section: null,
         };
       } else {
         movedWaypoint = [...targetCoordinate];
         nextSteps[0] = {
           ...originalStep,
           waypoint: movedWaypoint,
-          segment: null,
-          mode: 'straight',
+          section: null,
         };
       }
     } else {
@@ -273,8 +280,7 @@ export async function rebuildRouteAfterWaypointMove(
       nextSteps[0] = {
         ...originalStep,
         waypoint: movedWaypoint,
-        segment: null,
-        mode: 'straight',
+        section: null,
       };
     }
   } else {
@@ -297,8 +303,11 @@ export async function rebuildRouteAfterWaypointMove(
         nextSteps[waypointIndex] = {
           ...originalStep,
           waypoint: movedWaypoint,
-          segment,
-          mode: 'network',
+          section: {
+            origin: 'generated',
+            mode: 'network',
+            coordinates: segment,
+          },
         };
       } else {
         movedWaypoint = [...targetCoordinate];
@@ -328,8 +337,7 @@ export async function rebuildRouteAfterWaypointMove(
     );
     nextSteps[waypointIndex + 1] = {
       ...nextStep,
-      segment: rebuiltSection.segment,
-      mode: rebuiltSection.mode,
+      section: rebuiltSection,
     };
   }
 
@@ -405,8 +413,11 @@ export async function rebuildRouteAfterWaypointInsertion(
         connectRoutedSegmentEndpoint(segment, previousStep.waypoint, 'start');
         insertedStep = {
           waypoint: [...segment[segment.length - 1]],
-          segment,
-          mode: 'network',
+          section: {
+            origin: 'generated',
+            mode: 'network',
+            coordinates: segment,
+          },
         };
       } else {
         insertedStep = createStraightRouteStep(previousStep, targetCoordinate);
@@ -460,8 +471,11 @@ export async function rebuildRouteAfterWaypointInsertion(
       connectRoutedSegmentEndpoint(segment, previousStep.waypoint, 'start');
       insertedStep = {
         waypoint: [...segment[segment.length - 1]],
-        segment,
-        mode: 'network',
+        section: {
+          origin: 'generated',
+          mode: 'network',
+          coordinates: segment,
+        },
       };
     } else {
       insertedStep = createStraightRouteStep(previousStep, targetCoordinate);
@@ -479,8 +493,7 @@ export async function rebuildRouteAfterWaypointInsertion(
   );
   const updatedDestinationStep: RouteStep = {
     ...destinationStep,
-    segment: rebuiltDestinationSection.segment,
-    mode: rebuiltDestinationSection.mode,
+    section: rebuiltDestinationSection,
   };
 
   return {
@@ -492,6 +505,50 @@ export async function rebuildRouteAfterWaypointInsertion(
     ],
     closure,
   };
+}
+
+/**
+ * Concatenates two untouched imported sections when their shared waypoint is
+ * deleted. Removing an automatically created editing anchor must not reroute
+ * geometry that the user did not otherwise change.
+ *
+ * @param incoming - Imported section ending at the deleted waypoint.
+ * @param outgoing - Imported section starting at the deleted waypoint.
+ * @returns One imported section with the shared boundary coordinate included once.
+ * @throws {Error} If either input is not an untouched imported section.
+ */
+function mergeImportedSections(
+  incoming: RouteSection,
+  outgoing: RouteSection,
+): RouteSection {
+  if (incoming.origin !== 'imported' || outgoing.origin !== 'imported') {
+    throw new Error(
+      'Only imported route sections can be merged without routing.',
+    );
+  }
+
+  const coordinates = incoming.coordinates.map(
+    (coordinate): Coordinate => [...coordinate],
+  );
+  const outgoingStartIndex =
+    incoming.coordinates.length > 0 &&
+    outgoing.coordinates.length > 0 &&
+    incoming.coordinates[incoming.coordinates.length - 1][0] ===
+      outgoing.coordinates[0][0] &&
+    incoming.coordinates[incoming.coordinates.length - 1][1] ===
+      outgoing.coordinates[0][1]
+      ? 1
+      : 0;
+
+  for (
+    let index = outgoingStartIndex;
+    index < outgoing.coordinates.length;
+    index += 1
+  ) {
+    coordinates.push([...outgoing.coordinates[index]]);
+  }
+
+  return { origin: 'imported', coordinates };
 }
 
 /**
@@ -534,7 +591,7 @@ export async function rebuildRouteAfterWaypointDeletion(
         {
           ...remainingStep,
           waypoint: [...remainingStep.waypoint],
-          segment: null,
+          section: null,
         },
       ],
       closure: null,
@@ -547,7 +604,7 @@ export async function rebuildRouteAfterWaypointDeletion(
       {
         ...nextFirstStep,
         waypoint: [...nextFirstStep.waypoint],
-        segment: null,
+        section: null,
       },
       ...steps.slice(2),
     ];
@@ -598,18 +655,22 @@ export async function rebuildRouteAfterWaypointDeletion(
   }
 
   const previousStep = steps[waypointIndex - 1];
+  const deletedStep = steps[waypointIndex];
   const destinationStep = steps[waypointIndex + 1];
-  const rebuiltDestinationSection = await rebuildFixedRouteSection(
-    previousStep.waypoint,
-    destinationStep.waypoint,
-    editMode,
-    routingLoader,
-    signal,
-  );
+  const replacementSection =
+    deletedStep.section?.origin === 'imported' &&
+    destinationStep.section?.origin === 'imported'
+      ? mergeImportedSections(deletedStep.section, destinationStep.section)
+      : await rebuildFixedRouteSection(
+          previousStep.waypoint,
+          destinationStep.waypoint,
+          editMode,
+          routingLoader,
+          signal,
+        );
   const updatedDestinationStep: RouteStep = {
     ...destinationStep,
-    segment: rebuiltDestinationSection.segment,
-    mode: rebuiltDestinationSection.mode,
+    section: replacementSection,
   };
 
   return {

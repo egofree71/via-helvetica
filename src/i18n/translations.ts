@@ -93,6 +93,17 @@ const frenchTranslations = {
   'route.segmentHint': 'Cliquer pour prolonger, glisser pour ajouter un point de passage.',
   'route.export': 'Exporter l’itinéraire',
   'route.import': 'Charger un itinéraire GPX',
+  'route.editImported': 'Modifier l’itinéraire',
+  'route.editImportedSingleSegmentOnly':
+    'L’édition est disponible uniquement pour les GPX contenant un seul tronçon continu.',
+  'route.editImportedOutsideMap':
+    'Cet itinéraire sort de la zone couverte par Via Helvetica et ne peut pas être modifié.',
+  'route.editImportedTooManyPoints':
+    'Ce GPX contient plus de {maximum} points. Il peut être affiché, mais il est trop détaillé pour être modifié dans cette version.',
+  'route.editImportedSparseGeometry':
+    'Ce GPX ne contient pas assez de points intermédiaires pour rester modifiable avec le suivi des chemins (maximum {maximum} km entre deux points). Il reste disponible en lecture seule.',
+  'route.editImportedError':
+    'Cet itinéraire GPX n’a pas pu être préparé pour l’édition.',
   'route.importError':
     'Ce fichier GPX ne contient pas d’itinéraire valide.',
   'route.importTooLarge': 'Ce fichier GPX est trop volumineux.',
@@ -316,6 +327,17 @@ const germanTranslations: Record<TranslationKey, string> = {
   'route.segmentHint': 'Klicken zum Fortsetzen, ziehen zum Einfügen eines Wegpunkts.',
   'route.export': 'Route exportieren',
   'route.import': 'GPX-Route laden',
+  'route.editImported': 'Route bearbeiten',
+  'route.editImportedSingleSegmentOnly':
+    'Die Bearbeitung ist nur für GPX-Dateien mit einem einzigen durchgehenden Abschnitt verfügbar.',
+  'route.editImportedOutsideMap':
+    'Diese Route liegt teilweise ausserhalb des von Via Helvetica abgedeckten Gebiets und kann nicht bearbeitet werden.',
+  'route.editImportedTooManyPoints':
+    'Diese GPX-Datei enthält mehr als {maximum} Punkte. Sie kann angezeigt werden, ist in dieser Version aber zu detailliert für die Bearbeitung.',
+  'route.editImportedSparseGeometry':
+    'Diese GPX-Datei enthält nicht genügend Zwischenpunkte, um mit Wegführung bearbeitet zu werden (höchstens {maximum} km zwischen zwei Punkten). Sie bleibt schreibgeschützt verfügbar.',
+  'route.editImportedError':
+    'Diese GPX-Route konnte nicht für die Bearbeitung vorbereitet werden.',
   'route.importError':
     'Diese GPX-Datei enthält keine gültige Route.',
   'route.importTooLarge': 'Diese GPX-Datei ist zu gross.',
@@ -538,6 +560,17 @@ const italianTranslations: Record<TranslationKey, string> = {
   'route.segmentHint': 'Fai clic per continuare, trascina per inserire un punto di passaggio.',
   'route.export': 'Esporta l’itinerario',
   'route.import': 'Carica un itinerario GPX',
+  'route.editImported': 'Modifica l’itinerario',
+  'route.editImportedSingleSegmentOnly':
+    'La modifica è disponibile solo per i GPX con un unico tratto continuo.',
+  'route.editImportedOutsideMap':
+    'Questo itinerario esce dall’area coperta da Via Helvetica e non può essere modificato.',
+  'route.editImportedTooManyPoints':
+    'Questo GPX contiene più di {maximum} punti. Può essere visualizzato, ma in questa versione è troppo dettagliato per essere modificato.',
+  'route.editImportedSparseGeometry':
+    'Questo GPX non contiene abbastanza punti intermedi per restare modificabile seguendo i sentieri (massimo {maximum} km tra due punti). Rimane disponibile in sola lettura.',
+  'route.editImportedError':
+    'Non è stato possibile preparare questo itinerario GPX per la modifica.',
   'route.importError':
     'Questo file GPX non contiene un itinerario valido.',
   'route.importTooLarge': 'Questo file GPX è troppo grande.',
@@ -761,6 +794,17 @@ const englishTranslations: Record<TranslationKey, string> = {
   'route.segmentHint': 'Click to continue, drag to insert a waypoint.',
   'route.export': 'Export the route',
   'route.import': 'Load a GPX route',
+  'route.editImported': 'Edit the route',
+  'route.editImportedSingleSegmentOnly':
+    'Editing is available only for GPX files containing one continuous segment.',
+  'route.editImportedOutsideMap':
+    'This route extends outside the area covered by Via Helvetica and cannot be edited.',
+  'route.editImportedTooManyPoints':
+    'This GPX contains more than {maximum} points. It can still be displayed, but it is too detailed to edit in this version.',
+  'route.editImportedSparseGeometry':
+    'This GPX does not contain enough intermediate points to remain editable with path-following (maximum {maximum} km between two points). It remains available read-only.',
+  'route.editImportedError':
+    'This GPX route could not be prepared for editing.',
   'route.importError':
     'This GPX file does not contain a valid route.',
   'route.importTooLarge': 'This GPX file is too large.',

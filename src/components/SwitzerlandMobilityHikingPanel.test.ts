@@ -75,7 +75,6 @@ describe('SwitzerlandMobilityHikingPanel', () => {
             onSelectCandidate: vi.fn(),
             onProfileHoverDistanceChange: vi.fn(),
             routeHoverDistanceMeters: null,
-            onExport: vi.fn(),
             onClose: vi.fn(),
           }),
         ),
@@ -114,7 +113,6 @@ describe('SwitzerlandMobilityHikingPanel', () => {
             onSelectCandidate: vi.fn(),
             onProfileHoverDistanceChange,
             routeHoverDistanceMeters: 15_000,
-            onExport: vi.fn(),
             onClose: vi.fn(),
           }),
         ),
@@ -168,7 +166,6 @@ describe('SwitzerlandMobilityHikingPanel', () => {
             onSelectCandidate,
             onProfileHoverDistanceChange: vi.fn(),
             routeHoverDistanceMeters: null,
-            onExport: vi.fn(),
             onClose: vi.fn(),
           }),
         ),
@@ -197,9 +194,7 @@ describe('SwitzerlandMobilityHikingPanel', () => {
     expect(onSelectCandidate).toHaveBeenCalledWith(candidate);
   });
 
-  it('exports the selected public route from the panel header', async () => {
-    const onExport = vi.fn();
-
+  it('keeps route-level export outside the information panel', async () => {
     await act(async () => {
       root?.render(
         createElement(
@@ -210,24 +205,14 @@ describe('SwitzerlandMobilityHikingPanel', () => {
             onSelectCandidate: vi.fn(),
             onProfileHoverDistanceChange: vi.fn(),
             routeHoverDistanceMeters: null,
-            onExport,
             onClose: vi.fn(),
           }),
         ),
       );
     });
 
-    const exportButton = container.querySelector<HTMLButtonElement>(
-      '.switzerland-mobility-hiking-panel-export',
-    );
-
-    expect(exportButton).not.toBeNull();
-    expect(exportButton?.disabled).toBe(false);
-
-    await act(async () => {
-      exportButton?.click();
-    });
-
-    expect(onExport).toHaveBeenCalledTimes(1);
+    expect(
+      container.querySelector('.switzerland-mobility-hiking-panel-export'),
+    ).toBeNull();
   });
 });

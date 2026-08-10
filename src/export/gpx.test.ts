@@ -27,11 +27,15 @@ interface ParsedTrackPoint {
 function createStep(
   waypoint: Coordinate,
   segment: Coordinate[] | null,
+  origin: 'generated' | 'imported' = 'generated',
 ): RouteStep {
   return {
     waypoint,
-    segment,
-    mode: segment ? 'network' : 'straight',
+    section: segment
+      ? origin === 'imported'
+        ? { origin: 'imported', coordinates: segment }
+        : { origin: 'generated', mode: 'network', coordinates: segment }
+      : null,
   };
 }
 
@@ -152,10 +156,27 @@ describe('createRouteGpx', () => {
     expectTrackPointAt(trackPoints[2], NORTH_EAST);
   });
 
+  it('preserves every vertex of untouched imported sections', () => {
+    const subtleImportedPoint: Coordinate = [2_600_500, 1_200_000.05];
+    const document = parseGpx(
+      createRouteGpx([
+        createStep(START, null),
+        createStep(EAST, [START, subtleImportedPoint, EAST], 'imported'),
+      ]),
+    );
+    const trackPoints = readTrackPoints(document);
+
+    expect(trackPoints).toHaveLength(3);
+    expectTrackPointAt(trackPoints[0], START);
+    expectTrackPointAt(trackPoints[1], subtleImportedPoint);
+    expectTrackPointAt(trackPoints[2], EAST);
+  });
+
   it('keeps a loop closing section and returns to the original start point', () => {
     const closure: RouteClosure = {
-      segment: [EAST, START],
+      origin: 'generated',
       mode: 'straight',
+      coordinates: [EAST, START],
     };
     const document = parseGpx(
       createRouteGpx(

@@ -25,8 +25,6 @@ interface SwitzerlandMobilityHikingPanelProps {
   onProfileHoverDistanceChange: (distanceMeters: number | null) => void;
   /** Cumulative distance selected by hovering the public route on the map. */
   routeHoverDistanceMeters: number | null;
-  /** Opens the shared GPX naming dialog for the selected public route. */
-  onExport: () => void;
   /** Clears the panel, pending request, vector highlight, and profile marker. */
   onClose: () => void;
 }
@@ -132,7 +130,6 @@ export default function SwitzerlandMobilityHikingPanel({
   onSelectCandidate,
   onProfileHoverDistanceChange,
   routeHoverDistanceMeters,
-  onExport,
   onClose,
 }: SwitzerlandMobilityHikingPanelProps) {
   const { locale, t } = useI18n();
@@ -223,27 +220,6 @@ export default function SwitzerlandMobilityHikingPanel({
           </div>
 
           <div className="switzerland-mobility-hiking-panel-actions">
-            {status.state === 'ready' && (
-              <button
-                type="button"
-                className="switzerland-mobility-hiking-panel-export"
-                aria-label={t('route.export')}
-                title={t('route.export')}
-                disabled={status.elevationStatus === 'loading'}
-                onClick={onExport}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <path d="M12 3v12" />
-                  <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
-                  <path d="M5 18v2h14v-2" />
-                </svg>
-              </button>
-            )}
-
             <button
               type="button"
               className="switzerland-mobility-hiking-panel-close"

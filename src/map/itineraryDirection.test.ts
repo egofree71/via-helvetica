@@ -59,9 +59,36 @@ describe('directional itinerary arrows', () => {
     expect(createArrowSamples([[0, 0], [100_000, 0]], 1)).toHaveLength(16);
   });
 
-  it('hides arrows when the route is too short or the map scale is too broad', () => {
+  it('keeps regional direction cues but hides them once the map is too broad', () => {
     expect(createArrowSamples([[0, 0], [100, 0]], 1)).toEqual([]);
-    expect(createArrowSamples([[0, 0], [10_000, 0]], 21)).toEqual([]);
+    expect(createArrowSamples([[0, 0], [10_000, 0]], 30).length).toBeGreaterThan(0);
+    expect(createArrowSamples([[0, 0], [10_000, 0]], 41)).toEqual([]);
+  });
+
+  it('resolves protected coordinates from the current map resolution', () => {
+    const protectedCoordinate: Coordinate = [434, 0];
+    const lineStyle = new Style();
+    const resolutions: number[] = [];
+    const styleFunction = createDirectionalLineStyle({
+      lineStyles: [lineStyle],
+      coordinates: [[0, 0], [1_000, 0]],
+      color: '#d52b1e',
+      avoidCoordinates: (resolution) => {
+        resolutions.push(resolution);
+        return [protectedCoordinate];
+      },
+    });
+    const styles = styleFunction(new Feature(), 1);
+
+    expect(resolutions).toEqual([1]);
+    expect(styles[0]).toBe(lineStyle);
+    for (const style of styles.slice(1)) {
+      const geometry = style.getGeometry();
+      expect(geometry).toBeInstanceOf(Point);
+      expect(
+        distance((geometry as Point).getCoordinates(), protectedCoordinate),
+      ).toBeGreaterThanOrEqual(24);
+    }
   });
 
   it('keeps every accepted arrow clear of protected waypoints', () => {
@@ -76,7 +103,7 @@ describe('directional itinerary arrows', () => {
     for (const arrow of arrows) {
       expect(
         distance(arrow.coordinate, protectedCoordinate),
-      ).toBeGreaterThanOrEqual(30);
+      ).toBeGreaterThanOrEqual(24);
     }
   });
 

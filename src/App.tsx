@@ -26,6 +26,12 @@ import {
   createRouteSegmentsGpx,
   downloadGpxDocument,
 } from './export/gpx';
+import {
+  isEditableImportedRoutePristine as isEditableImportedRoutePristineState,
+  resolveExactImportedRouteSource,
+  resolveItineraryExportSource,
+  type EditableImportedRouteExportOrigin,
+} from './export/itineraryExportSource';
 import { useI18n } from './i18n/I18nContext';
 import {
   createSwisstopoShare,
@@ -39,6 +45,12 @@ import {
   MAP_EXTENT,
 } from './map/config';
 import { fromWgs84 } from './map/projection';
+import {
+  createEditableRouteFromImportedGeometry,
+  ImportedRouteSparseGeometryError,
+  ImportedRouteTooManyVerticesError,
+  MAX_EDITABLE_IMPORTED_VERTEX_COUNT,
+} from './map/importedRouteConversion';
 import { useEditableRoute } from './map/useEditableRoute';
 import { useImportedRoute } from './map/useImportedRoute';
 import {
@@ -60,6 +72,7 @@ import {
   updateSearchResultMarker,
 } from './map/searchResult';
 import { useItineraryMetrics } from './metrics/useItineraryMetrics';
+import type { RouteElevationSummary } from './metrics/routeMetrics';
 import type { LocationSearchResult } from './search/locationSearch';
 import {
   getCurrentReleaseDialogItems,
@@ -69,6 +82,12 @@ import {
 
 /** Itinerary source named by the shared GPX export dialog. */
 type RouteExportSource = 'editable' | 'imported' | 'switzerlandMobility';
+
+/** Original GPX resources retained while a converted editable route may return to pristine. */
+interface EditableImportedRouteOrigin extends EditableImportedRouteExportOrigin {
+  /** Embedded GPX profile retained while geometry remains pristine. */
+  elevationSummary: RouteElevationSummary | null;
+}
 
 /**
  * Builds an unambiguous local timestamp for the proposed GPX name. The ISO-like
@@ -110,6 +129,8 @@ export default function App() {
   const [routeExportDefaultName, setRouteExportDefaultName] = useState('');
   const [routeExportSource, setRouteExportSource] =
     useState<RouteExportSource>('editable');
+  const [editableImportedRouteOrigin, setEditableImportedRouteOrigin] =
+    useState<EditableImportedRouteOrigin | null>(null);
   const initialHikingTrailsVisibility = useMemo(
     resolveInitialHikingTrailsVisibility,
     [],
@@ -232,6 +253,7 @@ export default function App() {
     reverseRoute,
     toggleRouteLoop,
     deleteRoute,
+    startEditingFromRouteState,
     replaceWithReadOnlyItinerary,
     showTemporaryRouteMessage,
     isPointerInteractionActive,
@@ -244,6 +266,7 @@ export default function App() {
 
   const handleImportedRouteAccepted = useCallback(() => {
     clearSelectedSearchResult();
+    setEditableImportedRouteOrigin(null);
     replaceWithReadOnlyItinerary();
   }, [clearSelectedSearchResult, replaceWithReadOnlyItinerary]);
 
@@ -265,10 +288,98 @@ export default function App() {
     onImportError: handleImportedRouteError,
   });
 
+  const isEditableImportedRoutePristine =
+    isEditableImportedRoutePristineState(
+      routeHistory,
+      editableImportedRouteOrigin,
+    );
+
+  /** Converts the current continuous GPX to editable state without rerouting. */
+  const editImportedRoute = useCallback(() => {
+    if (!importedRouteSource || importedRouteSegments.length !== 1) {
+      showTemporaryRouteMessage(
+        t('route.editImportedSingleSegmentOnly'),
+        'error',
+      );
+      return;
+    }
+
+    const coordinates = importedRouteSegments[0];
+
+    if (coordinates.length > MAX_EDITABLE_IMPORTED_VERTEX_COUNT) {
+      showTemporaryRouteMessage(
+        t('route.editImportedTooManyPoints', {
+          maximum: MAX_EDITABLE_IMPORTED_VERTEX_COUNT.toLocaleString(locale),
+        }),
+        'error',
+      );
+      return;
+    }
+
+    if (
+      coordinates.some(
+        (coordinate) => !containsCoordinate(MAP_EXTENT, coordinate),
+      )
+    ) {
+      showTemporaryRouteMessage(t('route.editImportedOutsideMap'), 'error');
+      return;
+    }
+
+    try {
+      const state = createEditableRouteFromImportedGeometry(coordinates);
+
+      setEditableImportedRouteOrigin({
+        source: importedRouteSource,
+        elevationSummary: importedRouteElevationSummary,
+        pristineState: state,
+      });
+      clearSelectedSearchResult();
+      clearImportedRoute();
+      startEditingFromRouteState(state);
+    } catch (error) {
+      if (error instanceof ImportedRouteTooManyVerticesError) {
+        showTemporaryRouteMessage(
+          t('route.editImportedTooManyPoints', {
+            maximum: error.maximumVertexCount.toLocaleString(locale),
+          }),
+          'error',
+        );
+        return;
+      }
+
+      if (error instanceof ImportedRouteSparseGeometryError) {
+        showTemporaryRouteMessage(
+          t('route.editImportedSparseGeometry', {
+            maximum: error.maximumDistanceMeters / 1_000,
+          }),
+          'error',
+        );
+        return;
+      }
+
+      console.error(
+        'Unable to convert the imported GPX to an editable route.',
+        error,
+      );
+      showTemporaryRouteMessage(t('route.editImportedError'), 'error');
+    }
+  }, [
+    clearImportedRoute,
+    clearSelectedSearchResult,
+    importedRouteElevationSummary,
+    importedRouteSegments,
+    importedRouteSource,
+    locale,
+    showTemporaryRouteMessage,
+    startEditingFromRouteState,
+    t,
+  ]);
+
   /** Makes one validated public route the sole current itinerary. */
   const handleSwitzerlandMobilityHikingRouteAccepted = useCallback(() => {
     clearSelectedSearchResult();
     clearImportedRoute();
+    setEditableImportedRouteOrigin(null);
     replaceWithReadOnlyItinerary();
   }, [
     clearImportedRoute,
@@ -306,15 +417,28 @@ export default function App() {
 
   const handleToggleRouteCreation = useCallback(() => {
     if (!isRouteCreationActive) {
+      // Invalidate a pending File.text() read even before an imported source is
+      // available, otherwise a late GPX result could replace a newly started route.
       clearImportedRoute();
+
+      if (importedRouteSource) {
+        setEditableImportedRouteOrigin(null);
+      }
     }
 
     toggleRouteCreation();
   }, [
     clearImportedRoute,
+    importedRouteSource,
     isRouteCreationActive,
     toggleRouteCreation,
   ]);
+
+  /** Clears the route and any retained GPX origin that no longer has geometry. */
+  const handleDeleteRoute = useCallback(() => {
+    deleteRoute();
+    setEditableImportedRouteOrigin(null);
+  }, [deleteRoute]);
 
   const {
     areTrailClosuresVisible,
@@ -355,7 +479,11 @@ export default function App() {
     mapRuntimeRef,
     editableRouteCoordinates: routeCoordinates,
     importedRouteSegments,
-    importedRouteElevationSummary,
+    embeddedRouteElevationSummary:
+      importedRouteElevationSummary ??
+      (isEditableImportedRoutePristine
+        ? editableImportedRouteOrigin?.elevationSummary ?? null
+        : null),
     isRoutePointerInteractionActive,
     // The selected public route owns the shared black marker and profile cursor
     // while it is the current read-only itinerary.
@@ -415,59 +543,69 @@ export default function App() {
     });
   };
 
-  /** Opens the export/share dialog for the current editable or imported route. */
+  /** Opens the shared export/share dialog for whichever itinerary is current. */
   const requestCurrentItineraryExport = () => {
-    if (importedRouteSource) {
-      setRouteExportDefaultName(importedRouteSource.name);
+    if (switzerlandMobilityHikingPanel?.state === 'ready') {
+      const route = switzerlandMobilityHikingPanel.route;
+      const baseName = route.routeName
+        ?? (route.routeNumber
+          ? t('switzerlandMobilityHiking.routeNumber', {
+              number: route.routeNumber,
+            })
+          : t('switzerlandMobilityHiking.unnamedRoute'));
+      const stageName = route.stageNumber
+        ? `${baseName} — ${t('switzerlandMobilityHiking.stage', {
+            number: route.stageNumber,
+          })}`
+        : baseName;
+
+      setRouteExportDefaultName(
+        route.sectionName
+          ? `${stageName} — ${route.sectionName}`
+          : stageName,
+      );
+      setRouteExportSource('switzerlandMobility');
+      setIsRouteExportDialogOpen(true);
+      return;
+    }
+
+    const source = resolveItineraryExportSource({
+      importedRouteSource,
+      editableImportedRouteOrigin,
+      routeHistory,
+      isRouteEditingActive: isRouteCreationActive,
+      isRouteOperationPending,
+    });
+
+    if (!source) {
+      return;
+    }
+
+    if (source.kind === 'imported') {
+      setRouteExportDefaultName(source.source.name);
       setRouteExportSource('imported');
       setIsRouteExportDialogOpen(true);
       return;
     }
 
-    if (
-      !isRouteCreationActive ||
-      isRouteOperationPending ||
-      routeHistory.steps.length < 2
-    ) {
-      return;
-    }
-
     setRouteExportDefaultName(
-      createRouteExportDefaultName(t('gpx.routeName')),
+      editableImportedRouteOrigin?.source.name ??
+        createRouteExportDefaultName(t('gpx.routeName')),
     );
     setRouteExportSource('editable');
     setIsRouteExportDialogOpen(true);
   };
 
-  /** Opens the shared name dialog for the selected public hiking route. */
-  const requestSwitzerlandMobilityHikingExport = () => {
-    if (switzerlandMobilityHikingPanel?.state !== 'ready') {
-      return;
-    }
-
-    const route = switzerlandMobilityHikingPanel.route;
-    const baseName = route.routeName
-      ?? (route.routeNumber
-        ? t('switzerlandMobilityHiking.routeNumber', {
-            number: route.routeNumber,
-          })
-        : t('switzerlandMobilityHiking.unnamedRoute'));
-    const stageName = route.stageNumber
-      ? `${baseName} — ${t('switzerlandMobilityHiking.stage', {
-          number: route.stageNumber,
-        })}`
-      : baseName;
-
-    setRouteExportDefaultName(
-      route.sectionName
-        ? `${stageName} — ${route.sectionName}`
-        : stageName,
-    );
-    setRouteExportSource('switzerlandMobility');
-    setIsRouteExportDialogOpen(true);
-  };
-
-  /** Builds the exact GPX document used by both download and swisstopo transfer. */
+  /**
+   * Builds the GPX document for the export source selected when the dialog opened.
+   * The same document is used for local download and the optional swisstopo hand-off
+   * so both actions preserve the same pristine/imported versus generated semantics.
+   *
+   * @param routeName - User-confirmed name written into the exported GPX.
+   * @returns Complete GPX XML for the selected current itinerary source.
+   * @throws {Error} If the selected source is no longer available or an editable
+   * route mutation is still pending.
+   */
   const createCurrentRouteGpxDocument = (routeName: string): string => {
     const generatedAt = new Date();
 
@@ -485,14 +623,20 @@ export default function App() {
     }
 
     if (routeExportSource === 'imported') {
-      if (!importedRouteSource) {
+      const source = resolveExactImportedRouteSource(
+        importedRouteSource,
+        editableImportedRouteOrigin,
+        routeHistory,
+      );
+
+      if (!source) {
         throw new Error('The imported GPX route is unavailable.');
       }
 
-      // Keep provider-specific metadata and extensions from the source GPX;
-      // only the user-facing itinerary name may change in the shared dialog.
+      // Keep provider-specific metadata and extensions from the source GPX
+      // while the converted editable geometry still matches its pristine state.
       return createNamedImportedGpxDocument(
-        importedRouteSource.gpxDocument,
+        source.gpxDocument,
         routeName,
       );
     }
@@ -608,18 +752,22 @@ export default function App() {
           onToggleSnap={toggleRouteSnap}
           onReverse={reverseRoute}
           onToggleLoop={toggleRouteLoop}
-          onDelete={deleteRoute}
+          onDelete={handleDeleteRoute}
         />
 
-        {(isRouteCreationActive || importedRouteSource) && (
+        {(isRouteCreationActive ||
+          importedRouteSource ||
+          switzerlandMobilityHikingPanel?.state === 'ready') && (
           <button
             type="button"
             className="map-control-button map-control-button--route-export"
             aria-label={t('route.export')}
             title={t('route.export')}
             disabled={
-              isRouteCreationActive &&
-              (isRouteOperationPending || routeHistory.steps.length < 2)
+              switzerlandMobilityHikingPanel?.state === 'ready'
+                ? switzerlandMobilityHikingPanel.elevationStatus === 'loading'
+                : isRouteCreationActive &&
+                  (isRouteOperationPending || routeHistory.steps.length < 2)
             }
             onClick={requestCurrentItineraryExport}
           >
@@ -635,6 +783,7 @@ export default function App() {
           onOpen={closeMapInformationPopup}
           onSelectFile={importRouteFile}
         />
+
 
         <MapLayersSelector
           baseMapStyle={baseMapStyle}
@@ -798,7 +947,6 @@ export default function App() {
           routeHoverDistanceMeters={
             switzerlandMobilityHikingMapHoverDistanceMeters
           }
-          onExport={requestSwitzerlandMobilityHikingExport}
           onClose={dismissSwitzerlandMobilityHikingPanel}
         />
       )}
@@ -816,6 +964,14 @@ export default function App() {
               handleProfileHoverDistanceChange
             }
             routeHoverDistanceMeters={routeMapHoverDistanceMeters}
+            editAction={
+              importedRouteSource
+                ? {
+                    label: t('route.editImported'),
+                    onClick: editImportedRoute,
+                  }
+                : null
+            }
           />
         )}
 

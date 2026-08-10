@@ -39,7 +39,7 @@ Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 | Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, persistent visibility and opacity controls for information layers, place and WGS 84/LV95 coordinate search, geolocation, scale, and fullscreen mode |
 | Route planning | Editable ordered waypoints, start and finish markers, sparse direction arrows, optional swissTLM3D snapping in a dedicated routing Worker, undo, redo, reversal, loop closure, route deletion, and straight fallback segments when no routable path is found |
 | Route information | Distance, ascent, descent, Swiss hiking-time estimate, and a collapsible elevation profile with pointer synchronisation between the chart and the map |
-| Import and export | Read-only GPX loading with route statistics and elevation profile, named GPX export for editable, imported, and selected SwitzerlandMobility routes, plus an optional swisstopo hand-off that temporarily exposes the current GPX, using a QR code on desktop and an explicit direct app link on small touch devices |
+| Import and export | Read-only GPX loading with route statistics and elevation profile, optional lossless conversion of one continuous GPX trace into editable waypoints without rerouting the initial geometry, named GPX export for editable, imported, and selected SwitzerlandMobility routes, plus an optional swisstopo hand-off that temporarily exposes the current GPX, using a QR code on desktop and an explicit direct app link on small touch devices |
 | Safety | Official hiking-trail closures and detours, plus military shooting notices and danger zones with localized details |
 | Public transport | Passenger-relevant stops, mode-specific symbols, next departures grouped by date, and links to the official SBB/CFF/FFS timetable |
 | Interface | Compact floating controls, no permanent toolbar, French, German, Italian, and English translations with shareable localized URLs, a one-time release-highlights dialog, and localized About and static release-history pages |
@@ -142,18 +142,30 @@ Machine-specific infrastructure and credentials remain outside version control.
   network-routing limit.
 - Drag an existing waypoint to move it, click it to delete it, or drag a route
   section to insert a new waypoint.
-- Use the route controls to undo, redo, reverse, close or reopen a loop,
-  delete, or export the current itinerary.
+- Use the route controls to undo, redo, reverse, close or reopen a loop, or
+  delete the current editable itinerary. Use the shared export action in the map
+  controls whenever the current itinerary can be exported.
 - Compact **A** and **B** markers identify the current start and finish.
 
 ### Import and export GPX
 
 - Load a GPX file as the current purple, read-only itinerary.
+- For a GPX containing one continuous segment inside the Swiss map extent, use
+  the pencil action beside the statistics bar to make it editable. Conversion
+  creates waypoints on existing GPX vertices and does not reroute or simplify
+  the initial geometry. Editable conversion is currently limited to 20,000
+  source vertices; denser files remain fully available in read-only mode.
+- Long converted routes may retain hundreds of editing anchors in route state.
+  At broad map scales, waypoint handles are automatically decluttered in screen
+  space and direction arrows avoid only the handles that are actually visible.
 - Imported GPX routes reuse embedded elevations when available, otherwise the
-  profile is requested from GeoAdmin.
-- Export the current editable route or loaded GPX as a named GPX file. Imported
-  GPX content is retained only while it is the current read-only itinerary so its
-  original metadata and extensions can be preserved when exporting or sharing it.
+  profile is requested from GeoAdmin. A converted route keeps the embedded
+  profile while its geometry is still pristine.
+- Export the current editable route or loaded GPX as a named GPX file. The
+  original GPX XML remains available after conversion while the editable state
+  is still pristine, so metadata and extensions can still be preserved after
+  entering edit mode. Once an edit is committed, Via Helvetica exports a generated
+  GPX while retaining untouched imported section vertices.
 - When the optional share Worker is configured, use **Open in swisstopo** to
   upload that same named GPX for up to 24 hours by default. Desktop shows a QR
   code for the official `swisstopo.app/u/` hand-off; small touch devices expose
@@ -172,9 +184,9 @@ Machine-specific infrastructure and credentials remain outside version control.
   information. A selected public hiking route is highlighted and framed in full;
   its calculated elevation profile can be opened from the summary and remains
   synchronized with the map. Once its complete geometry is available, it replaces
-  any editable route or imported GPX as the single current itinerary. The export
-  button in the route header downloads that selected stage as GPX. When several
-  named routes share the clicked path, choose one before framing.
+  any editable route or imported GPX as the single current itinerary. The shared
+  export action in the map controls downloads that selected stage as GPX. When
+  several named routes share the clicked path, choose one before framing.
 - Use the information button to open the localized About dialog with the
   project summary, support contact, source code, license, professional profile,
   release history, and official data credits. Returning visitors are introduced
@@ -225,8 +237,10 @@ retries, and session fallback are documented in
   resolved.
 - Closures and danger zones are informational and do not automatically change
   route calculation.
-- Imported GPX and selected SwitzerlandMobility routes are read-only and replace
-  the previous current itinerary.
+- Imported GPX and selected SwitzerlandMobility routes initially replace the
+  previous current itinerary as read-only geometry. A GPX can be converted to an
+  editable route only when it contains one continuous segment inside the map
+  extent; multi-segment GPX files remain read-only in the current implementation.
 - Routes are not saved as a local or remote route library. Export the current
   itinerary as GPX before leaving or reloading the application if you want to
   keep it; swisstopo hand-off objects are temporary transfer files only.

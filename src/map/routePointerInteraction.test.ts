@@ -24,16 +24,18 @@ const ROUTE_STATE: RouteState = {
   steps: [
     {
       waypoint: [100, 100],
-      segment: null,
-      mode: 'straight',
+      section: null,
     },
     {
       waypoint: [200, 100],
-      segment: [
-        [100, 100],
-        [200, 100],
-      ],
-      mode: 'straight',
+      section: {
+        origin: 'generated',
+        mode: 'straight',
+        coordinates: [
+          [100, 100],
+          [200, 100],
+        ],
+      },
     },
   ],
   closure: null,

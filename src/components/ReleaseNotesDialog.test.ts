@@ -99,22 +99,22 @@ describe('ReleaseNotesDialog', () => {
     expect(
       container.querySelectorAll('.release-notes-list > li'),
     ).toHaveLength(2);
-    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.4.0');
+    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.5.0');
     expect(container.textContent).toContain(
-      'Transfert vers l’app swisstopo :',
+      'Modifier un GPX importé :',
     );
     expect(container.textContent).toContain(
-      'Le partage est également disponible pour les GPX importés.',
+      'Un bouton crayon apparaît ensuite à droite du résumé de l’itinéraire',
     );
-    expect(container.textContent).toContain('Fichiers GPX plus compacts :');
+    expect(container.textContent).toContain('Export SuisseMobile regroupé :');
     expect(container.textContent).toContain(
-      'réduit leur taille sans modifier les coordonnées',
+      'son export utilise désormais le même bouton à droite de la carte',
     );
     expect(document.activeElement).toBe(
       container.querySelector('#release-notes-dialog-title'),
     );
     expect(container.textContent).not.toContain(
-      'Interface et affichage affinés :',
+      'Transfert vers l’app swisstopo :',
     );
     expect(
       container.querySelector('.release-notes-dialog-icon-close'),

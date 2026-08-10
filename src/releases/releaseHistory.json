@@ -1,9 +1,9 @@
 {
-  "currentVersion": "1.4.0",
+  "currentVersion": "1.5.0",
   "locales": {
     "fr": {
       "dialog": {
-        "title": "Nouveautés de Via Helvetica 1.4.0",
+        "title": "Nouveautés de Via Helvetica 1.5.0",
         "historyLink": "Voir l’historique complet",
         "historyLinkNewTabLabel": "s’ouvre dans un nouvel onglet"
       },
@@ -18,6 +18,33 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.5.0",
+          "summary": "Cette version permet de modifier un GPX importé et harmonise l’accès à l’export des itinéraires.",
+          "items": [
+            {
+              "id": "editableImportedGpx",
+              "title": "Modifier un GPX importé :",
+              "description": "Un GPX est toujours chargé d’abord en lecture seule. Un bouton crayon apparaît ensuite à droite du résumé de l’itinéraire pour le rendre éditable, sans recalculer ni simplifier son tracé initial.",
+              "details": [
+                "Lors de la conversion, Via Helvetica place des points d’ancrage sur des sommets existants du GPX, avec une cible d’environ un point par kilomètre et un espacement plus serré pour les itinéraires courts.",
+                "La géométrie du GPX reste identique tant qu’elle n’est pas modifiée ; déplacer ou insérer un point ne recalcule que les sections concernées.",
+                "Pour garder la carte lisible, le nombre de poignées visibles s’adapte au niveau de zoom sans supprimer les points d’ancrage de l’itinéraire.",
+                "Tant que l’itinéraire converti reste intact, l’export conserve le document GPX d’origine. Après une modification, Via Helvetica génère un nouveau GPX en conservant les sommets des sections importées qui n’ont pas été touchées.",
+                "Dans cette première version, l’édition est réservée aux GPX continus situés dans l’étendue prise en charge et comportant au plus 20 000 sommets."
+              ]
+            },
+            {
+              "id": "sharedSwitzerlandMobilityExport",
+              "title": "Export SuisseMobile regroupé :",
+              "description": "Lorsqu’un itinéraire « À pied SuisseMobile » est sélectionné, son export utilise désormais le même bouton à droite de la carte que les itinéraires créés et les GPX importés.",
+              "details": [
+                "Le bouton d’export a été retiré du panneau de détail SuisseMobile afin de regrouper cette action avec les autres exports de l’application.",
+                "Le bouton commun apparaît uniquement lorsqu’un itinéraire SuisseMobile exportable est effectivement sélectionné."
+              ]
+            }
+          ]
+        },
         {
           "version": "1.4.0",
           "summary": "Cette version facilite le transfert des itinéraires vers l’app swisstopo et réduit la taille des fichiers GPX exportés.",
@@ -145,7 +172,7 @@
     },
     "de": {
       "dialog": {
-        "title": "Neu in Via Helvetica 1.4.0",
+        "title": "Neu in Via Helvetica 1.5.0",
         "historyLink": "Vollständigen Versionsverlauf anzeigen",
         "historyLinkNewTabLabel": "öffnet in einem neuen Tab"
       },
@@ -160,6 +187,33 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.5.0",
+          "summary": "Diese Version macht importierte GPX-Dateien bearbeitbar und vereinheitlicht den Export von Routen.",
+          "items": [
+            {
+              "id": "editableImportedGpx",
+              "title": "Importierte GPX-Dateien bearbeiten:",
+              "description": "Eine GPX-Datei wird weiterhin zunächst schreibgeschützt geladen. Danach erscheint rechts neben der Routenzusammenfassung ein Stift-Symbol, mit dem sie ohne Neuberechnung oder Vereinfachung des ursprünglichen Verlaufs bearbeitbar wird.",
+              "details": [
+                "Bei der Umwandlung setzt Via Helvetica Ankerpunkte auf vorhandene GPX-Stützpunkte, mit einem Zielabstand von ungefähr einem Kilometer und dichterer Verteilung bei kurzen Routen.",
+                "Die GPX-Geometrie bleibt unverändert, solange sie nicht bearbeitet wird; beim Verschieben oder Einfügen eines Punkts werden nur die betroffenen Abschnitte neu berechnet.",
+                "Damit die Karte übersichtlich bleibt, passt sich die Zahl der sichtbaren Anfasser an den Zoom an, ohne Ankerpunkte aus der Route zu entfernen.",
+                "Solange die umgewandelte Route unverändert bleibt, wird beim Export das ursprüngliche GPX-Dokument beibehalten. Nach einer Änderung erzeugt Via Helvetica eine neue GPX-Datei und erhält die Stützpunkte der unberührten importierten Abschnitte.",
+                "In dieser ersten Version können nur durchgehende GPX-Tracks innerhalb des unterstützten Kartenausschnitts mit höchstens 20 000 Stützpunkten bearbeitet werden."
+              ]
+            },
+            {
+              "id": "sharedSwitzerlandMobilityExport",
+              "title": "Gebündelter SchweizMobil-Export:",
+              "description": "Bei einer ausgewählten Wanderroute von SchweizMobil erfolgt der Export jetzt über denselben Button rechts auf der Karte wie bei erstellten Routen und importierten GPX-Dateien.",
+              "details": [
+                "Der bisherige Export-Button wurde aus dem SchweizMobil-Detailfenster entfernt, damit alle Exporte an derselben Stelle verfügbar sind.",
+                "Der gemeinsame Button erscheint nur, wenn tatsächlich eine exportierbare SchweizMobil-Route ausgewählt ist."
+              ]
+            }
+          ]
+        },
         {
           "version": "1.4.0",
           "summary": "Diese Version erleichtert die Übertragung von Routen in die swisstopo-App und verkleinert exportierte GPX-Dateien.",
@@ -287,7 +341,7 @@
     },
     "it": {
       "dialog": {
-        "title": "Novità di Via Helvetica 1.4.0",
+        "title": "Novità di Via Helvetica 1.5.0",
         "historyLink": "Vedi la cronologia completa",
         "historyLinkNewTabLabel": "si apre in una nuova scheda"
       },
@@ -302,6 +356,33 @@
         "versionLabel": "Versione"
       },
       "releases": [
+        {
+          "version": "1.5.0",
+          "summary": "Questa versione rende modificabili i GPX importati e riunisce in un unico punto l’esportazione degli itinerari.",
+          "items": [
+            {
+              "id": "editableImportedGpx",
+              "title": "GPX importati modificabili:",
+              "description": "Un GPX continua a essere caricato inizialmente in sola lettura. In seguito compare un pulsante con la matita a destra del riepilogo dell’itinerario, che permette di modificarlo senza ricalcolare né semplificare il tracciato iniziale.",
+              "details": [
+                "Durante la conversione, Via Helvetica posiziona punti di ancoraggio su vertici già presenti nel GPX, con una distanza obiettivo di circa un chilometro e una distribuzione più fitta per gli itinerari brevi.",
+                "La geometria del GPX rimane invariata finché non viene modificata; spostare o inserire un punto ricalcola soltanto le sezioni interessate.",
+                "Per mantenere leggibile la carta, il numero di maniglie visibili si adatta al livello di zoom senza eliminare i punti di ancoraggio dall’itinerario.",
+                "Finché l’itinerario convertito rimane intatto, l’esportazione conserva il documento GPX originale. Dopo una modifica, Via Helvetica genera un nuovo GPX mantenendo i vertici delle sezioni importate non toccate.",
+                "In questa prima versione, la modifica è disponibile per GPX continui all’interno dell’estensione supportata e con un massimo di 20 000 vertici."
+              ]
+            },
+            {
+              "id": "sharedSwitzerlandMobilityExport",
+              "title": "Esportazione SvizzeraMobile riunita:",
+              "description": "Quando è selezionato un itinerario «A piedi SvizzeraMobile», l’esportazione usa ora lo stesso pulsante a destra della carta degli itinerari creati e dei GPX importati.",
+              "details": [
+                "Il pulsante di esportazione è stato rimosso dal pannello dei dettagli SvizzeraMobile per riunire questa azione con le altre esportazioni dell’applicazione.",
+                "Il pulsante comune appare solo quando è effettivamente selezionato un itinerario SvizzeraMobile esportabile."
+              ]
+            }
+          ]
+        },
         {
           "version": "1.4.0",
           "summary": "Questa versione semplifica il trasferimento degli itinerari nell’app swisstopo e riduce le dimensioni dei file GPX esportati.",
@@ -429,7 +510,7 @@
     },
     "en": {
       "dialog": {
-        "title": "What’s new in Via Helvetica 1.4.0",
+        "title": "What’s new in Via Helvetica 1.5.0",
         "historyLink": "View full release history",
         "historyLinkNewTabLabel": "opens in a new tab"
       },
@@ -444,6 +525,33 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.5.0",
+          "summary": "This release makes imported GPX files editable and brings route export actions together in one place.",
+          "items": [
+            {
+              "id": "editableImportedGpx",
+              "title": "Editable imported GPX files:",
+              "description": "A GPX file is still loaded as read-only first. A pencil button then appears to the right of the route summary and can make it editable without rerouting or simplifying the original geometry.",
+              "details": [
+                "During conversion, Via Helvetica places anchors on existing GPX vertices, targeting roughly one anchor per kilometre and using closer spacing for short routes.",
+                "The GPX geometry stays unchanged until it is edited; moving or inserting a point recalculates only the affected sections.",
+                "To keep the map readable, the number of visible handles adapts to the zoom level without removing anchors from the route.",
+                "As long as the converted route remains unchanged, export preserves the original GPX document. After an edit, Via Helvetica generates a new GPX while retaining the vertices of untouched imported sections.",
+                "In this first version, editing is available for continuous GPX tracks inside the supported map extent with at most 20,000 vertices."
+              ]
+            },
+            {
+              "id": "sharedSwitzerlandMobilityExport",
+              "title": "Unified SwitzerlandMobility export:",
+              "description": "When a Hiking SwitzerlandMobility route is selected, it now uses the same export button on the right side of the map as created routes and imported GPX files.",
+              "details": [
+                "The export button has been removed from the SwitzerlandMobility detail panel so route exports are available from one consistent location.",
+                "The shared button appears only when an exportable SwitzerlandMobility route is actually selected."
+              ]
+            }
+          ]
+        },
         {
           "version": "1.4.0",
           "summary": "This release makes it easier to transfer routes to the swisstopo app and reduces the size of exported GPX files.",
