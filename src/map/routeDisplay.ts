@@ -63,6 +63,9 @@ const WAYPOINT_VISIBILITY_RESOLUTION_EPSILON = 1e-9;
  * Returns the screen-space separation used for waypoint decluttering.
  * Detailed views keep handles compact for precise editing, while broader views
  * progressively open gaps that can be reused by direction arrows.
+ *
+ * @param resolution - Current map resolution in LV95 metres per screen pixel.
+ * @returns Minimum centre-to-centre handle separation in screen pixels.
  */
 function getVisibleWaypointSeparationPx(resolution: number): number {
   const interpolation = Math.min(
@@ -149,6 +152,11 @@ export function selectVisibleRouteWaypointIndexes(
  * Creates a cached resolution-aware selector shared by waypoint styles and
  * direction-arrow avoidance. Sharing one decision prevents arrows from reserving
  * space around anchors that are intentionally hidden at the current scale.
+ *
+ * @param steps - Complete editable waypoint sequence whose references stay stable
+ * for the lifetime of this resolver.
+ * @param activeWaypointIndex - Optional waypoint forced visible during a drag.
+ * @returns Resolution-aware lookup of waypoint indexes visible at the current scale.
  */
 function createVisibleWaypointIndexResolver(
   steps: RouteStep[],

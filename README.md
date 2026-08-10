@@ -142,8 +142,9 @@ Machine-specific infrastructure and credentials remain outside version control.
   network-routing limit.
 - Drag an existing waypoint to move it, click it to delete it, or drag a route
   section to insert a new waypoint.
-- Use the route controls to undo, redo, reverse, close or reopen a loop,
-  delete, or export the current itinerary.
+- Use the route controls to undo, redo, reverse, close or reopen a loop, or
+  delete the current editable itinerary. Use the shared export action in the map
+  controls whenever the current itinerary can be exported.
 - Compact **A** and **B** markers identify the current start and finish.
 
 ### Import and export GPX
@@ -183,9 +184,9 @@ Machine-specific infrastructure and credentials remain outside version control.
   information. A selected public hiking route is highlighted and framed in full;
   its calculated elevation profile can be opened from the summary and remains
   synchronized with the map. Once its complete geometry is available, it replaces
-  any editable route or imported GPX as the single current itinerary. The export
-  button in the route header downloads that selected stage as GPX. When several
-  named routes share the clicked path, choose one before framing.
+  any editable route or imported GPX as the single current itinerary. The shared
+  export action in the map controls downloads that selected stage as GPX. When
+  several named routes share the clicked path, choose one before framing.
 - Use the information button to open the localized About dialog with the
   project summary, support contact, source code, license, professional profile,
   release history, and official data credits. Returning visitors are introduced

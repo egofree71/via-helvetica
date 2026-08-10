@@ -1,7 +1,9 @@
 /**
- * Business context: presents the essential planning figures for the currently
- * drawn hike in a compact floating bar. It can reveal the elevation profile
- * above the bar while preserving the map as the main interface.
+ * Business context: presents the essential planning figures for whichever
+ * itinerary is currently active: an editable route, imported GPX, or selected
+ * SwitzerlandMobility hiking route. It can reveal the elevation profile above
+ * the compact bar and expose a contextual itinerary action without reducing the
+ * map to a permanent panel.
  */
 import { useId, useMemo, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';

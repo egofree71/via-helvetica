@@ -515,6 +515,7 @@ export async function rebuildRouteAfterWaypointInsertion(
  * @param incoming - Imported section ending at the deleted waypoint.
  * @param outgoing - Imported section starting at the deleted waypoint.
  * @returns One imported section with the shared boundary coordinate included once.
+ * @throws {Error} If either input is not an untouched imported section.
  */
 function mergeImportedSections(
   incoming: RouteSection,

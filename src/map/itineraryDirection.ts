@@ -9,37 +9,57 @@ import type { FeatureLike } from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
 import { Icon, Style } from 'ol/style.js';
 
-/** Approximate screen separation that keeps direction readable without visual noise. */
+/**
+ * Target centre-to-centre separation in CSS pixels between direction symbols.
+ * Increasing it reduces visual clutter; lowering it shows direction more
+ * frequently.
+ */
 const DIRECTION_ARROW_SPACING_PX = 150;
-/** Route must occupy this many screen pixels before an arrow adds useful information. */
+/**
+ * Minimum displayed route length in CSS pixels before an arrow adds useful
+ * information.
+ * Raising it hides symbols on shorter visible fragments.
+ */
 const MINIMUM_VISIBLE_ROUTE_LENGTH_PX = 105;
 /**
- * Direction remains available on regional views, but is hidden once the map is
- * so broad that local bends collapse and a tangent could become misleading.
+ * Maximum map resolution in LV95 metres per screen pixel where direction symbols
+ * remain trustworthy. Broader views hide them because local bends collapse and a
+ * tangent can become visually misleading.
  */
 const MAX_DIRECTION_ARROW_RESOLUTION = 40;
-/** Keeps arrows clear of route endpoints and disconnected GPX segment ends. */
+/**
+ * Screen-space margin in CSS pixels kept clear at route and GPX-segment ends.
+ * Increasing it prevents endpoint collisions but leaves less room for arrows.
+ */
 const LINE_END_MARGIN_PX = 38;
 /**
- * Keeps arrows clear of visible waypoint handles and A/B badges while leaving
- * enough usable route between kilometre-scale anchors for direction symbols.
+ * Screen-space exclusion radius in CSS pixels around visible waypoint handles and
+ * A/B badges. Keeping it smaller than waypoint decluttering gaps leaves usable
+ * route between kilometre-scale anchors for direction symbols.
  */
 const AVOID_COORDINATE_MARGIN_PX = 24;
-/** Defensive cap for unusually long routes or very wide displays. */
+/**
+ * Maximum number of direction symbols rendered for one displayed line. The cap
+ * prevents unusually long routes or wide displays from becoming visually noisy.
+ */
 const MAX_DIRECTION_ARROWS_PER_LINE = 16;
 /**
- * Minimum centre-to-centre separation between direction symbols. This keeps
- * opposite arrows on an out-and-back section from touching or forming one
- * ambiguous combined shape.
+ * Minimum centre-to-centre separation in CSS pixels between direction symbols.
+ * This keeps opposite arrows on an out-and-back section from touching or forming
+ * one ambiguous combined shape.
  */
 const DIRECTION_ARROW_COLLISION_DISTANCE_PX = 30;
 /**
- * Screen-space phase shift tried when a candidate collides with an earlier
- * symbol. Moving along the route preserves the true direction while
+ * Screen-space phase shift in CSS pixels tried when a candidate collides with an
+ * earlier symbol. Moving along the route preserves the true direction while
  * desynchronizing repeated passes over the same geometry.
  */
 const DIRECTION_ARROW_PHASE_SHIFT_PX = 42;
-/** Number of alternating forward/backward phase shifts attempted per symbol. */
+/**
+ * Unitless number of alternating forward/backward phase shifts attempted per
+ * symbol.
+ * Raising it may recover more candidates but adds placement work.
+ */
 const DIRECTION_ARROW_PHASE_SHIFT_ATTEMPTS = 2;
 /**
  * Hollow arrowhead dimensions in CSS pixels. The symbol is deliberately
@@ -49,19 +69,23 @@ const DIRECTION_ARROW_PHASE_SHIFT_ATTEMPTS = 2;
 const DIRECTION_ARROW_WIDTH_PX = 24;
 const DIRECTION_ARROW_HEIGHT_PX = 16;
 /**
- * Curvature is inspected across this many visible pixels on either side of a
+ * Curvature is inspected across this many CSS pixels on either side of a
  * candidate. The wider window catches bends that collapse into one apparent
  * corner at broad map scales.
  */
 const DIRECTION_CURVATURE_HALF_WINDOW_PX = 18;
 /**
- * The final orientation uses a shorter tangent so the symbol follows the line
- * directly underneath it instead of pointing across the inside of a bend.
+ * The final orientation uses a shorter CSS-pixel tangent so the symbol follows
+ * the line directly underneath it instead of pointing across the inside of a
+ * bend.
  */
 const DIRECTION_LOCAL_TANGENT_HALF_WINDOW_PX = 5;
-/** Tight folds whose visible chord is still tiny are skipped instead of guessing. */
+/**
+ * Minimum visible tangent chord in CSS pixels; tighter folds are skipped instead
+ * of guessing a misleading direction.
+ */
 const MINIMUM_VISIBLE_TANGENT_CHORD_PX = 7;
-/** A local tangent shorter than this is too unstable to orient reliably. */
+/** Minimum local tangent chord in CSS pixels required for stable orientation. */
 const MINIMUM_LOCAL_TANGENT_CHORD_PX = 3;
 /**
  * Maximum change in travel direction across the visible inspection window.
@@ -74,7 +98,11 @@ const MAXIMUM_VISIBLE_TURN_RADIANS = (50 * Math.PI) / 180;
  * direction suggested by the surrounding visible route.
  */
 const MAXIMUM_LOCAL_TANGENT_DELTA_RADIANS = (32 * Math.PI) / 180;
-/** Resolution changes below this relative threshold reuse the prior render cache. */
+/**
+ * Unitless relative resolution threshold below which the prior render cache is
+ * reused. The tiny tolerance avoids rebuilding styles for numerically equivalent
+ * resolutions.
+ */
 const RESOLUTION_CACHE_EPSILON = 1e-9;
 
 /** Reuses the two route-colour SVGs across display rebuilds. */

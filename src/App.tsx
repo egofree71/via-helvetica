@@ -596,7 +596,16 @@ export default function App() {
     setIsRouteExportDialogOpen(true);
   };
 
-  /** Builds the exact GPX document used by both download and swisstopo transfer. */
+  /**
+   * Builds the GPX document for the export source selected when the dialog opened.
+   * The same document is used for local download and the optional swisstopo hand-off
+   * so both actions preserve the same pristine/imported versus generated semantics.
+   *
+   * @param routeName - User-confirmed name written into the exported GPX.
+   * @returns Complete GPX XML for the selected current itinerary source.
+   * @throws {Error} If the selected source is no longer available or an editable
+   * route mutation is still pending.
+   */
   const createCurrentRouteGpxDocument = (routeName: string): string => {
     const generatedAt = new Date();
 
