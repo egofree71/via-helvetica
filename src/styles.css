@@ -1263,6 +1263,27 @@ select {
   transform: translateX(-50%);
 }
 
+/* Keep the contextual GPX edit action aligned to the statistics bar rather
+   than to the fixed-size map controls beside the map. */
+.route-statistics-row {
+  position: relative;
+}
+
+.route-summary-edit-button {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(100% + 0.85rem);
+  width: 3.5rem;
+  height: auto;
+}
+
+.route-summary-edit-button img {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: block;
+}
+
 .route-statistics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr)) 3.5rem;
@@ -2003,6 +2024,14 @@ select {
    keep the summary on the bottom edge and move the compact About control into
    the existing right-side stack instead of sacrificing a full strip of map
    height. */
+@media (max-width: 60rem) {
+  .route-summary-edit-button {
+    right: 0;
+    bottom: calc(100% + 0.45rem);
+    left: auto;
+  }
+}
+
 @media (max-width: 1140px) {
   .about-button {
     position: static;
@@ -2198,6 +2227,16 @@ select {
 
   .route-profile-toggle {
     width: 2.85rem;
+  }
+
+  .route-summary-edit-button {
+    left: calc(100% + 0.6rem);
+    width: 2.85rem;
+  }
+
+  .route-summary-edit-button img {
+    width: 1.5rem;
+    height: 1.5rem;
   }
 
   .route-profile-toggle svg {

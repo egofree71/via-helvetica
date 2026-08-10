@@ -51,7 +51,7 @@ export interface UseImportedRouteOptions {
 export interface ImportedRouteSource {
   /** Parsed itinerary name proposed by the export dialog. */
   name: string;
-  /** Complete original GPX XML retained only while this read-only route is current. */
+  /** Complete original GPX XML associated with this validated import. */
   gpxDocument: string;
 }
 
@@ -59,7 +59,7 @@ export interface ImportedRouteSource {
 export interface ImportedRouteController {
   /** Independent projected GPX segments; an empty array means no imported route. */
   segments: Coordinate[][];
-  /** Original GPX source retained only while the imported route remains current. */
+  /** Original GPX source exposed while the read-only imported route remains current. */
   source: ImportedRouteSource | null;
   /** Embedded GPX profile summary, or null when GeoAdmin must provide elevations. */
   elevationSummary: RouteElevationSummary | null;

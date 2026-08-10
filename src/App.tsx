@@ -39,8 +39,13 @@ import {
   MAP_EXTENT,
 } from './map/config';
 import { fromWgs84 } from './map/projection';
+import { createEditableRouteFromImportedGeometry } from './map/importedRouteConversion';
+import { routeStateMatches, type RouteState } from './map/routeState';
 import { useEditableRoute } from './map/useEditableRoute';
-import { useImportedRoute } from './map/useImportedRoute';
+import {
+  useImportedRoute,
+  type ImportedRouteSource,
+} from './map/useImportedRoute';
 import {
   resolveInitialMapInformationLayerVisibility,
   useMapInformationLayers,
@@ -60,6 +65,7 @@ import {
   updateSearchResultMarker,
 } from './map/searchResult';
 import { useItineraryMetrics } from './metrics/useItineraryMetrics';
+import type { RouteElevationSummary } from './metrics/routeMetrics';
 import type { LocationSearchResult } from './search/locationSearch';
 import {
   getCurrentReleaseDialogItems,
@@ -69,6 +75,16 @@ import {
 
 /** Itinerary source named by the shared GPX export dialog. */
 type RouteExportSource = 'editable' | 'imported' | 'switzerlandMobility';
+
+/** Original GPX resources retained while a converted editable route may return to pristine. */
+interface EditableImportedRouteOrigin {
+  /** Original source used for exact pristine export. */
+  source: ImportedRouteSource;
+  /** Embedded GPX profile retained while geometry remains pristine. */
+  elevationSummary: RouteElevationSummary | null;
+  /** Exact state created by lossless GPX conversion. */
+  pristineState: RouteState;
+}
 
 /**
  * Builds an unambiguous local timestamp for the proposed GPX name. The ISO-like
@@ -110,6 +126,8 @@ export default function App() {
   const [routeExportDefaultName, setRouteExportDefaultName] = useState('');
   const [routeExportSource, setRouteExportSource] =
     useState<RouteExportSource>('editable');
+  const [editableImportedRouteOrigin, setEditableImportedRouteOrigin] =
+    useState<EditableImportedRouteOrigin | null>(null);
   const initialHikingTrailsVisibility = useMemo(
     resolveInitialHikingTrailsVisibility,
     [],
@@ -232,6 +250,7 @@ export default function App() {
     reverseRoute,
     toggleRouteLoop,
     deleteRoute,
+    startEditingFromRouteState,
     replaceWithReadOnlyItinerary,
     showTemporaryRouteMessage,
     isPointerInteractionActive,
@@ -244,6 +263,7 @@ export default function App() {
 
   const handleImportedRouteAccepted = useCallback(() => {
     clearSelectedSearchResult();
+    setEditableImportedRouteOrigin(null);
     replaceWithReadOnlyItinerary();
   }, [clearSelectedSearchResult, replaceWithReadOnlyItinerary]);
 
@@ -265,10 +285,68 @@ export default function App() {
     onImportError: handleImportedRouteError,
   });
 
+  const isEditableImportedRoutePristine =
+    editableImportedRouteOrigin !== null &&
+    routeStateMatches(
+      routeHistory,
+      editableImportedRouteOrigin.pristineState,
+    );
+
+  /** Converts the current continuous GPX to editable state without rerouting. */
+  const editImportedRoute = useCallback(() => {
+    if (!importedRouteSource || importedRouteSegments.length !== 1) {
+      showTemporaryRouteMessage(
+        t('route.editImportedSingleSegmentOnly'),
+        'error',
+      );
+      return;
+    }
+
+    const coordinates = importedRouteSegments[0];
+
+    if (
+      coordinates.some(
+        (coordinate) => !containsCoordinate(MAP_EXTENT, coordinate),
+      )
+    ) {
+      showTemporaryRouteMessage(t('route.editImportedOutsideMap'), 'error');
+      return;
+    }
+
+    try {
+      const state = createEditableRouteFromImportedGeometry(coordinates);
+
+      setEditableImportedRouteOrigin({
+        source: importedRouteSource,
+        elevationSummary: importedRouteElevationSummary,
+        pristineState: state,
+      });
+      clearSelectedSearchResult();
+      clearImportedRoute();
+      startEditingFromRouteState(state);
+    } catch (error) {
+      console.error(
+        'Unable to convert the imported GPX to an editable route.',
+        error,
+      );
+      showTemporaryRouteMessage(t('route.editImportedError'), 'error');
+    }
+  }, [
+    clearImportedRoute,
+    clearSelectedSearchResult,
+    importedRouteElevationSummary,
+    importedRouteSegments,
+    importedRouteSource,
+    showTemporaryRouteMessage,
+    startEditingFromRouteState,
+    t,
+  ]);
+
   /** Makes one validated public route the sole current itinerary. */
   const handleSwitzerlandMobilityHikingRouteAccepted = useCallback(() => {
     clearSelectedSearchResult();
     clearImportedRoute();
+    setEditableImportedRouteOrigin(null);
     replaceWithReadOnlyItinerary();
   }, [
     clearImportedRoute,
@@ -305,16 +383,24 @@ export default function App() {
   ]);
 
   const handleToggleRouteCreation = useCallback(() => {
-    if (!isRouteCreationActive) {
+    if (!isRouteCreationActive && importedRouteSource) {
       clearImportedRoute();
+      setEditableImportedRouteOrigin(null);
     }
 
     toggleRouteCreation();
   }, [
     clearImportedRoute,
+    importedRouteSource,
     isRouteCreationActive,
     toggleRouteCreation,
   ]);
+
+  /** Clears the route and any retained GPX origin that no longer has geometry. */
+  const handleDeleteRoute = useCallback(() => {
+    deleteRoute();
+    setEditableImportedRouteOrigin(null);
+  }, [deleteRoute]);
 
   const {
     areTrailClosuresVisible,
@@ -355,7 +441,11 @@ export default function App() {
     mapRuntimeRef,
     editableRouteCoordinates: routeCoordinates,
     importedRouteSegments,
-    importedRouteElevationSummary,
+    embeddedRouteElevationSummary:
+      importedRouteElevationSummary ??
+      (isEditableImportedRoutePristine
+        ? editableImportedRouteOrigin?.elevationSummary ?? null
+        : null),
     isRoutePointerInteractionActive,
     // The selected public route owns the shared black marker and profile cursor
     // while it is the current read-only itinerary.
@@ -417,8 +507,13 @@ export default function App() {
 
   /** Opens the export/share dialog for the current editable or imported route. */
   const requestCurrentItineraryExport = () => {
-    if (importedRouteSource) {
-      setRouteExportDefaultName(importedRouteSource.name);
+    const pristineImportedSource = isEditableImportedRoutePristine
+      ? editableImportedRouteOrigin?.source ?? null
+      : null;
+    const exactImportedSource = importedRouteSource ?? pristineImportedSource;
+
+    if (exactImportedSource) {
+      setRouteExportDefaultName(exactImportedSource.name);
       setRouteExportSource('imported');
       setIsRouteExportDialogOpen(true);
       return;
@@ -433,7 +528,8 @@ export default function App() {
     }
 
     setRouteExportDefaultName(
-      createRouteExportDefaultName(t('gpx.routeName')),
+      editableImportedRouteOrigin?.source.name ??
+        createRouteExportDefaultName(t('gpx.routeName')),
     );
     setRouteExportSource('editable');
     setIsRouteExportDialogOpen(true);
@@ -485,14 +581,20 @@ export default function App() {
     }
 
     if (routeExportSource === 'imported') {
-      if (!importedRouteSource) {
+      const source =
+        importedRouteSource ??
+        (isEditableImportedRoutePristine
+          ? editableImportedRouteOrigin?.source ?? null
+          : null);
+
+      if (!source) {
         throw new Error('The imported GPX route is unavailable.');
       }
 
-      // Keep provider-specific metadata and extensions from the source GPX;
-      // only the user-facing itinerary name may change in the shared dialog.
+      // Keep provider-specific metadata and extensions from the source GPX
+      // while the converted editable geometry still matches its pristine state.
       return createNamedImportedGpxDocument(
-        importedRouteSource.gpxDocument,
+        source.gpxDocument,
         routeName,
       );
     }
@@ -608,7 +710,7 @@ export default function App() {
           onToggleSnap={toggleRouteSnap}
           onReverse={reverseRoute}
           onToggleLoop={toggleRouteLoop}
-          onDelete={deleteRoute}
+          onDelete={handleDeleteRoute}
         />
 
         {(isRouteCreationActive || importedRouteSource) && (
@@ -816,6 +918,14 @@ export default function App() {
               handleProfileHoverDistanceChange
             }
             routeHoverDistanceMeters={routeMapHoverDistanceMeters}
+            editAction={
+              importedRouteSource
+                ? {
+                    label: t('route.editImported'),
+                    onClick: editImportedRoute,
+                  }
+                : null
+            }
           />
         )}
 

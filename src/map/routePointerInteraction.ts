@@ -372,15 +372,15 @@ export function getRouteSegmentHitAtPixel(
   };
 
   for (let stepIndex = 1; stepIndex < steps.length; stepIndex += 1) {
-    const segment = steps[stepIndex].segment;
+    const segment = steps[stepIndex].section?.coordinates;
 
     if (segment && segment.length >= 2) {
       inspectSegment(segment, stepIndex);
     }
   }
 
-  if (closure?.segment && closure.segment.length >= 2) {
-    inspectSegment(closure.segment, steps.length);
+  if (closure?.coordinates && closure.coordinates.length >= 2) {
+    inspectSegment(closure.coordinates, steps.length);
   }
 
   return closestDistanceSquared <= toleranceSquared ? closestHit : null;

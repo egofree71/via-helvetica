@@ -9,7 +9,16 @@ import type {
   RouteElevationPoint,
   RouteElevationStatus,
 } from '../metrics/routeMetrics';
+import penIconUrl from '../assets/pen.svg';
 import RouteElevationProfile from './RouteElevationProfile';
+
+/** Optional contextual action displayed beside the compact statistics bar. */
+interface RouteStatisticsAction {
+  /** Accessible label and tooltip for the action. */
+  label: string;
+  /** Runs the contextual itinerary action. */
+  onClick: () => void;
+}
 
 /** Values displayed by the route statistics bar. */
 interface RouteStatisticsProps {
@@ -29,6 +38,8 @@ interface RouteStatisticsProps {
   onProfileHoverDistanceChange?: (distanceMeters: number | null) => void;
   /** Cumulative distance selected by hovering the route on the map. */
   routeHoverDistanceMeters?: number | null;
+  /** Contextual action shown only when the current itinerary offers one. */
+  editAction?: RouteStatisticsAction | null;
 }
 
 /** Duration is rounded to five minutes because it is an indicative estimate. */
@@ -96,6 +107,7 @@ export default function RouteStatistics({
   elevationPoints,
   onProfileHoverDistanceChange,
   routeHoverDistanceMeters = null,
+  editAction = null,
 }: RouteStatisticsProps) {
   const { locale, t } = useI18n();
   const [isProfileVisible, setIsProfileVisible] = useState(false);
@@ -139,94 +151,108 @@ export default function RouteStatistics({
         />
       )}
 
-      <section
-        className="route-statistics"
-        aria-label={t('statistics.aria')}
-        aria-busy={elevationStatus === 'loading'}
-      >
-        <div className="route-statistics-item">
-          <span className="route-statistics-label">{t('statistics.distance')}</span>
-          <strong>
-            {formatDistance(distanceMeters, integerFormat, distanceFormat)}
-          </strong>
-        </div>
-
-        <div className="route-statistics-item">
-          <span className="route-statistics-label">{t('statistics.ascent')}</span>
-          <svg
-            className="route-statistics-direction-icon"
-            viewBox="0 0 12 14"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path d="M6 12V2" />
-            <path d="m2.5 5.5 3.5-3.5 3.5 3.5" />
-          </svg>
-          <strong>
-            {hasElevation
-              ? formatElevation(ascentMeters, integerFormat)
-              : unavailableValue}
-          </strong>
-        </div>
-
-        <div className="route-statistics-item">
-          <span className="route-statistics-label">{t('statistics.descent')}</span>
-          <svg
-            className="route-statistics-direction-icon"
-            viewBox="0 0 12 14"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path d="M6 2v10" />
-            <path d="m2.5 8.5 3.5 3.5 3.5-3.5" />
-          </svg>
-          <strong>
-            {hasElevation
-              ? formatElevation(descentMeters, integerFormat)
-              : unavailableValue}
-          </strong>
-        </div>
-
-        <div
-          className="route-statistics-item"
-          title={t('statistics.durationTitle')}
+      <div className="route-statistics-row">
+        <section
+          className="route-statistics"
+          aria-label={t('statistics.aria')}
+          aria-busy={elevationStatus === 'loading'}
         >
-          <span className="route-statistics-label">{t('statistics.duration')}</span>
-          <strong>
-            {hasElevation
-              ? formatDuration(
-                  durationMinutes,
-                  integerFormat,
-                  t('units.hourShort'),
-                  t('units.minuteShort'),
-                )
-              : unavailableValue}
-          </strong>
-        </div>
+          <div className="route-statistics-item">
+            <span className="route-statistics-label">{t('statistics.distance')}</span>
+            <strong>
+              {formatDistance(distanceMeters, integerFormat, distanceFormat)}
+            </strong>
+          </div>
 
-        <button
-          type="button"
-          className={[
-            'route-profile-toggle',
-            isProfileVisible && hasProfile
-              ? 'route-profile-toggle--active'
-              : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-          aria-label={profileButtonLabel}
-          aria-expanded={isProfileVisible && hasProfile}
-          aria-controls={profileId}
-          title={profileButtonLabel}
-          disabled={!hasProfile}
-          onClick={() => setIsProfileVisible((isVisible) => !isVisible)}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M3.5 18.5h17" />
-            <path d="m4.5 16 4.1-5 3.2 3.2 3.5-7 4.2 8.8" />
-          </svg>
-        </button>
-      </section>
+          <div className="route-statistics-item">
+            <span className="route-statistics-label">{t('statistics.ascent')}</span>
+            <svg
+              className="route-statistics-direction-icon"
+              viewBox="0 0 12 14"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M6 12V2" />
+              <path d="m2.5 5.5 3.5-3.5 3.5 3.5" />
+            </svg>
+            <strong>
+              {hasElevation
+                ? formatElevation(ascentMeters, integerFormat)
+                : unavailableValue}
+            </strong>
+          </div>
+
+          <div className="route-statistics-item">
+            <span className="route-statistics-label">{t('statistics.descent')}</span>
+            <svg
+              className="route-statistics-direction-icon"
+              viewBox="0 0 12 14"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M6 2v10" />
+              <path d="m2.5 8.5 3.5 3.5 3.5-3.5" />
+            </svg>
+            <strong>
+              {hasElevation
+                ? formatElevation(descentMeters, integerFormat)
+                : unavailableValue}
+            </strong>
+          </div>
+
+          <div
+            className="route-statistics-item"
+            title={t('statistics.durationTitle')}
+          >
+            <span className="route-statistics-label">{t('statistics.duration')}</span>
+            <strong>
+              {hasElevation
+                ? formatDuration(
+                    durationMinutes,
+                    integerFormat,
+                    t('units.hourShort'),
+                    t('units.minuteShort'),
+                  )
+                : unavailableValue}
+            </strong>
+          </div>
+
+          <button
+            type="button"
+            className={[
+              'route-profile-toggle',
+              isProfileVisible && hasProfile
+                ? 'route-profile-toggle--active'
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            aria-label={profileButtonLabel}
+            aria-expanded={isProfileVisible && hasProfile}
+            aria-controls={profileId}
+            title={profileButtonLabel}
+            disabled={!hasProfile}
+            onClick={() => setIsProfileVisible((isVisible) => !isVisible)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3.5 18.5h17" />
+              <path d="m4.5 16 4.1-5 3.2 3.2 3.5-7 4.2 8.8" />
+            </svg>
+          </button>
+        </section>
+
+        {editAction && (
+          <button
+            type="button"
+            className="map-control-button route-summary-edit-button"
+            aria-label={editAction.label}
+            title={editAction.label}
+            onClick={editAction.onClick}
+          >
+            <img src={penIconUrl} alt="" aria-hidden="true" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

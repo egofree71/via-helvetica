@@ -1,10 +1,10 @@
 /**
  * Business context: prepares the itinerary currently presented by Via Helvetica
- * for GPX download or swisstopo transfer. Editable and selected public-route
- * geometry is serialized as compact GPX 1.1, with each continuous section
- * simplified within a sub-metre tolerance while preserving endpoints and
- * deliberate gaps. Imported GPX follows a separate preservation path so its
- * provider-specific metadata and extensions are not rebuilt unnecessarily.
+ * for GPX download or swisstopo transfer. Generated editable and selected-public
+ * geometry is serialized as compact GPX 1.1 with sub-metre simplification, while
+ * untouched sections inherited from an editable GPX keep every source vertex. A
+ * read-only or still-pristine imported GPX follows the separate XML-preservation
+ * path so provider metadata and extensions are not rebuilt unnecessarily.
  * Smoothed elevation samples are embedded in generated GPX when available.
  */
 import type { Coordinate } from 'ol/coordinate.js';
@@ -215,7 +215,7 @@ function coordinateDistanceSquared(
   return deltaX * deltaX + deltaY * deltaY;
 }
 
-/** Appends one coordinate unless it is effectively identical to the previous one. */
+/** Appends one generated coordinate unless it is effectively identical to the previous one. */
 function appendExportCoordinate(
   coordinates: Coordinate[],
   coordinate: Coordinate,
@@ -226,6 +226,24 @@ function appendExportCoordinate(
     !previousCoordinate ||
     coordinateDistanceSquared(previousCoordinate, coordinate) >
       GPX_DUPLICATE_COORDINATE_DISTANCE_SQUARED
+  ) {
+    coordinates.push([coordinate[0], coordinate[1]]);
+  }
+}
+
+/** Appends one imported coordinate while removing only an exact shared section boundary. */
+function appendImportedExportCoordinate(
+  coordinates: Coordinate[],
+  coordinate: Coordinate,
+): void {
+  const previousCoordinate = coordinates[coordinates.length - 1];
+
+  // Imported sections are already trusted source geometry. Preserve even very
+  // dense recorded points and remove only the duplicated adjacent-section join.
+  if (
+    !previousCoordinate ||
+    previousCoordinate[0] !== coordinate[0] ||
+    previousCoordinate[1] !== coordinate[1]
   ) {
     coordinates.push([coordinate[0], coordinate[1]]);
   }
@@ -373,18 +391,36 @@ function collectExportCoordinates(
   const coordinates: Coordinate[] = [];
 
   for (const step of steps) {
-    if (step.segment && step.segment.length >= 2) {
-      for (const coordinate of simplifyRouteSection(step.segment)) {
-        appendExportCoordinate(coordinates, coordinate);
+    if (step.section && step.section.coordinates.length >= 2) {
+      const sectionCoordinates = step.section.origin === 'imported'
+        ? step.section.coordinates
+        : simplifyRouteSection(step.section.coordinates);
+
+      // Untouched imported sections retain every source vertex. Generated
+      // sections keep the existing lightweight export simplification.
+      for (const coordinate of sectionCoordinates) {
+        if (step.section.origin === 'imported') {
+          appendImportedExportCoordinate(coordinates, coordinate);
+        } else {
+          appendExportCoordinate(coordinates, coordinate);
+        }
       }
     } else {
       appendExportCoordinate(coordinates, step.waypoint);
     }
   }
 
-  if (closure?.segment && closure.segment.length >= 2) {
-    for (const coordinate of simplifyRouteSection(closure.segment)) {
-      appendExportCoordinate(coordinates, coordinate);
+  if (closure?.coordinates && closure.coordinates.length >= 2) {
+    const closureCoordinates = closure.origin === 'imported'
+      ? closure.coordinates
+      : simplifyRouteSection(closure.coordinates);
+
+    for (const coordinate of closureCoordinates) {
+      if (closure.origin === 'imported') {
+        appendImportedExportCoordinate(coordinates, coordinate);
+      } else {
+        appendExportCoordinate(coordinates, coordinate);
+      }
     }
   }
 

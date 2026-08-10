@@ -188,6 +188,38 @@ describe('useEditableRoute orchestration', () => {
     );
   });
 
+
+  it('seeds editable history from imported geometry without routing', async () => {
+    await act(async () => {
+      root?.render(createElement(Harness));
+    });
+
+    const importedState: RouteState = {
+      steps: [
+        { waypoint: [0, 0], section: null },
+        {
+          waypoint: [1_000, 0],
+          section: {
+            origin: 'imported',
+            coordinates: [[0, 0], [500, 20], [1_000, 0]],
+          },
+        },
+      ],
+      closure: null,
+    };
+
+    await act(async () => {
+      controllerState.current?.startEditingFromRouteState(importedState);
+    });
+
+    expect(controllerState.current?.isRouteCreationActive).toBe(true);
+    expect(controllerState.current?.isRouteSnapEnabled).toBe(true);
+    expect(controllerState.current?.routeHistory.steps).toBe(importedState.steps);
+    expect(controllerState.current?.routeHistory.undoStates).toEqual([]);
+    expect(controllerState.current?.routeHistory.redoStates).toEqual([]);
+    expect(loaderState.instances[0].routeCalls).toBe(0);
+  });
+
   it('rejects an overlong appended section before pending state or Worker routing', async () => {
     await act(async () => {
       root?.render(createElement(Harness));
@@ -197,8 +229,7 @@ describe('useEditableRoute orchestration', () => {
       steps: [
         {
           waypoint: [0, 0],
-          segment: null,
-          mode: 'network',
+          section: null,
         },
       ],
       closure: null,

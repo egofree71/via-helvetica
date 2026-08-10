@@ -224,8 +224,12 @@ export function updateRouteWaypointDragPreview(
   previewSteps[waypointIndex] = {
     ...movedStep,
     waypoint: previewCoordinate,
-    segment: previousStep
-      ? [[...previousStep.waypoint], previewCoordinate]
+    section: previousStep
+      ? {
+          origin: 'generated',
+          mode: 'straight',
+          coordinates: [[...previousStep.waypoint], previewCoordinate],
+        }
       : null,
   };
 
@@ -234,7 +238,11 @@ export function updateRouteWaypointDragPreview(
   if (nextStep) {
     previewSteps[waypointIndex + 1] = {
       ...nextStep,
-      segment: [previewCoordinate, [...nextStep.waypoint]],
+      section: {
+        origin: 'generated',
+        mode: 'straight',
+        coordinates: [previewCoordinate, [...nextStep.waypoint]],
+      },
     };
   }
 
@@ -253,8 +261,9 @@ export function updateRouteWaypointDragPreview(
         : previewSteps[previewSteps.length - 1].waypoint;
 
     previewClosure = {
-      ...closure,
-      segment: [[...lastWaypoint], [...firstWaypoint]],
+      origin: 'generated',
+      mode: 'straight',
+      coordinates: [[...lastWaypoint], [...firstWaypoint]],
     };
   }
 
@@ -287,13 +296,17 @@ export function updateRouteInsertionDragPreview(
     const firstStep = steps[0];
     const insertedStep: RouteStep = {
       waypoint: insertedCoordinate,
-      segment: [[...previousStep.waypoint], insertedCoordinate],
-      mode: closure.mode,
+      section: {
+        origin: 'generated',
+        mode: 'straight',
+        coordinates: [[...previousStep.waypoint], insertedCoordinate],
+      },
     };
     const previewSteps = [...steps, insertedStep];
     const previewClosure: RouteClosure = {
-      ...closure,
-      segment: [insertedCoordinate, [...firstStep.waypoint]],
+      origin: 'generated',
+      mode: 'straight',
+      coordinates: [insertedCoordinate, [...firstStep.waypoint]],
     };
 
     updateRouteDisplay(
@@ -315,12 +328,19 @@ export function updateRouteInsertionDragPreview(
 
   const insertedStep: RouteStep = {
     waypoint: insertedCoordinate,
-    segment: [[...previousStep.waypoint], insertedCoordinate],
-    mode: destinationStep.mode,
+    section: {
+      origin: 'generated',
+      mode: 'straight',
+      coordinates: [[...previousStep.waypoint], insertedCoordinate],
+    },
   };
   const updatedDestinationStep: RouteStep = {
     ...destinationStep,
-    segment: [insertedCoordinate, [...destinationStep.waypoint]],
+    section: {
+      origin: 'generated',
+      mode: 'straight',
+      coordinates: [insertedCoordinate, [...destinationStep.waypoint]],
+    },
   };
   const previewSteps = [
     ...steps.slice(0, stepIndex),

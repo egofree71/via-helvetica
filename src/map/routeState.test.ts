@@ -10,33 +10,45 @@ import {
   reverseRouteState,
   reverseRouteSteps,
   routeStateMatches,
+  type RouteSection,
   type RouteState,
   type RouteStep,
 } from './routeState';
+
+function generatedSection(
+  coordinates: number[][],
+  mode: 'straight' | 'network' = 'straight',
+): RouteSection {
+  return {
+    origin: 'generated',
+    mode,
+    coordinates,
+  };
+}
 
 function createOpenRouteSteps(): RouteStep[] {
   return [
     {
       waypoint: [0, 0],
-      segment: null,
-      mode: 'straight',
+      section: null,
     },
     {
       waypoint: [10, 0],
-      segment: [
-        [0, 0],
-        [5, 0],
-        [10, 0],
-      ],
-      mode: 'network',
+      section: generatedSection(
+        [
+          [0, 0],
+          [5, 0],
+          [10, 0],
+        ],
+        'network',
+      ),
     },
     {
       waypoint: [10, 10],
-      segment: [
+      section: generatedSection([
         [10, 0],
         [10, 10],
-      ],
-      mode: 'straight',
+      ]),
     },
   ];
 }
@@ -53,23 +65,47 @@ describe('routeState', () => {
     ]);
   });
 
-  it('removes only sub-decimetre consecutive duplicates', () => {
+  it('keeps the existing sub-decimetre deduplication for generated geometry', () => {
     const steps: RouteStep[] = [
-      { waypoint: [0, 0], segment: null, mode: 'straight' },
+      { waypoint: [0, 0], section: null },
       {
         waypoint: [1, 0],
-        segment: [
+        section: generatedSection([
           [0, 0],
           [0.05, 0],
           [0.11, 0],
           [1, 0],
-        ],
-        mode: 'straight',
+        ]),
       },
     ];
 
     expect(collectRouteCoordinates(steps)).toEqual([
       [0, 0],
+      [0.11, 0],
+      [1, 0],
+    ]);
+  });
+
+  it('preserves distinct source vertices even when they are less than ten centimetres apart', () => {
+    const steps: RouteStep[] = [
+      { waypoint: [0, 0], section: null },
+      {
+        waypoint: [1, 0],
+        section: {
+          origin: 'imported',
+          coordinates: [
+            [0, 0],
+            [0.05, 0],
+            [0.11, 0],
+            [1, 0],
+          ],
+        },
+      },
+    ];
+
+    expect(collectRouteCoordinates(steps)).toEqual([
+      [0, 0],
+      [0.05, 0],
       [0.11, 0],
       [1, 0],
     ]);
@@ -82,41 +118,65 @@ describe('routeState', () => {
     expect(reverseRouteSteps(steps)).toEqual([
       {
         waypoint: [10, 10],
-        segment: null,
-        mode: 'straight',
+        section: null,
       },
       {
         waypoint: [10, 0],
-        segment: [
+        section: generatedSection([
           [10, 10],
           [10, 0],
-        ],
-        mode: 'straight',
+        ]),
       },
       {
         waypoint: [0, 0],
-        segment: [
-          [10, 0],
-          [5, 0],
-          [0, 0],
-        ],
-        mode: 'network',
+        section: generatedSection(
+          [
+            [10, 0],
+            [5, 0],
+            [0, 0],
+          ],
+          'network',
+        ),
       },
     ]);
     expect(steps).toEqual(originalSnapshot);
   });
 
+  it('preserves imported section provenance when reversing', () => {
+    const steps: RouteStep[] = [
+      { waypoint: [0, 0], section: null },
+      {
+        waypoint: [10, 0],
+        section: {
+          origin: 'imported',
+          coordinates: [
+            [0, 0],
+            [10, 0],
+          ],
+        },
+      },
+    ];
+
+    expect(reverseRouteSteps(steps)[1].section).toEqual({
+      origin: 'imported',
+      coordinates: [
+        [10, 0],
+        [0, 0],
+      ],
+    });
+  });
+
   it('reverses a closed route while preserving its physical start', () => {
     const state: RouteState = {
       steps: createOpenRouteSteps(),
-      closure: {
-        segment: [
+      closure: generatedSection(
+        [
           [10, 10],
           [0, 10],
           [0, 0],
         ],
-        mode: 'network',
-      },
+        'network',
+      ),
     };
 
     const reversed = reverseRouteState(state);

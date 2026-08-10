@@ -756,19 +756,28 @@ With snapping enabled:
 
 Moving a waypoint rebuilds only its incoming and outgoing sections. In a closed
 route, moving the first or last waypoint also rebuilds the closure where
-required.
+required. A GPX converted for editing enters the same workflow: untouched
+sections remain marked `imported`, while every section actually rebuilt by a
+move becomes a normal `generated` network or straight section.
 
 ### 13.3 Insertion
 
 Dragging a stored section inserts one waypoint and replaces that section with
 two sections. Each half independently uses the current snap mode and may
-independently fall back to a straight line after a normal coverage miss.
+independently fall back to a straight line after a normal coverage miss. This is
+also the transition point at which an imported section touched by insertion is
+replaced by generated geometry.
 
 ### 13.4 Deletion
 
-Deleting an intermediate waypoint reconnects its neighbours using the current
-snap mode. Endpoint deletion in a closed route rebuilds the remaining loop.
-Unrelated sections retain their exact stored geometry.
+Deleting an intermediate waypoint normally reconnects its neighbours using the
+current snap mode. One deliberate exception protects converted GPX geometry: if
+both sections adjacent to an automatically created anchor are still imported,
+their stored coordinate arrays are concatenated and the routing loader is not
+called. Removing such an anchor therefore changes edit granularity without
+changing the trace. If either adjacent section has already been generated, the
+normal reconnection rule applies. Endpoint deletion in a closed route rebuilds
+the remaining loop. Unrelated sections retain their exact stored geometry.
 
 ### 13.5 Error versus fallback
 

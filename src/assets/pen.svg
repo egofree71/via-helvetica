@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 350 350" width="350" height="350">
+  <title>Pencil</title>
+  <g transform="translate(32 313) rotate(-45)"
+     fill="none" stroke="#000000" stroke-width="18"
+     stroke-linecap="round" stroke-linejoin="round">
+    <!-- Outer contour: sharpened tip, body, and rounded end. -->
+    <path d="M 0 0
+             L 75 -45
+             L 355 -45
+             A 13 13 0 0 1 368 -32
+             L 368 32
+             A 13 13 0 0 1 355 45
+             L 75 45
+             Z"/>
+    <!-- Boundary between the sharpened tip and the pencil body. -->
+    <path d="M 75 -45 L 75 45"/>
+    <!-- Boundary between the body and the end cap. -->
+    <path d="M 314 -45 L 314 45"/>
+  </g>
+</svg>
