@@ -33,13 +33,12 @@ function createStorage() {
 describe('release history', () => {
   it('provides the same current release structure in every language', () => {
     const expectedItemIds = [
-      'swisstopoTransfer',
-      'compactGpxExport',
-      'interfaceRefinements',
+      'editableImportedGpx',
+      'sharedSwitzerlandMobilityExport',
     ];
     const expectedDialogItemIds = [
-      'swisstopoTransfer',
-      'compactGpxExport',
+      'editableImportedGpx',
+      'sharedSwitzerlandMobilityExport',
     ];
 
     for (const language of SUPPORTED_LANGUAGES) {
