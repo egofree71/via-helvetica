@@ -543,8 +543,32 @@ export default function App() {
     });
   };
 
-  /** Opens the export/share dialog for the current editable or imported route. */
+  /** Opens the shared export/share dialog for whichever itinerary is current. */
   const requestCurrentItineraryExport = () => {
+    if (switzerlandMobilityHikingPanel?.state === 'ready') {
+      const route = switzerlandMobilityHikingPanel.route;
+      const baseName = route.routeName
+        ?? (route.routeNumber
+          ? t('switzerlandMobilityHiking.routeNumber', {
+              number: route.routeNumber,
+            })
+          : t('switzerlandMobilityHiking.unnamedRoute'));
+      const stageName = route.stageNumber
+        ? `${baseName} — ${t('switzerlandMobilityHiking.stage', {
+            number: route.stageNumber,
+          })}`
+        : baseName;
+
+      setRouteExportDefaultName(
+        route.sectionName
+          ? `${stageName} — ${route.sectionName}`
+          : stageName,
+      );
+      setRouteExportSource('switzerlandMobility');
+      setIsRouteExportDialogOpen(true);
+      return;
+    }
+
     const source = resolveItineraryExportSource({
       importedRouteSource,
       editableImportedRouteOrigin,
@@ -569,34 +593,6 @@ export default function App() {
         createRouteExportDefaultName(t('gpx.routeName')),
     );
     setRouteExportSource('editable');
-    setIsRouteExportDialogOpen(true);
-  };
-
-  /** Opens the shared name dialog for the selected public hiking route. */
-  const requestSwitzerlandMobilityHikingExport = () => {
-    if (switzerlandMobilityHikingPanel?.state !== 'ready') {
-      return;
-    }
-
-    const route = switzerlandMobilityHikingPanel.route;
-    const baseName = route.routeName
-      ?? (route.routeNumber
-        ? t('switzerlandMobilityHiking.routeNumber', {
-            number: route.routeNumber,
-          })
-        : t('switzerlandMobilityHiking.unnamedRoute'));
-    const stageName = route.stageNumber
-      ? `${baseName} — ${t('switzerlandMobilityHiking.stage', {
-          number: route.stageNumber,
-        })}`
-      : baseName;
-
-    setRouteExportDefaultName(
-      route.sectionName
-        ? `${stageName} — ${route.sectionName}`
-        : stageName,
-    );
-    setRouteExportSource('switzerlandMobility');
     setIsRouteExportDialogOpen(true);
   };
 
@@ -750,15 +746,19 @@ export default function App() {
           onDelete={handleDeleteRoute}
         />
 
-        {(isRouteCreationActive || importedRouteSource) && (
+        {(isRouteCreationActive ||
+          importedRouteSource ||
+          switzerlandMobilityHikingPanel?.state === 'ready') && (
           <button
             type="button"
             className="map-control-button map-control-button--route-export"
             aria-label={t('route.export')}
             title={t('route.export')}
             disabled={
-              isRouteCreationActive &&
-              (isRouteOperationPending || routeHistory.steps.length < 2)
+              switzerlandMobilityHikingPanel?.state === 'ready'
+                ? switzerlandMobilityHikingPanel.elevationStatus === 'loading'
+                : isRouteCreationActive &&
+                  (isRouteOperationPending || routeHistory.steps.length < 2)
             }
             onClick={requestCurrentItineraryExport}
           >
@@ -937,7 +937,6 @@ export default function App() {
           routeHoverDistanceMeters={
             switzerlandMobilityHikingMapHoverDistanceMeters
           }
-          onExport={requestSwitzerlandMobilityHikingExport}
           onClose={dismissSwitzerlandMobilityHikingPanel}
         />
       )}

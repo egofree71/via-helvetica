@@ -549,8 +549,10 @@ waypoint. Closing and reopening are undoable snapshots.
 
 GPX export and swisstopo hand-off share the same naming workflow:
 
-- the contextual export/share control appears below route creation only while an
-  editable route is active or an imported GPX is the current itinerary;
+- the contextual export/share control stays in the right-side map controls and
+  appears only while an editable route, imported GPX, or fully selected
+  SwitzerlandMobility route is the current itinerary; for a selected public route
+  it remains disabled only while elevation samples are still loading;
 - the dialog asks for a route name once;
 - editable and selected public routes use Via Helvetica's GPX serializer;
   generated sections are simplified independently so every waypoint remains
@@ -765,9 +767,9 @@ section text. Distance, ascent, descent, walking time, and profile samples are
 calculated by Via Helvetica from the retrieved geometry and the existing
 elevation-profile service; no SwitzerlandMobility editorial descriptions or photos
 are reproduced. The profile is collapsed by default and reuses the same chart and
-black map marker as editable routes and imported GPX tracks. The header export
-action reuses the shared naming dialog and writes the complete selected geometry as
-a GPX 1.1 track, preserving independent line segments and embedding calculated
+black map marker as editable routes and imported GPX tracks. The shared right-side
+export control reuses the naming dialog and writes the complete selected geometry
+as a GPX 1.1 track, preserving independent line segments and embedding calculated
 elevations when available. A shared synchronization hook grants marker ownership
 only to the visible summary. Starting route creation, hiding the layer, changing
 language, selecting another map information feature, or opening another temporary

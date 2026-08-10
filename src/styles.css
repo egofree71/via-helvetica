@@ -1103,9 +1103,6 @@ select {
   gap: 0.15rem;
 }
 
-/* Export lives beside close because both actions apply to the complete selected
-   public route, while the profile toggle remains attached to route metrics. */
-.switzerland-mobility-hiking-panel-export,
 .switzerland-mobility-hiking-panel-close {
   display: grid;
   width: 2.4rem;
@@ -1123,35 +1120,10 @@ select {
   line-height: 1;
 }
 
-.switzerland-mobility-hiking-panel-export {
-  color: #26323c;
-  font-size: 1rem;
-}
-
-.switzerland-mobility-hiking-panel-export svg {
-  width: 1.55rem;
-  height: 1.55rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-}
-
-.switzerland-mobility-hiking-panel-export:hover:not(:disabled) {
-  background: rgb(23 105 224 / 9%);
-}
-
-.switzerland-mobility-hiking-panel-export:disabled {
-  opacity: 0.42;
-  cursor: wait;
-}
-
 .switzerland-mobility-hiking-panel-close:hover {
   background: rgb(183 25 25 / 9%);
 }
 
-.switzerland-mobility-hiking-panel-export:focus-visible,
 .switzerland-mobility-hiking-panel-close:focus-visible,
 .switzerland-mobility-hiking-route-choices button:focus-visible {
   outline: 3px solid rgb(23 105 224 / 40%);
