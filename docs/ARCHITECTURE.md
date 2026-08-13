@@ -433,6 +433,12 @@ Independent segments sent to the GeoAdmin profile service share one global
 sampling budget. This keeps profile size bounded when provider geometry contains
 genuine gaps instead of multiplying the normal limit by the number of parts.
 
+Complete embedded GPX elevations are resampled on a regular distance grid
+that targets roughly 20 metres, while GeoAdmin-backed metrics accumulate the
+valid profile samples returned by the provider. The same route geometry may
+therefore produce slightly different ascent/descent values after GPX export and
+re-import.
+
 Every asynchronous result is tied to the exact immutable segment-array identity
 that requested it. Superseded requests are aborted, and stale responses cannot
 update a newer itinerary.
@@ -444,12 +450,6 @@ The same profile samples support:
 - the collapsible SVG profile;
 - map-to-profile pointer lookup;
 - profile-to-map pointer lookup.
-
-An exploratory investigation into elevation sampling, GPX round-trips,
-GeoAdmin profile behaviour, long-itinerary limits, and a possible local
-swissALTI3D provider is recorded in [`ELEVATION_ANALYSIS.md`](ELEVATION_ANALYSIS.md).
-It is intentionally non-normative: the runtime behaviour described in this
-document and in the source code remains authoritative.
 
 ## 5. Main workflows
 
