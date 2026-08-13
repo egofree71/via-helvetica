@@ -445,6 +445,12 @@ The same profile samples support:
 - map-to-profile pointer lookup;
 - profile-to-map pointer lookup.
 
+An exploratory investigation into elevation sampling, GPX round-trips,
+GeoAdmin profile behaviour, long-itinerary limits, and a possible local
+swissALTI3D provider is recorded in [`ELEVATION_ANALYSIS.md`](ELEVATION_ANALYSIS.md).
+It is intentionally non-normative: the runtime behaviour described in this
+document and in the source code remains authoritative.
+
 ## 5. Main workflows
 
 ### 5.1 Application startup
