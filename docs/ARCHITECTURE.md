@@ -137,13 +137,15 @@ the bottom edge, while the About control joins the right-side control stack when
 horizontal space becomes tight. At phone widths the permanent search field is
 replaced by a search button directly below route creation; activating it opens a
 temporary full-viewport search surface that reuses the same query and result
-logic. The layer selector instead becomes a full-width bottom sheet capped to
-roughly three quarters of the dynamic viewport: part of the map remains visible,
-base-map previews share one row, and longer layer content scrolls inside the
-sheet. The metric scale is hidden where it would otherwise remain covered by the
-summary. Tall temporary surfaces use the dynamic mobile viewport height, with a
-conventional viewport fallback, so browser address and navigation bars cannot
-cover their reachable content.
+logic. The layer selector and map-information details instead use full-width,
+fixed half-height bottom sheets: part of the map remains visible to preserve the
+geographic context, base-map previews share one row, and content that does not fit
+uses native vertical scrolling inside the sheet. These sheets deliberately avoid
+custom drag gestures so ordinary taps, links, and scrolling remain browser-native
+on touch devices. The metric scale is hidden where it would otherwise remain
+covered by the summary. Tall temporary surfaces use the dynamic mobile viewport
+height, with a conventional viewport fallback, so browser address and navigation
+bars cannot cover their reachable content.
 
 ### 1.5 Explicit workflow boundaries
 

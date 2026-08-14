@@ -2130,9 +2130,9 @@ select {
     display: grid;
   }
 
-  /* On phones the layer selector behaves as a bottom sheet: it uses the full
-     width, deliberately leaves part of the map visible, and scrolls internally
-     when the available height cannot contain every information layer. */
+  /* On phones the layer selector is a fixed-height bottom sheet. Keeping half
+     the viewport visible preserves the geographic context, while native scrolling
+     inside the sheet exposes any controls that do not fit. */
   .map-layers-menu {
     position: fixed;
     /* The sheet must cover every permanent map-control item while open. The About
@@ -2144,8 +2144,9 @@ select {
     left: 0;
     width: auto;
     max-width: none;
-    max-height: 72vh;
-    max-height: 72dvh;
+    height: 50vh;
+    height: 50dvh;
+    max-height: none;
     padding: 0.4rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
     border-right: 0;
     border-bottom: 0;
@@ -2235,9 +2236,9 @@ select {
   .map-layers-section--base-maps .base-map-option-preview {
     width: 100%;
     height: auto;
-    /* A wider thumbnail keeps the background recognisable while reclaiming
-       vertical room for the information-layer rows below. */
-    aspect-ratio: 16 / 10;
+    /* A 4:3 preview gives each background enough visual presence to remain
+       recognisable while the three choices still fit on one phone-width row. */
+    aspect-ratio: 4 / 3;
     border-radius: 7px;
   }
 
@@ -2260,11 +2261,28 @@ select {
     stroke: currentcolor;
   }
 
+  /* Optional map information uses the same simple mobile pattern as Layers:
+     a fixed half-height sheet keeps the selected map context visible and delegates
+     any extra content to the browser's native scrolling instead of custom drag
+     gestures. Desktop popups keep their existing floating layout. */
   .map-information-popup {
-    top: 4.25rem;
-    left: 0.75rem;
-    width: calc(100vw - 5.25rem);
-    max-height: calc(100vh - 5rem);
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    width: 100vw;
+    height: 50vh;
+    height: 50dvh;
+    max-height: none;
+    flex-direction: column;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 28px rgb(0 0 0 / 22%);
+    overscroll-behavior: contain;
   }
 
   .public-transport-stop-popup {
@@ -2272,8 +2290,17 @@ select {
     max-width: none;
   }
 
+  .map-information-popup-header {
+    flex: 0 0 auto;
+  }
+
   .map-information-popup-body {
-    max-height: calc(100vh - 8rem);
+    min-height: 0;
+    max-height: none;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .map-control-button,
