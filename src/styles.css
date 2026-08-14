@@ -2077,6 +2077,26 @@ select {
     height: 2.85rem;
   }
 
+  /* Route editing exposes seven adjacent controls. On phones, keep the six
+     contextual actions together instead of orphaning delete on a second row.
+     A 44 px target preserves comfortable touch interaction, while an adaptive
+     gap uses spare width on larger phones without penalising narrower ones. */
+  .route-controls,
+  .route-action-controls {
+    gap: clamp(0.25rem, 1.75vw, 0.5rem);
+  }
+
+  .route-action-controls {
+    flex-wrap: nowrap;
+    max-width: none;
+  }
+
+  .map-control-button--route-action,
+  .map-control-button--route-toggle {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
   /* Mobile browser chrome changes the usable viewport height as its address and
      navigation bars expand or collapse. Dynamic viewport units keep both dialog
      edges visible on real devices while the vh declaration remains a fallback. */
