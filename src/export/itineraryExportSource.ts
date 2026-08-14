@@ -84,14 +84,14 @@ export function resolveExactImportedRouteSource(
 /**
  * Resolves whether the shared export dialog should preserve imported XML or
  * generate a document from editable geometry.
- * @param input - Current itinerary sources and editable-route availability.
+ * @param input - Current itinerary sources and editable-route availability. Edit-mode
+ * activation is deliberately absent because leaving edit mode keeps the route current.
  * @returns Imported source, editable source, or `null` when export is unavailable.
  */
 export function resolveItineraryExportSource(input: {
   importedRouteSource: ExportableImportedRouteSource | null;
   editableImportedRouteOrigin: EditableImportedRouteExportOrigin | null;
   routeHistory: RouteHistory;
-  isRouteEditingActive: boolean;
   isRouteOperationPending: boolean;
 }): ItineraryExportSource {
   const exactImportedSource = resolveExactImportedRouteSource(
@@ -108,7 +108,6 @@ export function resolveItineraryExportSource(input: {
   }
 
   if (
-    !input.isRouteEditingActive ||
     input.isRouteOperationPending ||
     input.routeHistory.steps.length < 2
   ) {

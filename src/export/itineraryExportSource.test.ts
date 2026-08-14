@@ -64,11 +64,21 @@ describe('editable imported-route export source', () => {
       importedRouteSource: SOURCE,
       editableImportedRouteOrigin: null,
       routeHistory: historyFromState({ steps: [], closure: null }),
-      isRouteEditingActive: false,
       isRouteOperationPending: false,
     });
 
     expect(result).toEqual({ kind: 'imported', source: SOURCE });
+  });
+
+  it('offers generated export whenever a complete editable route remains current', () => {
+    expect(
+      resolveItineraryExportSource({
+        importedRouteSource: null,
+        editableImportedRouteOrigin: null,
+        routeHistory: historyFromState(PRISTINE_STATE),
+        isRouteOperationPending: false,
+      }),
+    ).toEqual({ kind: 'editable' });
   });
 
   it('keeps the exact XML after conversion while route references remain pristine', () => {
@@ -81,7 +91,6 @@ describe('editable imported-route export source', () => {
         importedRouteSource: null,
         editableImportedRouteOrigin: origin,
         routeHistory: history,
-        isRouteEditingActive: true,
         isRouteOperationPending: false,
       }),
     ).toEqual({ kind: 'imported', source: SOURCE });
@@ -110,7 +119,6 @@ describe('editable imported-route export source', () => {
         importedRouteSource: null,
         editableImportedRouteOrigin: origin,
         routeHistory: historyFromState(changedState),
-        isRouteEditingActive: true,
         isRouteOperationPending: false,
       }),
     ).toEqual({ kind: 'editable' });
@@ -155,7 +163,6 @@ describe('editable imported-route export source', () => {
         importedRouteSource: null,
         editableImportedRouteOrigin: null,
         routeHistory: historyFromState(PRISTINE_STATE),
-        isRouteEditingActive: true,
         isRouteOperationPending: true,
       }),
     ).toBeNull();
@@ -168,7 +175,6 @@ describe('editable imported-route export source', () => {
           steps: [importedStep([0, 0], null)],
           closure: null,
         }),
-        isRouteEditingActive: true,
         isRouteOperationPending: false,
       }),
     ).toBeNull();

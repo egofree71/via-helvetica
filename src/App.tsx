@@ -573,7 +573,6 @@ export default function App() {
       importedRouteSource,
       editableImportedRouteOrigin,
       routeHistory,
-      isRouteEditingActive: isRouteCreationActive,
       isRouteOperationPending,
     });
 
@@ -755,7 +754,8 @@ export default function App() {
           onDelete={handleDeleteRoute}
         />
 
-        {(isRouteCreationActive ||
+        {/* Export follows the current itinerary, not whether route editing is active. */}
+        {(routeHistory.steps.length > 0 ||
           importedRouteSource ||
           switzerlandMobilityHikingPanel?.state === 'ready') && (
           <button
@@ -766,7 +766,7 @@ export default function App() {
             disabled={
               switzerlandMobilityHikingPanel?.state === 'ready'
                 ? switzerlandMobilityHikingPanel.elevationStatus === 'loading'
-                : isRouteCreationActive &&
+                : !importedRouteSource &&
                   (isRouteOperationPending || routeHistory.steps.length < 2)
             }
             onClick={requestCurrentItineraryExport}
