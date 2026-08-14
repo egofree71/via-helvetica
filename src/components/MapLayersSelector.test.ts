@@ -155,6 +155,40 @@ describe('MapLayersSelector', () => {
     );
   });
 
+  it('offers a close action for the mobile layer sheet', async () => {
+    await act(async () => {
+      root?.render(createSelectorElement());
+    });
+
+    const layersButton = container.querySelector<HTMLButtonElement>(
+      '.map-control-button--map-layers',
+    );
+
+    await act(async () => {
+      layersButton?.click();
+    });
+
+    expect(container.textContent).toContain('Cartes et données');
+    expect(
+      container.querySelector('.map-layers-section--base-maps'),
+    ).not.toBeNull();
+
+    const closeButton = container.querySelector<HTMLButtonElement>(
+      '.map-layers-mobile-close',
+    );
+
+    expect(closeButton?.getAttribute('aria-label')).toBe(
+      'Fermer les cartes et données',
+    );
+
+    await act(async () => {
+      closeButton?.click();
+    });
+
+    expect(container.querySelector('.map-layers-menu')).toBeNull();
+    expect(layersButton?.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('does not reopen opacity settings after their layer is hidden', async () => {
     await act(async () => {
       root?.render(createSelectorElement());

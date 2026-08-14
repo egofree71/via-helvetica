@@ -343,6 +343,13 @@ select {
   padding: 0;
 }
 
+/* The mobile layer selector becomes a bottom sheet at phone widths. Its
+   dedicated header stays out of the desktop popover to preserve the compact
+   large-screen workflow. */
+.map-layers-mobile-header {
+  display: none;
+}
+
 .map-layers-section--overlays {
   margin-top: 0.35rem;
   padding-top: 0.35rem;
@@ -2123,19 +2130,134 @@ select {
     display: grid;
   }
 
-  /* On narrow screens the layers button can sit far below the top edge.
-     Anchoring its temporary menu to the viewport keeps both edges reachable
-     and lets the menu itself scroll instead of being clipped by browser chrome. */
+  /* On phones the layer selector behaves as a bottom sheet: it uses the full
+     width, deliberately leaves part of the map visible, and scrolls internally
+     when the available height cannot contain every information layer. */
   .map-layers-menu {
     position: fixed;
-    top: 4.25rem;
-    right: 4.35rem;
-    width: 18rem;
-    max-width: calc(100vw - 5.1rem);
-    /* Keep the menu content-sized when it fits, but cap it to the visible
-       mobile viewport so shorter screens still get internal scrolling. */
-    max-height: calc(100vh - 5rem);
-    max-height: calc(100dvh - 5rem);
+    /* The sheet must cover every permanent map-control item while open. The About
+       button has its own local z-index, so the sheet must sit above that value too. */
+    z-index: 30;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-width: none;
+    max-height: 72vh;
+    max-height: 72dvh;
+    padding: 0.4rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 28px rgb(0 0 0 / 22%);
+    overscroll-behavior: contain;
+  }
+
+  .map-layers-mobile-header {
+    position: sticky;
+    z-index: 1;
+    top: -0.4rem;
+    display: flex;
+    min-height: 3.35rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0 -0.75rem 0.25rem;
+    padding: 0.55rem 0.75rem 0.45rem;
+    color: #17212b;
+    background: rgb(255 255 255 / 97%);
+  }
+
+  .map-layers-mobile-header strong {
+    font-size: 1.1rem;
+    line-height: 1.2;
+  }
+
+  .map-layers-mobile-close {
+    display: grid;
+    width: 2.75rem;
+    height: 2.75rem;
+    flex: 0 0 auto;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    color: #17212b;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .map-layers-mobile-close:hover {
+    background: rgb(23 105 224 / 10%);
+  }
+
+  .map-layers-mobile-close:focus-visible {
+    outline: 3px solid rgb(23 105 224 / 40%);
+    outline-offset: -3px;
+  }
+
+  .map-layers-mobile-close svg {
+    width: 1.55rem;
+    height: 1.55rem;
+    fill: none;
+    stroke: currentcolor;
+    stroke-linecap: round;
+    stroke-width: 2;
+  }
+
+  /* Base maps are much easier to scan on a narrow screen as three preview
+     cards. The labels remain underneath their previews rather than forcing
+     three desktop-style rows to consume vertical map space. */
+  .map-layers-section--base-maps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .map-layers-section--base-maps .map-layers-section-title {
+    grid-column: 1 / -1;
+  }
+
+  .map-layers-section--base-maps .map-layer-option {
+    position: relative;
+    display: grid;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(2.4rem, auto);
+    gap: 0.35rem;
+    align-content: start;
+    padding: 0.3rem;
+    text-align: center;
+  }
+
+  .map-layers-section--base-maps .base-map-option-preview {
+    width: 100%;
+    height: auto;
+    /* A wider thumbnail keeps the background recognisable while reclaiming
+       vertical room for the information-layer rows below. */
+    aspect-ratio: 16 / 10;
+    border-radius: 7px;
+  }
+
+  .map-layers-section--base-maps .map-layer-option--selected
+    .base-map-option-preview {
+    outline: 3px solid #1769e0;
+    outline-offset: -2px;
+  }
+
+  .map-layers-section--base-maps .map-layer-option-check {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 1.35rem;
+    height: 1.35rem;
+    padding: 0.15rem;
+    border-radius: 999px;
+    color: #ffffff;
+    background: #1769e0;
+    stroke: currentcolor;
   }
 
   .map-information-popup {

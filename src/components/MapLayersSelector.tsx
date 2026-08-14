@@ -368,8 +368,24 @@ export default function MapLayersSelector({
 
       {isOpen && (
         <div className="map-layers-menu" role="menu" aria-label={label}>
+          <div className="map-layers-mobile-header">
+            <strong>{t('map.layers.mobileTitle')}</strong>
+            <button
+              type="button"
+              className="map-layers-mobile-close"
+              role="menuitem"
+              aria-label={t('map.layers.close')}
+              title={t('map.layers.close')}
+              onClick={closeMenu}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+
           <section
-            className="map-layers-section"
+            className="map-layers-section map-layers-section--base-maps"
             role="group"
             aria-labelledby="map-layers-base-maps-title"
           >
