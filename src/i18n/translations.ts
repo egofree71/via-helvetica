@@ -60,6 +60,7 @@ const frenchTranslations = {
 
   'search.placeholder': 'Lieu ou coordonnées…',
   'search.label': 'Rechercher un lieu ou des coordonnées',
+  'search.close': 'Fermer la recherche',
   'search.clearLabel': 'Effacer la recherche',
   'search.clearTitle': 'Effacer',
   'search.loading': 'Recherche…',
@@ -294,6 +295,7 @@ const germanTranslations: Record<TranslationKey, string> = {
 
   'search.placeholder': 'Ort oder Koordinaten…',
   'search.label': 'Ort oder Koordinaten suchen',
+  'search.close': 'Suche schliessen',
   'search.clearLabel': 'Suche löschen',
   'search.clearTitle': 'Löschen',
   'search.loading': 'Suche…',
@@ -527,6 +529,7 @@ const italianTranslations: Record<TranslationKey, string> = {
 
   'search.placeholder': 'Luogo o coordinate…',
   'search.label': 'Cerca un luogo o delle coordinate',
+  'search.close': 'Chiudi la ricerca',
   'search.clearLabel': 'Cancella la ricerca',
   'search.clearTitle': 'Cancella',
   'search.loading': 'Ricerca…',
@@ -761,6 +764,7 @@ const englishTranslations: Record<TranslationKey, string> = {
 
   'search.placeholder': 'Place or coordinates…',
   'search.label': 'Search for a place or coordinates',
+  'search.close': 'Close search',
   'search.clearLabel': 'Clear search',
   'search.clearTitle': 'Clear',
   'search.loading': 'Searching…',

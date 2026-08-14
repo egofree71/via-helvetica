@@ -134,10 +134,13 @@ contextual and temporary:
 The responsive layout resolves collisions by moving small controls rather than
 permanently reserving large strips of viewport space. The route summary stays on
 the bottom edge, while the About control joins the right-side control stack when
-horizontal space becomes tight. The metric scale is hidden at phone widths where
-it would otherwise remain covered by the summary. Tall temporary dialogs use the
-dynamic mobile viewport height, with a conventional viewport fallback, so browser
-address and navigation bars cannot cover their header or footer.
+horizontal space becomes tight. At phone widths the permanent search field is
+replaced by a search button directly below route creation; activating it opens a
+temporary full-viewport search surface that reuses the same query and result
+logic. The metric scale is hidden where it would otherwise remain covered by the
+summary. Tall temporary surfaces use the dynamic mobile viewport height, with a
+conventional viewport fallback, so browser address and navigation bars cannot
+cover their reachable content.
 
 ### 1.5 Explicit workflow boundaries
 
@@ -661,10 +664,13 @@ that extent without contacting GeoAdmin. Unfinished input with strong coordinate
 markers remains local and keeps the result panel closed, while ordinary numeric
 place searches such as postal codes still reach SearchServer. Text searches then
 use a bounded language-aware session cache and abort superseded uncached requests.
-Provider labels are converted to plain text before React renders them. Selecting
-a place frames the broader planning context; selecting an exact coordinate uses
-the closer geolocation scale. Either result creates a temporary marker that is
-cleared when a higher-priority workflow takes ownership.
+The same `LocationSearch` state and provider workflow serves both presentations:
+a permanent compact field on larger screens and a temporary full-viewport surface
+opened from the right-side search button on phones. Provider labels are converted
+to plain text before React renders them. Selecting a place frames the broader
+planning context; selecting an exact coordinate uses the closer geolocation scale.
+Either result creates a temporary marker that is cleared when a higher-priority
+workflow takes ownership.
 
 Geolocation is requested only after explicit user action. A valid WGS 84
 position is converted to LV95, checked against the configured extent, displayed,
@@ -1073,9 +1079,10 @@ manual checks include:
 
 - mouse, pen, and touch route editing, including edge auto-pan while moving or
   inserting a waypoint and cancellation after focus or pointer loss;
-- responsive control collisions, translated layer-label wrapping, the release
-  and About dialogs, expandable opacity sliders, and layer-menu stacking above
-  itinerary profiles on narrow and short viewports;
+- responsive control collisions, the phone search button and full-viewport
+  search surface (including the virtual keyboard), translated layer-label
+  wrapping, the release and About dialogs, expandable opacity sliders, and
+  layer-menu stacking above itinerary profiles on narrow and short viewports;
 - official hiking and SwitzerlandMobility portrayals across useful zooms and
   restored opacity preferences after a reload;
 - selection, overlap choice, highlighting, full-route fitting, and profile

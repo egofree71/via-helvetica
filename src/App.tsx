@@ -124,6 +124,7 @@ export default function App() {
     });
   const [isRouteExportDialogOpen, setIsRouteExportDialogOpen] =
     useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [locationSearchResetVersion, setLocationSearchResetVersion] =
     useState(0);
   const [routeExportDefaultName, setRouteExportDefaultName] = useState('');
@@ -719,6 +720,8 @@ export default function App() {
 
       <LocationSearch
         key={`${language}:${locationSearchResetVersion}`}
+        isMobileOverlayOpen={isMobileSearchOpen}
+        onMobileOverlayClose={() => setIsMobileSearchOpen(false)}
         onSearchFocus={closeMapInformationPopup}
         onSelect={selectSearchResult}
         onClear={clearSearchResultMarkerOnly}
@@ -753,6 +756,22 @@ export default function App() {
           onToggleLoop={toggleRouteLoop}
           onDelete={handleDeleteRoute}
         />
+
+        <button
+          type="button"
+          className="map-control-button map-control-button--search"
+          aria-label={t('search.label')}
+          title={t('search.label')}
+          onClick={() => {
+            closeMapInformationPopup();
+            setIsMobileSearchOpen(true);
+          }}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="m15.5 15.5 5 5" />
+          </svg>
+        </button>
 
         {/* Export follows the current itinerary, not whether route editing is active. */}
         {(routeHistory.steps.length > 0 ||
