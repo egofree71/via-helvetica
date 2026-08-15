@@ -140,16 +140,15 @@ immediately above the complete route-summary block instead of reserving a perman
 side gutter or separating an open elevation profile from the statistics strip.
 The elevation profile keeps its intrinsic chart
 aspect ratio and content-driven height so narrow screens do not visually exaggerate
-relief merely to fill a panel. The About control joins the right-side control stack when
-horizontal space becomes tight. At phone widths the permanent search field is
+relief merely to fill a panel. At phone widths the permanent search field is
 replaced by a search button directly below route creation; activating it opens a
 temporary full-viewport search surface that reuses the same query and result
 logic. The layer selector and map-information details use full-width, fixed
 half-height bottom sheets so part of the map remains visible while long content
 uses browser-native scrolling. On phones the layer sheet is titled "Map and
-options" and also contains the four language choices, removing an infrequently
-used permanent control from the narrow map edge; desktop keeps the direct
-language selector. The SwitzerlandMobility overlap chooser is also
+options" and also contains the four language choices plus an About entry,
+removing infrequently used permanent controls from the narrow map edge; desktop
+keeps the direct language selector and About button. The SwitzerlandMobility overlap chooser is also
 full-width on phones, but keeps a content-driven height for short candidate lists
 and only caps itself at half the viewport when native scrolling is actually
 needed. These sheets deliberately avoid custom drag gestures so ordinary taps,
@@ -699,9 +698,9 @@ Fullscreen requests target the complete application root. A
 
 The About dialog contains project context, experimental-routing guidance,
 creator and support details, source and license links, professional profile, a
-link to the localized release history, and complete data credits. Its permanently
-visible map control provides direct access to the centralized source references
-without occupying additional map space.
+link to the localized release history, and complete data credits. Larger screens
+keep a direct map control, while phones expose the same dialog from the Map and
+options sheet so an infrequently used action does not consume permanent map space.
 
 The release dialog reads the current semantic version and the highlights marked
 for compact display from `src/releases/releaseHistory.json`; history-only items

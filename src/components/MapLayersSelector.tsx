@@ -1,8 +1,8 @@
 /**
  * Business context: groups background selection and optional information
  * overlays behind one compact map control. On phones it also absorbs the
- * infrequently changed language choice so the permanent map-control column
- * stays focused on actions used while planning.
+ * infrequently changed language and About actions so the permanent map-control
+ * column stays focused on actions used while planning.
  */
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
@@ -54,6 +54,8 @@ interface MapLayersSelectorProps {
     layer: MapLayerOpacityKey,
     opacity: number,
   ) => void;
+  /** Opens the existing project-information dialog from the mobile options sheet. */
+  onOpenAbout: () => void;
 }
 
 /** One mutually exclusive base-map choice and its translated label. */
@@ -256,6 +258,7 @@ export default function MapLayersSelector({
   onPublicTransportStopsChange,
   layerOpacities,
   onLayerOpacityChange,
+  onOpenAbout,
 }: MapLayersSelectorProps) {
   const { language, setLanguage, t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -529,6 +532,22 @@ export default function MapLayersSelector({
               })}
             </div>
           </section>
+
+          <button
+            type="button"
+            className="map-layers-about-action"
+            role="menuitem"
+            onClick={() => {
+              closeMenu();
+              onOpenAbout();
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 11v6M12 7.5h.01" />
+            </svg>
+            <span>{t('about.open')}</span>
+          </button>
         </div>
       )}
     </div>

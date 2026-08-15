@@ -823,6 +823,7 @@ export default function App() {
           onPublicTransportStopsChange={setArePublicTransportStopsVisible}
           layerOpacities={layerOpacities}
           onLayerOpacityChange={setLayerOpacity}
+          onOpenAbout={openAboutDialog}
         />
 
         <div className="zoom-controls">

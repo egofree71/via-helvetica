@@ -1,6 +1,6 @@
 /**
- * Business context: protects the shared layer menu that lets hikers tune each
- * optional information overlay without losing the existing visibility controls.
+ * Business context: protects the shared map-options menu that lets hikers tune
+ * map layers and reach infrequent mobile-only settings without crowding the map.
  */
 import { act, createElement, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -32,6 +32,7 @@ const defaultProps: ComponentProps<typeof MapLayersSelector> = {
   onPublicTransportStopsChange: vi.fn(),
   layerOpacities,
   onLayerOpacityChange: vi.fn(),
+  onOpenAbout: vi.fn(),
 };
 
 /** Builds the translated selector while preserving component state on rerender. */
@@ -54,6 +55,7 @@ describe('MapLayersSelector', () => {
 
   beforeEach(() => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    window.history.replaceState({}, '', '/fr/');
     window.localStorage.setItem('via-helvetica-language', 'fr');
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -225,6 +227,36 @@ describe('MapLayersSelector', () => {
         '.map-layers-language-option[aria-label="Deutsch"]',
       )?.getAttribute('aria-checked'),
     ).toBe('true');
+  });
+
+  it('opens About from the mobile map options entry and closes the sheet', async () => {
+    const onOpenAbout = vi.fn();
+
+    await act(async () => {
+      root?.render(createSelectorElement({ onOpenAbout }));
+    });
+
+    const layersButton = container.querySelector<HTMLButtonElement>(
+      '.map-control-button--map-layers',
+    );
+
+    await act(async () => {
+      layersButton?.click();
+    });
+
+    const aboutAction = container.querySelector<HTMLButtonElement>(
+      '.map-layers-about-action',
+    );
+
+    expect(aboutAction?.textContent).toContain('À propos de Via Helvetica');
+
+    await act(async () => {
+      aboutAction?.click();
+    });
+
+    expect(onOpenAbout).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.map-layers-menu')).toBeNull();
+    expect(layersButton?.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('does not reopen opacity settings after their layer is hidden', async () => {

@@ -350,10 +350,11 @@ select {
   display: none;
 }
 
-/* Language stays a direct floating control on large screens. The same choice
-   moves inside the mobile map/options sheet only where permanent map space is
-   scarce. */
-.map-layers-section--language {
+/* Language and About stay directly accessible on large screens. The same
+   infrequently used actions move inside the mobile map/options sheet only
+   where permanent map space is scarce. */
+.map-layers-section--language,
+.map-layers-about-action {
   display: none;
 }
 
@@ -2305,9 +2306,48 @@ select {
     outline-offset: 2px;
   }
 
-  /* The direct language selector remains useful on desktop but needlessly
-     consumes one permanent map-control slot on phones. */
-  .language-selector {
+  .map-layers-about-action {
+    display: flex;
+    width: 100%;
+    min-height: 2.85rem;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.35rem;
+    padding: 0.55rem 0.45rem;
+    border: 0;
+    border-top: 1px solid rgb(32 47 60 / 12%);
+    color: #17212b;
+    background: transparent;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .map-layers-about-action:hover {
+    background: rgb(23 105 224 / 7%);
+  }
+
+  .map-layers-about-action:focus-visible {
+    outline: 3px solid rgb(23 105 224 / 35%);
+    outline-offset: -3px;
+  }
+
+  .map-layers-about-action svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentcolor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+  }
+
+  /* The direct language and About controls remain useful on desktop but
+     needlessly consume permanent map-control slots on phones. */
+  .language-selector,
+  .about-button {
     display: none;
   }
 
