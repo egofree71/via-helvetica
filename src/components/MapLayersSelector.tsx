@@ -1,10 +1,17 @@
 /**
  * Business context: groups background selection and optional information
- * overlays behind one compact map control. Each overlay can be shown, hidden,
- * and made more or less opaque without growing the permanent control column.
+ * overlays behind one compact map control. On phones it also absorbs the
+ * infrequently changed language choice so the permanent map-control column
+ * stays focused on actions used while planning.
  */
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
+import {
+  LANGUAGE_METADATA,
+  SUPPORTED_LANGUAGES,
+  type Language,
+  type TranslationKey,
+} from '../i18n/translations';
 import {
   MINIMUM_MAP_LAYER_OPACITY,
   type BaseMapStyle,
@@ -100,6 +107,14 @@ const BASE_MAP_OPTIONS: BaseMapOption[] = [
   { value: 'gray', labelKey: 'map.baseMap.gray' },
   { value: 'aerial', labelKey: 'map.baseMap.aerial' },
 ];
+
+/** Full language names keep the compact mobile choices accessible to screen readers. */
+const LANGUAGE_LABEL_KEYS: Record<Language, TranslationKey> = {
+  fr: 'language.fr',
+  de: 'language.de',
+  it: 'language.it',
+  en: 'language.en',
+};
 
 /** Converts an OpenLayers opacity ratio to the integer percentage shown in UI. */
 function opacityPercent(opacity: number): number {
@@ -242,7 +257,7 @@ export default function MapLayersSelector({
   layerOpacities,
   onLayerOpacityChange,
 }: MapLayersSelectorProps) {
-  const { t } = useI18n();
+  const { language, setLanguage, t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [expandedOpacityLayer, setExpandedOpacityLayer] =
@@ -472,6 +487,47 @@ export default function MapLayersSelector({
                 />
               );
             })}
+          </section>
+
+          <section
+            className="map-layers-section map-layers-section--language"
+            role="group"
+            aria-labelledby="map-layers-language-title"
+          >
+            <h2
+              id="map-layers-language-title"
+              className="map-layers-section-title"
+            >
+              {t('map.layers.language')}
+            </h2>
+            <div className="map-layers-language-options">
+              {SUPPORTED_LANGUAGES.map((option) => {
+                const isSelected = option === language;
+                const languageLabel = t(LANGUAGE_LABEL_KEYS[option]);
+
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    className={[
+                      'map-layers-language-option',
+                      isSelected
+                        ? 'map-layers-language-option--selected'
+                        : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    role="menuitemradio"
+                    aria-checked={isSelected}
+                    aria-label={languageLabel}
+                    title={languageLabel}
+                    onClick={() => setLanguage(option)}
+                  >
+                    {LANGUAGE_METADATA[option].shortLabel}
+                  </button>
+                );
+              })}
+            </div>
           </section>
         </div>
       )}

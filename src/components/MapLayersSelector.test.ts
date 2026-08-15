@@ -168,7 +168,7 @@ describe('MapLayersSelector', () => {
       layersButton?.click();
     });
 
-    expect(container.textContent).toContain('Cartes et données');
+    expect(container.textContent).toContain('Carte et options');
     expect(
       container.querySelector('.map-layers-section--base-maps'),
     ).not.toBeNull();
@@ -178,7 +178,7 @@ describe('MapLayersSelector', () => {
     );
 
     expect(closeButton?.getAttribute('aria-label')).toBe(
-      'Fermer les cartes et données',
+      'Fermer le panneau Carte et options',
     );
 
     await act(async () => {
@@ -187,6 +187,44 @@ describe('MapLayersSelector', () => {
 
     expect(container.querySelector('.map-layers-menu')).toBeNull();
     expect(layersButton?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('offers language choices inside the mobile map options sheet', async () => {
+    await act(async () => {
+      root?.render(createSelectorElement());
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '.map-control-button--map-layers',
+        )
+        ?.click();
+    });
+
+    const languageOptions = container.querySelectorAll<HTMLButtonElement>(
+      '.map-layers-language-option',
+    );
+
+    expect(languageOptions).toHaveLength(4);
+    expect(Array.from(languageOptions, (option) => option.textContent)).toEqual([
+      'FR',
+      'DE',
+      'IT',
+      'EN',
+    ]);
+    expect(languageOptions[0]?.getAttribute('aria-checked')).toBe('true');
+
+    await act(async () => {
+      languageOptions[1]?.click();
+    });
+
+    expect(container.textContent).toContain('Karte und Optionen');
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        '.map-layers-language-option[aria-label="Deutsch"]',
+      )?.getAttribute('aria-checked'),
+    ).toBe('true');
   });
 
   it('does not reopen opacity settings after their layer is hidden', async () => {

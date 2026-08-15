@@ -146,7 +146,10 @@ replaced by a search button directly below route creation; activating it opens a
 temporary full-viewport search surface that reuses the same query and result
 logic. The layer selector and map-information details use full-width, fixed
 half-height bottom sheets so part of the map remains visible while long content
-uses browser-native scrolling. The SwitzerlandMobility overlap chooser is also
+uses browser-native scrolling. On phones the layer sheet is titled "Map and
+options" and also contains the four language choices, removing an infrequently
+used permanent control from the narrow map edge; desktop keeps the direct
+language selector. The SwitzerlandMobility overlap chooser is also
 full-width on phones, but keeps a content-driven height for short candidate lists
 and only caps itself at half the viewport when native scrolling is actually
 needed. These sheets deliberately avoid custom drag gestures so ordinary taps,

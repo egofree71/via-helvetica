@@ -1,6 +1,7 @@
 /**
- * Business context: provides a compact language choice that fits the existing
- * floating map controls without introducing a permanent toolbar or panel.
+ * Business context: keeps language switching directly available in the
+ * floating map controls on large screens. Phone layouts move the same choice
+ * into the map/options sheet to preserve scarce permanent map space.
  */
 import { useI18n } from '../i18n/I18nContext';
 import {

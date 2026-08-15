@@ -350,6 +350,13 @@ select {
   display: none;
 }
 
+/* Language stays a direct floating control on large screens. The same choice
+   moves inside the mobile map/options sheet only where permanent map space is
+   scarce. */
+.map-layers-section--language {
+  display: none;
+}
+
 .map-layers-section--overlays {
   margin-top: 0.35rem;
   padding-top: 0.35rem;
@@ -2259,6 +2266,49 @@ select {
     color: #ffffff;
     background: #1769e0;
     stroke: currentcolor;
+  }
+
+  .map-layers-section--language {
+    display: block;
+    margin-top: 0.35rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid rgb(32 47 60 / 12%);
+  }
+
+  .map-layers-language-options {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.45rem;
+    padding: 0.25rem 0.45rem 0.35rem;
+  }
+
+  .map-layers-language-option {
+    min-height: 2.65rem;
+    padding: 0.35rem 0.25rem;
+    border: 1px solid rgb(32 47 60 / 18%);
+    border-radius: 8px;
+    color: #17212b;
+    background: #ffffff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .map-layers-language-option--selected {
+    border-color: #1769e0;
+    color: #ffffff;
+    background: #1769e0;
+  }
+
+  .map-layers-language-option:focus-visible {
+    outline: 3px solid rgb(23 105 224 / 35%);
+    outline-offset: 2px;
+  }
+
+  /* The direct language selector remains useful on desktop but needlessly
+     consumes one permanent map-control slot on phones. */
+  .language-selector {
+    display: none;
   }
 
   /* Optional map information uses the same simple mobile pattern as Layers:
