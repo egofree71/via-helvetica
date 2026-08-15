@@ -823,6 +823,7 @@ export default function App() {
           onPublicTransportStopsChange={setArePublicTransportStopsVisible}
           layerOpacities={layerOpacities}
           onLayerOpacityChange={setLayerOpacity}
+          onOpen={closeMapInformationPopup}
           onOpenAbout={openAboutDialog}
         />
 

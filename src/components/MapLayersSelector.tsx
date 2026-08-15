@@ -54,6 +54,8 @@ interface MapLayersSelectorProps {
     layer: MapLayerOpacityKey,
     opacity: number,
   ) => void;
+  /** Lets the owner dismiss overlapping map information before this menu opens. */
+  onOpen: () => void;
   /** Opens the existing project-information dialog from the mobile options sheet. */
   onOpenAbout: () => void;
 }
@@ -258,6 +260,7 @@ export default function MapLayersSelector({
   onPublicTransportStopsChange,
   layerOpacities,
   onLayerOpacityChange,
+  onOpen,
   onOpenAbout,
 }: MapLayersSelectorProps) {
   const { language, setLanguage, t } = useI18n();
@@ -373,6 +376,7 @@ export default function MapLayersSelector({
           if (isOpen) {
             closeMenu();
           } else {
+            onOpen();
             setIsOpen(true);
           }
         }}

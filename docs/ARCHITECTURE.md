@@ -145,14 +145,21 @@ replaced by a search button directly below route creation; activating it opens a
 temporary full-viewport search surface that reuses the same query and result
 logic. The layer selector and map-information details use full-width, fixed
 half-height bottom sheets so part of the map remains visible while long content
-uses browser-native scrolling. On phones the layer sheet is titled "Map and
+uses browser-native scrolling. Opening the map/options sheet first dismisses any
+map-information sheet occupying the same lower viewport region. Mobile temporary
+surfaces follow an explicit stacking order: itinerary summaries, map-information
+sheets, map/options, then full-screen search. The map-controls container is raised
+only while map/options is open so itinerary summaries can otherwise remain above
+the permanent floating controls. On phones the layer sheet is titled "Map and
 options" and also contains the four language choices plus an About entry,
 removing infrequently used permanent controls from the narrow map edge; desktop
 keeps the direct language selector and About button. The SwitzerlandMobility overlap chooser is also
 full-width on phones, but keeps a content-driven height for short candidate lists
 and only caps itself at half the viewport when native scrolling is actually
-needed. These sheets deliberately avoid custom drag gestures so ordinary taps,
-links, and scrolling remain browser-native on touch devices. The metric scale is
+needed. Its candidate list uses the flexbox space left by the localized header,
+hint, and safe-area padding rather than a fixed height subtraction. These sheets
+deliberately avoid custom drag gestures so ordinary taps, links, and scrolling
+remain browser-native on touch devices. The metric scale is
 hidden where it would otherwise remain
 covered by the summary. Tall temporary surfaces use the dynamic mobile viewport
 height, with a conventional viewport fallback, so browser address and navigation

@@ -32,6 +32,7 @@ const defaultProps: ComponentProps<typeof MapLayersSelector> = {
   onPublicTransportStopsChange: vi.fn(),
   layerOpacities,
   onLayerOpacityChange: vi.fn(),
+  onOpen: vi.fn(),
   onOpenAbout: vi.fn(),
 };
 
@@ -155,6 +156,30 @@ describe('MapLayersSelector', () => {
       'hikingTrails',
       0.35,
     );
+  });
+
+  it('notifies the owner when opening so overlapping map information can close', async () => {
+    const onOpen = vi.fn();
+
+    await act(async () => {
+      root?.render(createSelectorElement({ onOpen }));
+    });
+
+    const layersButton = container.querySelector<HTMLButtonElement>(
+      '.map-control-button--map-layers',
+    );
+
+    await act(async () => {
+      layersButton?.click();
+    });
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      layersButton?.click();
+    });
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
   it('offers a close action for the mobile layer sheet', async () => {

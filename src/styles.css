@@ -2134,6 +2134,14 @@ select {
     right: 0.75rem;
   }
 
+  /* Mobile temporary surfaces use an explicit stacking order: itinerary
+     summaries (30), information sheets (32), map/options (34), search (40).
+     Raising the nav only while its sheet exists lets route summaries continue
+     to cover the permanent floating controls the rest of the time. */
+  .map-controls:has(.map-layers-menu) {
+    z-index: 34;
+  }
+
   .map-control-button--search {
     display: grid;
   }
@@ -2357,6 +2365,7 @@ select {
      gestures. Desktop popups keep their existing floating layout. */
   .map-information-popup {
     position: fixed;
+    z-index: 32;
     top: auto;
     right: 0;
     bottom: 0;
@@ -2391,6 +2400,14 @@ select {
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* Keep the close glyph compact while giving phone users the same 44 px
+     touch target used by the other primary mobile controls. */
+  .map-information-popup-close,
+  .switzerland-mobility-hiking-panel-close {
+    width: 2.75rem;
+    height: 2.75rem;
   }
 
   .map-control-button,
@@ -2495,15 +2512,18 @@ select {
     .switzerland-mobility-hiking-route-choices {
     display: flex;
     min-height: 0;
+    flex: 1 1 auto;
     flex-direction: column;
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 
+  /* Let flexbox allocate the remaining height below the variable-size header
+     and hint instead of subtracting a brittle fixed rem value from 50dvh. */
   .switzerland-mobility-hiking-summary--choices
     .switzerland-mobility-hiking-route-choices > div {
     min-height: 0;
-    max-height: calc(50vh - 7.5rem);
-    max-height: calc(50dvh - 7.5rem);
+    max-height: none;
+    flex: 1 1 auto;
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;

@@ -56,36 +56,35 @@ describe('RouteStatistics', () => {
     vi.restoreAllMocks();
   });
 
-  it('marks the open-profile and contextual-edit layout states independently', async () => {
+  it('toggles the profile and keeps the contextual edit action available', async () => {
     const editAction = { label: 'Modifier', onClick: vi.fn() };
 
     await act(async () => {
       root?.render(createStatisticsElement({ editAction }));
     });
 
-    const summary = container.querySelector<HTMLElement>('.route-summary');
     const profileToggle = container.querySelector<HTMLButtonElement>(
       '.route-profile-toggle',
     );
+    const editButton = container.querySelector<HTMLButtonElement>(
+      '.route-summary-edit-button',
+    );
 
-    expect(summary?.classList.contains('route-summary--has-edit-action')).toBe(
-      true,
-    );
-    expect(summary?.classList.contains('route-summary--profile-open')).toBe(
-      false,
-    );
+    expect(profileToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.route-elevation-profile')).toBeNull();
+    expect(editButton?.getAttribute('aria-label')).toBe('Modifier');
 
     await act(async () => {
       profileToggle?.click();
     });
 
-    expect(summary?.classList.contains('route-summary--profile-open')).toBe(
-      true,
-    );
+    expect(profileToggle?.getAttribute('aria-expanded')).toBe('true');
     expect(container.querySelector('.route-elevation-profile')).not.toBeNull();
-    expect(
-      container.querySelector<HTMLButtonElement>('.route-summary-edit-button')
-        ?.getAttribute('aria-label'),
-    ).toBe('Modifier');
+
+    await act(async () => {
+      editButton?.click();
+    });
+
+    expect(editAction.onClick).toHaveBeenCalledTimes(1);
   });
 });
