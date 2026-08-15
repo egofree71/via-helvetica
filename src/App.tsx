@@ -83,6 +83,22 @@ import {
 /** Itinerary source named by the shared GPX export dialog. */
 type RouteExportSource = 'editable' | 'imported' | 'switzerlandMobility';
 
+/** Matches the CSS breakpoint where the map can temporarily own the whole phone viewport. */
+const MOBILE_MAP_UI_MEDIA_QUERY = '(max-width: 700px)';
+
+/** Reads the current responsive mode without making desktop map clicks change shell visibility. */
+function isMobileMapViewport(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  if (typeof window.matchMedia === 'function') {
+    return window.matchMedia(MOBILE_MAP_UI_MEDIA_QUERY).matches;
+  }
+
+  return window.innerWidth <= 700;
+}
+
 /** Original GPX resources retained while a converted editable route may return to pristine. */
 interface EditableImportedRouteOrigin extends EditableImportedRouteExportOrigin {
   /** Embedded GPX profile retained while geometry remains pristine. */
@@ -125,6 +141,7 @@ export default function App() {
   const [isRouteExportDialogOpen, setIsRouteExportDialogOpen] =
     useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [isMobileMapUiHidden, setIsMobileMapUiHidden] = useState(false);
   const [locationSearchResetVersion, setLocationSearchResetVersion] =
     useState(0);
   const [routeExportDefaultName, setRouteExportDefaultName] = useState('');
@@ -216,6 +233,47 @@ export default function App() {
 
     setLocationSearchResetVersion((version) => version + 1);
   }, [mapRuntimeRef]);
+
+  /**
+   * Phone map taps optimistically toggle a temporary map-only view so remote
+   * identify latency never delays the gesture. A real information selection
+   * immediately restores the chrome; only an empty click leaves it toggled.
+   * Desktop returns `false` and keeps the historical immediate dismissal.
+   */
+  const handleMapClickStart = useCallback((): boolean => {
+    if (!isMobileMapViewport()) {
+      return false;
+    }
+
+    setIsMobileMapUiHidden((hidden) => !hidden);
+    return true;
+  }, []);
+
+  /** A real information selection always brings the temporarily hidden phone UI back. */
+  const handleMapInformationSelected = useCallback(() => {
+    setIsMobileMapUiHidden(false);
+    clearSelectedSearchResult();
+  }, [clearSelectedSearchResult]);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(MOBILE_MAP_UI_MEDIA_QUERY);
+    const handleResponsiveModeChange = (event: MediaQueryListEvent) => {
+      if (!event.matches) {
+        // Do not carry a transient phone-only presentation state through a
+        // rotation or resize into desktop/tablet layout and back again later.
+        setIsMobileMapUiHidden(false);
+      }
+    };
+
+    mediaQuery.addEventListener('change', handleResponsiveModeChange);
+    return () => {
+      mediaQuery.removeEventListener('change', handleResponsiveModeChange);
+    };
+  }, []);
 
   /** Removes only the temporary marker while preserving focus and typed text. */
   const clearSearchResultMarkerOnly = useCallback(() => {
@@ -463,10 +521,19 @@ export default function App() {
     language,
     isSwitzerlandMobilityHikingVisible,
     isRouteCreationActive,
-    onInformationSelected: clearSelectedSearchResult,
+    onMapClickStart: handleMapClickStart,
+    onInformationSelected: handleMapInformationSelected,
     onSwitzerlandMobilityHikingRouteAccepted:
       handleSwitzerlandMobilityHikingRouteAccepted,
   });
+
+  useEffect(() => {
+    if (isRouteCreationActive) {
+      // Route clicks own the map while editing, so the planning controls must
+      // never remain hidden if route mode is entered by another interaction.
+      setIsMobileMapUiHidden(false);
+    }
+  }, [isRouteCreationActive]);
 
   const {
     activeRouteSegments,
@@ -685,6 +752,7 @@ export default function App() {
         'app',
         isRouteCreationActive ? 'app--route-creation' : '',
         isRouteOperationPending ? 'app--route-busy' : '',
+        isMobileMapUiHidden ? 'app--map-ui-hidden' : '',
       ]
         .filter(Boolean)
         .join(' ')}

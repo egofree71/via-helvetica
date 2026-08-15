@@ -2134,6 +2134,19 @@ select {
     right: 0.75rem;
   }
 
+  /* A tap on empty map space can temporarily turn the phone into a map-only
+     canvas. Visibility/pointer suppression preserves each panel's React state,
+     so a second empty tap restores the exact controls and information that were
+     present before the user inspected or panned the map. */
+  .app--map-ui-hidden .map-controls,
+  .app--map-ui-hidden .map-information-popup,
+  .app--map-ui-hidden .route-summary,
+  .app--map-ui-hidden .switzerland-mobility-hiking-summary {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
   /* Mobile temporary surfaces use an explicit stacking order: itinerary
      summaries (30), information sheets (32), map/options (34), search (40).
      Raising the nav only while its sheet exists lets route summaries continue

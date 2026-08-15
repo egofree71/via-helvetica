@@ -182,6 +182,77 @@ describe('MapLayersSelector', () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the mobile map options sheet open across a map-only tap', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({ matches: true }),
+    );
+
+    const map = document.createElement('div');
+    map.className = 'map';
+    const mapSurface = document.createElement('div');
+    map.appendChild(mapSurface);
+    document.body.appendChild(map);
+
+    await act(async () => {
+      root?.render(createSelectorElement());
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '.map-control-button--map-layers',
+        )
+        ?.click();
+    });
+
+    await act(async () => {
+      mapSurface.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.map-layers-menu')).not.toBeNull();
+    expect(
+      container
+        .querySelector<HTMLButtonElement>(
+          '.map-control-button--map-layers',
+        )
+        ?.getAttribute('aria-expanded'),
+    ).toBe('true');
+
+    map.remove();
+  });
+
+  it('keeps desktop outside-map dismissal for the layer popover', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({ matches: false }),
+    );
+
+    const map = document.createElement('div');
+    map.className = 'map';
+    document.body.appendChild(map);
+
+    await act(async () => {
+      root?.render(createSelectorElement());
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '.map-control-button--map-layers',
+        )
+        ?.click();
+    });
+
+    await act(async () => {
+      map.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.map-layers-menu')).toBeNull();
+
+    map.remove();
+  });
+
   it('offers a close action for the mobile layer sheet', async () => {
     await act(async () => {
       root?.render(createSelectorElement());

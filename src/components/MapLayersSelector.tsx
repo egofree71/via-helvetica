@@ -21,6 +21,23 @@ import type {
   MapLayerOpacityKey,
 } from '../map/useMapLayerOpacities';
 
+
+/** Matches the phone layout where empty map taps temporarily hide application chrome. */
+const MOBILE_MAP_OPTIONS_MEDIA_QUERY = '(max-width: 700px)';
+
+/** Returns whether an outside press belongs to the mobile map canvas itself. */
+function isMobileMapCanvasPress(target: EventTarget | null): boolean {
+  if (!(target instanceof Element) || !target.closest('.map')) {
+    return false;
+  }
+
+  if (typeof window.matchMedia === 'function') {
+    return window.matchMedia(MOBILE_MAP_OPTIONS_MEDIA_QUERY).matches;
+  }
+
+  return window.innerWidth <= 700;
+}
+
 /** Controlled layer choices owned by the root map component. */
 interface MapLayersSelectorProps {
   /** Background currently displayed by the OpenLayers base layer. */
@@ -281,9 +298,18 @@ export default function MapLayersSelector({
     }
 
     const closeOnOutsidePress = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        closeMenu();
+      if (rootRef.current?.contains(event.target as Node)) {
+        return;
       }
+
+      // On phones, an empty map tap temporarily hides the whole shell while
+      // preserving panel state. Closing here on pointerdown would destroy the
+      // options sheet before OpenLayers can toggle that map-only presentation.
+      if (isMobileMapCanvasPress(event.target)) {
+        return;
+      }
+
+      closeMenu();
     };
 
     const closeOnEscape = (event: KeyboardEvent) => {

@@ -159,7 +159,11 @@ and only caps itself at half the viewport when native scrolling is actually
 needed. Its candidate list uses the flexbox space left by the localized header,
 hint, and safe-area padding rather than a fixed height subtraction. These sheets
 deliberately avoid custom drag gestures so ordinary taps, links, and scrolling
-remain browser-native on touch devices. The metric scale is
+remain browser-native on touch devices. Outside route creation/editing, an empty
+phone-map tap temporarily hides the floating controls, itinerary summaries, open
+information panels, and an open Map and options sheet without clearing their state;
+a second empty tap restores the same UI. Information features keep priority over this map-only toggle, and
+desktop retains the existing dismiss-on-empty-click behaviour. The metric scale is
 hidden where it would otherwise remain
 covered by the summary. Tall temporary surfaces use the dynamic mobile viewport
 height, with a conventional viewport fallback, so browser address and navigation
@@ -1124,6 +1128,9 @@ manual checks include:
 - provider portrayals and official popup content;
 - stop, closure, and danger-zone clicks near panel and viewport edges on desktop
   and mobile layouts;
+- mobile map-only toggling on genuinely empty map taps, including restoration of
+  an open information panel, selection of a real information feature while the
+  chrome is hidden, and confirmation that route-creation clicks never toggle it;
 - routing behaviour in contrasting geographic regions.
 
 The routing subsystem remains experimental until topology and provider behaviour
