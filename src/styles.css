@@ -2359,6 +2359,65 @@ select {
     transform: none;
   }
 
+  /* Once a public route is the current itinerary, its metrics and optional
+     profile use the same full-width mobile footprint as editable/imported
+     itineraries. Transient loading and error states can stay tied to their map
+     click, while overlap choices use a separate full-width content-sized sheet. */
+  .switzerland-mobility-hiking-summary--selected {
+    bottom: env(safe-area-inset-bottom, 0px);
+    left: 0;
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  /* A shared-path click needs the full phone width for readable route labels,
+     but short candidate lists should not hide half the map unnecessarily. The
+     viewport-height cap only becomes relevant when many overlapping routes need
+     native scrolling. */
+  .switzerland-mobility-hiking-summary--choices {
+    z-index: 30;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: auto;
+    max-height: 50vh;
+    max-height: 50dvh;
+  }
+
+  .switzerland-mobility-hiking-summary--choices
+    .switzerland-mobility-hiking-panel--choices {
+    display: flex;
+    width: 100%;
+    max-height: 50vh;
+    max-height: 50dvh;
+    min-height: 0;
+    flex-direction: column;
+    align-self: stretch;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .switzerland-mobility-hiking-summary--choices
+    .switzerland-mobility-hiking-route-choices {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .switzerland-mobility-hiking-summary--choices
+    .switzerland-mobility-hiking-route-choices > div {
+    min-height: 0;
+    max-height: calc(50vh - 7.5rem);
+    max-height: calc(50dvh - 7.5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .switzerland-mobility-hiking-panel-header {
     min-height: 3.2rem;
     padding-left: 0.8rem;

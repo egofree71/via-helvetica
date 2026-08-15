@@ -133,21 +133,25 @@ contextual and temporary:
 
 The responsive layout resolves collisions by moving small controls rather than
 permanently reserving large strips of viewport space. The route summary stays on
-the bottom edge; at phone widths its metrics strip spans the full viewport and a
-contextual imported-GPX edit action floats immediately above the complete route-summary
-block instead of reserving a permanent side gutter or separating an open elevation
-profile from the statistics strip. The elevation profile keeps its intrinsic chart
+the bottom edge; at phone widths the metrics strip and optional profile span the
+full viewport for editable routes, imported GPX itineraries, and selected
+SwitzerlandMobility routes. A contextual imported-GPX edit action floats
+immediately above the complete route-summary block instead of reserving a permanent
+side gutter or separating an open elevation profile from the statistics strip.
+The elevation profile keeps its intrinsic chart
 aspect ratio and content-driven height so narrow screens do not visually exaggerate
 relief merely to fill a panel. The About control joins the right-side control stack when
 horizontal space becomes tight. At phone widths the permanent search field is
 replaced by a search button directly below route creation; activating it opens a
 temporary full-viewport search surface that reuses the same query and result
-logic. The layer selector and map-information details instead use full-width,
-fixed half-height bottom sheets: part of the map remains visible to preserve the
-geographic context, base-map previews share one row, and content that does not fit
-uses native vertical scrolling inside the sheet. These sheets deliberately avoid
-custom drag gestures so ordinary taps, links, and scrolling remain browser-native
-on touch devices. The metric scale is hidden where it would otherwise remain
+logic. The layer selector and map-information details use full-width, fixed
+half-height bottom sheets so part of the map remains visible while long content
+uses browser-native scrolling. The SwitzerlandMobility overlap chooser is also
+full-width on phones, but keeps a content-driven height for short candidate lists
+and only caps itself at half the viewport when native scrolling is actually
+needed. These sheets deliberately avoid custom drag gestures so ordinary taps,
+links, and scrolling remain browser-native on touch devices. The metric scale is
+hidden where it would otherwise remain
 covered by the summary. Tall temporary surfaces use the dynamic mobile viewport
 height, with a conventional viewport fallback, so browser address and navigation
 bars cannot cover their reachable content.
