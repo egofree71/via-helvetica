@@ -2364,6 +2364,7 @@ select {
      itineraries. Transient loading and error states can stay tied to their map
      click, while overlap choices use a separate full-width content-sized sheet. */
   .switzerland-mobility-hiking-summary--selected {
+    z-index: 30;
     bottom: env(safe-area-inset-bottom, 0px);
     left: 0;
     width: 100vw;
@@ -2453,6 +2454,7 @@ select {
      contextual edit action moves above it instead of permanently reserving a
      right-side gutter that made both the bar and elevation profile narrower. */
   .route-summary {
+    z-index: 30;
     bottom: env(safe-area-inset-bottom, 0px);
     left: 0;
     width: 100vw;
