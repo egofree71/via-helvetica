@@ -33,12 +33,12 @@ function createStorage() {
 describe('release history', () => {
   it('provides the same current release structure in every language', () => {
     const expectedItemIds = [
-      'editableImportedGpx',
-      'sharedSwitzerlandMobilityExport',
+      'refinedMobileExperience',
+      'persistentRouteExport',
     ];
     const expectedDialogItemIds = [
-      'editableImportedGpx',
-      'sharedSwitzerlandMobilityExport',
+      'refinedMobileExperience',
+      'persistentRouteExport',
     ];
 
     for (const language of SUPPORTED_LANGUAGES) {
