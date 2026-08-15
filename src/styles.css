@@ -2490,6 +2490,14 @@ select {
     min-height: 0;
   }
 
+  /* SVG text scales down with the chart on narrow screens. Slightly larger
+     source labels keep distance and elevation graduations legible without
+     changing the chart geometry or exaggerating the terrain profile. */
+  .route-elevation-profile-axis-label,
+  .route-elevation-profile-distance-label {
+    font-size: 20px;
+  }
+
   .route-elevation-profile {
     padding: 0.65rem 0.65rem 0.45rem;
   }
