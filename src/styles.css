@@ -2648,7 +2648,8 @@ select {
   /* On phones the edit action belongs above the complete route-summary block,
      not between the elevation profile and statistics strip. Making the row
      non-positioned lets the button anchor to .route-summary, so profile and
-     statistics stay visually connected while the action remains easy to reach. */
+     statistics stay visually connected while the action remains easy to reach.
+     The right inset matches the permanent mobile map-control column. */
   .route-statistics-row {
     position: static;
   }
@@ -2656,7 +2657,7 @@ select {
   .route-summary-edit-button {
     display: grid;
     top: auto;
-    right: 0.45rem;
+    right: 0.75rem;
     bottom: calc(100% + 0.35rem);
     left: auto;
     width: 2.85rem;
