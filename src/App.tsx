@@ -83,7 +83,11 @@ import {
 /** Itinerary source named by the shared GPX export dialog. */
 type RouteExportSource = 'editable' | 'imported' | 'switzerlandMobility';
 
-/** Matches the CSS breakpoint where the map can temporarily own the whole phone viewport. */
+/**
+ * Matches the CSS breakpoint where the map can temporarily own the whole phone viewport.
+ * Keep the 700 px threshold synchronized with the mobile media query in `styles.css`;
+ * otherwise map-only tap behaviour could disagree with the UI that is actually visible.
+ */
 const MOBILE_MAP_UI_MEDIA_QUERY = '(max-width: 700px)';
 
 /** Reads the current responsive mode without making desktop map clicks change shell visibility. */

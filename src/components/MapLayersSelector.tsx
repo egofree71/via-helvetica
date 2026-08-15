@@ -22,7 +22,11 @@ import type {
 } from '../map/useMapLayerOpacities';
 
 
-/** Matches the phone layout where empty map taps temporarily hide application chrome. */
+/**
+ * Matches the phone layout where empty map taps temporarily hide application chrome.
+ * Keep the 700 px threshold synchronized with the mobile media query in `styles.css`;
+ * otherwise outside-press handling could diverge from the rendered phone layout.
+ */
 const MOBILE_MAP_OPTIONS_MEDIA_QUERY = '(max-width: 700px)';
 
 /** Returns whether an outside press belongs to the mobile map canvas itself. */
