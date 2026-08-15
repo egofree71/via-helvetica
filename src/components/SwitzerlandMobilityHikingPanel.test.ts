@@ -132,6 +132,11 @@ describe('SwitzerlandMobilityHikingPanel', () => {
 
     expect(toggle?.getAttribute('aria-expanded')).toBe('true');
     expect(
+      container.querySelector(
+        '.switzerland-mobility-hiking-summary--profile-open',
+      ),
+    ).not.toBeNull();
+    expect(
       container.querySelector('.route-elevation-profile'),
     ).not.toBeNull();
     expect(container.textContent).toContain('15 km');
@@ -141,6 +146,11 @@ describe('SwitzerlandMobilityHikingPanel', () => {
       toggle?.click();
     });
 
+    expect(
+      container.querySelector(
+        '.switzerland-mobility-hiking-summary--profile-open',
+      ),
+    ).toBeNull();
     expect(onProfileHoverDistanceChange).toHaveBeenLastCalledWith(null);
   });
 

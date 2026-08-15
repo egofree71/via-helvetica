@@ -133,7 +133,12 @@ contextual and temporary:
 
 The responsive layout resolves collisions by moving small controls rather than
 permanently reserving large strips of viewport space. The route summary stays on
-the bottom edge, while the About control joins the right-side control stack when
+the bottom edge; at phone widths its metrics strip spans the full viewport and a
+contextual imported-GPX edit action floats immediately above the complete route-summary
+block instead of reserving a permanent side gutter or separating an open elevation
+profile from the statistics strip. The elevation profile keeps its intrinsic chart
+aspect ratio and content-driven height so narrow screens do not visually exaggerate
+relief merely to fill a panel. The About control joins the right-side control stack when
 horizontal space becomes tight. At phone widths the permanent search field is
 replaced by a search button directly below route creation; activating it opens a
 temporary full-viewport search surface that reuses the same query and result
@@ -1097,9 +1102,9 @@ manual checks include:
   undo back to the pristine trace, adaptive waypoint decluttering across zoom
   levels, arrow separation from visible handles, and a dense real-world GPX to
   check drag and hit-testing responsiveness;
-- the contextual pencil position beside the statistics bar at every responsive
-  width, including intermediate/tablet and compact narrow layouts with the
-  elevation profile open;
+- the contextual pencil position beside the statistics bar at intermediate/tablet
+  widths and directly above the full-width statistics bar on phones, including
+  compact layouts with the elevation profile open;
 - local GPX export versus explicit swisstopo upload, desktop QR scanning, direct
   mobile hand-off, and expiry behaviour of the temporary GPX URL;
 - map/profile pointer synchronisation;

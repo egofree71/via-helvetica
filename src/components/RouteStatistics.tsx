@@ -143,7 +143,15 @@ export default function RouteStatistics({
       : t('profile.unavailable');
 
   return (
-    <div className="route-summary">
+    <div
+      className={[
+        'route-summary',
+        isProfileVisible && hasProfile ? 'route-summary--profile-open' : '',
+        editAction ? 'route-summary--has-edit-action' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       {isProfileVisible && hasProfile && (
         <RouteElevationProfile
           id={profileId}

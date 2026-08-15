@@ -2390,14 +2390,14 @@ select {
     width: 100%;
   }
 
-  /* The right-side controls remain visible while the profile is open. Keep a
-     dedicated gutter so route statistics and the elevation chart never sit
-     underneath those controls on a real phone. */
+  /* On phones the statistics strip uses the complete viewport width. The
+     contextual edit action moves above it instead of permanently reserving a
+     right-side gutter that made both the bar and elevation profile narrower. */
   .route-summary {
-    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-    left: 0.75rem;
-    width: calc(100vw - 5.25rem);
-    max-width: calc(100vw - 5.25rem);
+    bottom: env(safe-area-inset-bottom, 0px);
+    left: 0;
+    width: 100vw;
+    max-width: 100vw;
     transform: none;
   }
 
@@ -2455,17 +2455,22 @@ select {
     width: 2.85rem;
   }
 
-  /* The compact summary intentionally leaves a control gutter on its right.
-     Keep the GPX edit action attached to that row so opening the elevation
-     profile cannot place the pencil over the chart. */
+  /* On phones the edit action belongs above the complete route-summary block,
+     not between the elevation profile and statistics strip. Making the row
+     non-positioned lets the button anchor to .route-summary, so profile and
+     statistics stay visually connected while the action remains easy to reach. */
+  .route-statistics-row {
+    position: static;
+  }
+
   .route-summary-edit-button {
     display: grid;
-    top: 0;
-    right: auto;
-    bottom: 0;
-    left: calc(100% + 0.45rem);
+    top: auto;
+    right: 0.45rem;
+    bottom: calc(100% + 0.35rem);
+    left: auto;
     width: 2.85rem;
-    height: auto;
+    height: 2.85rem;
   }
 
   .route-summary-edit-button img {
@@ -2478,8 +2483,15 @@ select {
     height: 1.5rem;
   }
 
+  /* Preserve the SVG's native 720:150 aspect ratio on phones instead of
+     forcing extra chart height. A taller viewport would add empty space (or
+     visually over-emphasise relief if stretched) without adding information. */
   .route-elevation-profile-chart {
-    min-height: 8.5rem;
+    min-height: 0;
+  }
+
+  .route-elevation-profile {
+    padding: 0.65rem 0.65rem 0.45rem;
   }
 
   .route-message {
