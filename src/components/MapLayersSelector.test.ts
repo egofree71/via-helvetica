@@ -1,6 +1,6 @@
 /**
- * Business context: protects the shared layer menu that lets hikers tune each
- * optional information overlay without losing the existing visibility controls.
+ * Business context: protects the shared map-options menu that lets hikers tune
+ * map layers and reach infrequent mobile-only settings without crowding the map.
  */
 import { act, createElement, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -32,6 +32,8 @@ const defaultProps: ComponentProps<typeof MapLayersSelector> = {
   onPublicTransportStopsChange: vi.fn(),
   layerOpacities,
   onLayerOpacityChange: vi.fn(),
+  onOpen: vi.fn(),
+  onOpenAbout: vi.fn(),
 };
 
 /** Builds the translated selector while preserving component state on rerender. */
@@ -54,6 +56,7 @@ describe('MapLayersSelector', () => {
 
   beforeEach(() => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    window.history.replaceState({}, '', '/fr/');
     window.localStorage.setItem('via-helvetica-language', 'fr');
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -153,6 +156,203 @@ describe('MapLayersSelector', () => {
       'hikingTrails',
       0.35,
     );
+  });
+
+  it('notifies the owner when opening so overlapping map information can close', async () => {
+    const onOpen = vi.fn();
+
+    await act(async () => {
+      root?.render(createSelectorElement({ onOpen }));
+    });
+
+    const layersButton = container.querySelector<HTMLButtonElement>(
+      '.map-control-button--map-layers',
+    );
+
+    await act(async () => {
+      layersButton?.click();
+    });
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      layersButton?.click();
+    });
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the mobile map options sheet open across a map-only tap', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({ matches: true }),
+    );
+
+    const map = document.createElement('div');
+    map.className = 'map';
+    const mapSurface = document.createElement('div');
+    map.appendChild(mapSurface);
+    document.body.appendChild(map);
+
+    await act(async () => {
+      root?.render(createSelectorElement());
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '.map-control-button--map-layers',
+        )
+        ?.click();
+    });
+
+    await act(async () => {
+      mapSurface.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.map-layers-menu')).not.toBeNull();
+    expect(
+      container
+        .querySelector<HTMLButtonElement>(
+          '.map-control-button--map-layers',
+        )
+        ?.getAttribute('aria-expanded'),
+    ).toBe('true');
+
+    map.remove();
+  });
+
+  it('keeps desktop outside-map dismissal for the layer popover', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({ matches: false }),
+    );
+
+    const map = document.createElement('div');
+    map.className = 'map';
+    document.body.appendChild(map);
+
+    await act(async () => {
+      root?.render(createSelectorElement());
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '.map-control-button--map-layers',
+        )
+        ?.click();
+    });
+
+    await act(async () => {
+      map.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.map-layers-menu')).toBeNull();
+
+    map.remove();
+  });
+
+  it('offers a close action for the mobile layer sheet', async () => {
+    await act(async () => {
+      root?.render(createSelectorElement());
+    });
+
+    const layersButton = container.querySelector<HTMLButtonElement>(
+      '.map-control-button--map-layers',
+    );
+
+    await act(async () => {
+      layersButton?.click();
+    });
+
+    expect(container.textContent).toContain('Carte et options');
+    expect(
+      container.querySelector('.map-layers-section--base-maps'),
+    ).not.toBeNull();
+
+    const closeButton = container.querySelector<HTMLButtonElement>(
+      '.map-layers-mobile-close',
+    );
+
+    expect(closeButton?.getAttribute('aria-label')).toBe(
+      'Fermer le panneau Carte et options',
+    );
+
+    await act(async () => {
+      closeButton?.click();
+    });
+
+    expect(container.querySelector('.map-layers-menu')).toBeNull();
+    expect(layersButton?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('offers language choices inside the mobile map options sheet', async () => {
+    await act(async () => {
+      root?.render(createSelectorElement());
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '.map-control-button--map-layers',
+        )
+        ?.click();
+    });
+
+    const languageOptions = container.querySelectorAll<HTMLButtonElement>(
+      '.map-layers-language-option',
+    );
+
+    expect(languageOptions).toHaveLength(4);
+    expect(Array.from(languageOptions, (option) => option.textContent)).toEqual([
+      'FR',
+      'DE',
+      'IT',
+      'EN',
+    ]);
+    expect(languageOptions[0]?.getAttribute('aria-checked')).toBe('true');
+
+    await act(async () => {
+      languageOptions[1]?.click();
+    });
+
+    expect(container.textContent).toContain('Karte und Optionen');
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        '.map-layers-language-option[aria-label="Deutsch"]',
+      )?.getAttribute('aria-checked'),
+    ).toBe('true');
+  });
+
+  it('opens About from the mobile map options entry and closes the sheet', async () => {
+    const onOpenAbout = vi.fn();
+
+    await act(async () => {
+      root?.render(createSelectorElement({ onOpenAbout }));
+    });
+
+    const layersButton = container.querySelector<HTMLButtonElement>(
+      '.map-control-button--map-layers',
+    );
+
+    await act(async () => {
+      layersButton?.click();
+    });
+
+    const aboutAction = container.querySelector<HTMLButtonElement>(
+      '.map-layers-about-action',
+    );
+
+    expect(aboutAction?.textContent).toContain('À propos de Via Helvetica');
+
+    await act(async () => {
+      aboutAction?.click();
+    });
+
+    expect(onOpenAbout).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.map-layers-menu')).toBeNull();
+    expect(layersButton?.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('does not reopen opacity settings after their layer is hidden', async () => {

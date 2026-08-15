@@ -133,11 +133,41 @@ contextual and temporary:
 
 The responsive layout resolves collisions by moving small controls rather than
 permanently reserving large strips of viewport space. The route summary stays on
-the bottom edge, while the About control joins the right-side control stack when
-horizontal space becomes tight. The metric scale is hidden at phone widths where
-it would otherwise remain covered by the summary. Tall temporary dialogs use the
-dynamic mobile viewport height, with a conventional viewport fallback, so browser
-address and navigation bars cannot cover their header or footer.
+the bottom edge; at phone widths the metrics strip and optional profile span the
+full viewport for editable routes, imported GPX itineraries, and selected
+SwitzerlandMobility routes. A contextual imported-GPX edit action floats
+immediately above the complete route-summary block instead of reserving a permanent
+side gutter or separating an open elevation profile from the statistics strip.
+The elevation profile keeps its intrinsic chart
+aspect ratio and content-driven height so narrow screens do not visually exaggerate
+relief merely to fill a panel. At phone widths the permanent search field is
+replaced by a search button directly below route creation; activating it opens a
+temporary full-viewport search surface that reuses the same query and result
+logic. The layer selector and map-information details use full-width, fixed
+half-height bottom sheets so part of the map remains visible while long content
+uses browser-native scrolling. Opening the map/options sheet first dismisses any
+map-information sheet occupying the same lower viewport region. Mobile temporary
+surfaces follow an explicit stacking order: itinerary summaries, map-information
+sheets, map/options, then full-screen search. The map-controls container is raised
+only while map/options is open so itinerary summaries can otherwise remain above
+the permanent floating controls. On phones the layer sheet is titled "Map and
+options" and also contains the four language choices plus an About entry,
+removing infrequently used permanent controls from the narrow map edge; desktop
+keeps the direct language selector and About button. The SwitzerlandMobility overlap chooser is also
+full-width on phones, but keeps a content-driven height for short candidate lists
+and only caps itself at half the viewport when native scrolling is actually
+needed. Its candidate list uses the flexbox space left by the localized header,
+hint, and safe-area padding rather than a fixed height subtraction. These sheets
+deliberately avoid custom drag gestures so ordinary taps, links, and scrolling
+remain browser-native on touch devices. Outside route creation/editing, an empty
+phone-map tap temporarily hides the floating controls, itinerary summaries, open
+information panels, and an open Map and options sheet without clearing their state;
+a second empty tap restores the same UI. Information features keep priority over this map-only toggle, and
+desktop retains the existing dismiss-on-empty-click behaviour. The metric scale is
+hidden where it would otherwise remain
+covered by the summary. Tall temporary surfaces use the dynamic mobile viewport
+height, with a conventional viewport fallback, so browser address and navigation
+bars cannot cover their reachable content.
 
 ### 1.5 Explicit workflow boundaries
 
@@ -661,10 +691,13 @@ that extent without contacting GeoAdmin. Unfinished input with strong coordinate
 markers remains local and keeps the result panel closed, while ordinary numeric
 place searches such as postal codes still reach SearchServer. Text searches then
 use a bounded language-aware session cache and abort superseded uncached requests.
-Provider labels are converted to plain text before React renders them. Selecting
-a place frames the broader planning context; selecting an exact coordinate uses
-the closer geolocation scale. Either result creates a temporary marker that is
-cleared when a higher-priority workflow takes ownership.
+The same `LocationSearch` state and provider workflow serves both presentations:
+a permanent compact field on larger screens and a temporary full-viewport surface
+opened from the right-side search button on phones. Provider labels are converted
+to plain text before React renders them. Selecting a place frames the broader
+planning context; selecting an exact coordinate uses the closer geolocation scale.
+Either result creates a temporary marker that is cleared when a higher-priority
+workflow takes ownership.
 
 Geolocation is requested only after explicit user action. A valid WGS 84
 position is converted to LV95, checked against the configured extent, displayed,
@@ -676,9 +709,9 @@ Fullscreen requests target the complete application root. A
 
 The About dialog contains project context, experimental-routing guidance,
 creator and support details, source and license links, professional profile, a
-link to the localized release history, and complete data credits. Its permanently
-visible map control provides direct access to the centralized source references
-without occupying additional map space.
+link to the localized release history, and complete data credits. Larger screens
+keep a direct map control, while phones expose the same dialog from the Map and
+options sheet so an infrequently used action does not consume permanent map space.
 
 The release dialog reads the current semantic version and the highlights marked
 for compact display from `src/releases/releaseHistory.json`; history-only items
@@ -1073,9 +1106,10 @@ manual checks include:
 
 - mouse, pen, and touch route editing, including edge auto-pan while moving or
   inserting a waypoint and cancellation after focus or pointer loss;
-- responsive control collisions, translated layer-label wrapping, the release
-  and About dialogs, expandable opacity sliders, and layer-menu stacking above
-  itinerary profiles on narrow and short viewports;
+- responsive control collisions, the phone search button and full-viewport
+  search surface (including the virtual keyboard), translated layer-label
+  wrapping, the release and About dialogs, expandable opacity sliders, and
+  layer-menu stacking above itinerary profiles on narrow and short viewports;
 - official hiking and SwitzerlandMobility portrayals across useful zooms and
   restored opacity preferences after a reload;
 - selection, overlap choice, highlighting, full-route fitting, and profile
@@ -1085,15 +1119,18 @@ manual checks include:
   undo back to the pristine trace, adaptive waypoint decluttering across zoom
   levels, arrow separation from visible handles, and a dense real-world GPX to
   check drag and hit-testing responsiveness;
-- the contextual pencil position beside the statistics bar at every responsive
-  width, including intermediate/tablet and compact narrow layouts with the
-  elevation profile open;
+- the contextual pencil position beside the statistics bar at intermediate/tablet
+  widths and directly above the full-width statistics bar on phones, including
+  compact layouts with the elevation profile open;
 - local GPX export versus explicit swisstopo upload, desktop QR scanning, direct
   mobile hand-off, and expiry behaviour of the temporary GPX URL;
 - map/profile pointer synchronisation;
 - provider portrayals and official popup content;
 - stop, closure, and danger-zone clicks near panel and viewport edges on desktop
   and mobile layouts;
+- mobile map-only toggling on genuinely empty map taps, including restoration of
+  an open information panel, selection of a real information feature while the
+  chrome is hidden, and confirmation that route-creation clicks never toggle it;
 - routing behaviour in contrasting geographic regions.
 
 The routing subsystem remains experimental until topology and provider behaviour

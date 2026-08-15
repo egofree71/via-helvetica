@@ -1,12 +1,13 @@
 /**
  * Business context: protects the shared map-information click pipeline against
- * React lifecycle regressions. Closing an existing SwitzerlandMobility panel and
- * starting a new identify request happen in the same click, so the panel update
- * must not tear down the listener and abort its newly created request.
+ * React lifecycle regressions. A click may close an existing
+ * SwitzerlandMobility panel while its new identify request continues; empty
+ * mobile clicks may instead preserve that panel for temporary map-only mode.
  */
 import { act, createElement, useCallback, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { identifyTrailClosure } from '../closures/trailClosures';
 import { HIKING_TRAILS_MIN_ZOOM } from './config';
 import type { MapRuntime } from './mapRuntime';
 import { useMapInformationLayers } from './useMapInformationLayers';
@@ -158,7 +159,13 @@ function createRuntime(): {
   };
 }
 
-function Harness({ runtime }: { runtime: MapRuntime }) {
+function Harness({
+  runtime,
+  onMapClickStart,
+}: {
+  runtime: MapRuntime;
+  onMapClickStart?: () => boolean;
+}) {
   const mapRuntimeRef = useRef<MapRuntime | null>(runtime);
   const onInformationSelected = useCallback(() => undefined, []);
   const onRouteAccepted = useCallback(() => undefined, []);
@@ -172,6 +179,7 @@ function Harness({ runtime }: { runtime: MapRuntime }) {
     language: 'fr',
     isSwitzerlandMobilityHikingVisible: true,
     isRouteCreationActive: false,
+    onMapClickStart,
     onInformationSelected,
     onSwitzerlandMobilityHikingRouteAccepted: onRouteAccepted,
   });
@@ -230,5 +238,60 @@ describe('useMapInformationLayers click lifecycle', () => {
 
     expect(closureHarness.signals).toHaveLength(1);
     expect(closureHarness.signals[0].aborted).toBe(false);
+    expect(container.textContent).toContain('closed');
+  });
+
+  it('preserves the current panel when a mobile empty-map click is handled by the shell', async () => {
+    const { runtime, mapEvents } = createRuntime();
+    const onMapClickStart = vi.fn(() => true);
+    vi.mocked(identifyTrailClosure).mockResolvedValueOnce(null);
+
+    await act(async () => {
+      root?.render(
+        createElement(Harness, { runtime, onMapClickStart }),
+      );
+    });
+    await act(async () => {
+      selectionHarness.openPanel?.();
+    });
+
+    await act(async () => {
+      mapEvents.emit('singleclick', {
+        pixel: [400, 300],
+        coordinate: [2_553_000, 1_171_000],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onMapClickStart).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('ready');
+  });
+
+  it('keeps the historical desktop dismissal when the shell does not handle an empty click', async () => {
+    const { runtime, mapEvents } = createRuntime();
+    const onMapClickStart = vi.fn(() => false);
+    vi.mocked(identifyTrailClosure).mockResolvedValueOnce(null);
+
+    await act(async () => {
+      root?.render(
+        createElement(Harness, { runtime, onMapClickStart }),
+      );
+    });
+    await act(async () => {
+      selectionHarness.openPanel?.();
+    });
+
+    await act(async () => {
+      mapEvents.emit('singleclick', {
+        pixel: [400, 300],
+        coordinate: [2_553_000, 1_171_000],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onMapClickStart).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('closed');
   });
 });

@@ -183,7 +183,18 @@ export default function SwitzerlandMobilityHikingPanel({
   };
 
   return (
-    <div className="switzerland-mobility-hiking-summary">
+    <div
+      className={[
+        'switzerland-mobility-hiking-summary',
+        status.state === 'ready'
+          ? 'switzerland-mobility-hiking-summary--selected'
+          : status.state === 'choices'
+            ? 'switzerland-mobility-hiking-summary--choices'
+            : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       {status.state === 'ready' &&
         isProfileVisible &&
         hasProfile && (

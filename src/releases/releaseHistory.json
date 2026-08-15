@@ -1,9 +1,9 @@
 {
-  "currentVersion": "1.5.0",
+  "currentVersion": "1.6.0",
   "locales": {
     "fr": {
       "dialog": {
-        "title": "Nouveautés de Via Helvetica 1.5.0",
+        "title": "Nouveautés de Via Helvetica 1.6.0",
         "historyLink": "Voir l’historique complet",
         "historyLinkNewTabLabel": "s’ouvre dans un nouvel onglet"
       },
@@ -18,6 +18,29 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.6.0",
+          "summary": "Cette version améliore fortement l’expérience sur mobile tout en conservant Via Helvetica comme outil de préparation pensé d’abord pour les grands écrans.",
+          "items": [
+            {
+              "id": "refinedMobileExperience",
+              "title": "Expérience mobile repensée :",
+              "description": "L’interface sur les petits écrans a été largement revue afin de laisser davantage de place à la carte et de rendre les actions essentielles plus fluides : recherche plein écran, panneau Carte et options, panneaux d’information adaptés, profils et statistiques pleine largeur, ainsi qu’un mode carte seule. Via Helvetica reste néanmoins pensé avant tout pour préparer des itinéraires sur un grand écran.",
+              "details": [
+                "Les commandes d’édition ont été compactées et la recherche s’ouvre désormais en plein écran sur mobile.",
+                "Le panneau « Carte et options » regroupe les fonds de carte, les couches d’information, la langue et l’accès à « À propos de Via Helvetica » afin d’alléger les contrôles permanents sur la carte.",
+                "Les panneaux d’information, le profil d’altitude, les statistiques et les panneaux SuisseMobile utilisent mieux la largeur disponible et défilent naturellement lorsque leur contenu dépasse.",
+                "Hors édition d’itinéraire, un appui sur une zone vide de la carte masque temporairement les contrôles et panneaux pour examiner la carte ; un second appui restaure la même interface."
+              ]
+            },
+            {
+              "id": "persistentRouteExport",
+              "title": "Export toujours disponible :",
+              "description": "Le bouton d’export reste désormais visible tant qu’un itinéraire est affiché, même après avoir quitté le mode création ou édition. Il disparaît seulement lorsqu’aucun itinéraire courant n’est sélectionné.",
+              "details": []
+            }
+          ]
+        },
         {
           "version": "1.5.0",
           "summary": "Cette version permet de modifier un GPX importé et harmonise l’accès à l’export des itinéraires.",
@@ -172,7 +195,7 @@
     },
     "de": {
       "dialog": {
-        "title": "Neu in Via Helvetica 1.5.0",
+        "title": "Neu in Via Helvetica 1.6.0",
         "historyLink": "Vollständigen Versionsverlauf anzeigen",
         "historyLinkNewTabLabel": "öffnet in einem neuen Tab"
       },
@@ -187,6 +210,29 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.6.0",
+          "summary": "Diese Version verbessert die mobile Nutzung deutlich, während Via Helvetica weiterhin in erster Linie als Planungswerkzeug für grosse Bildschirme gedacht ist.",
+          "items": [
+            {
+              "id": "refinedMobileExperience",
+              "title": "Überarbeitete mobile Bedienung:",
+              "description": "Die Oberfläche auf kleinen Bildschirmen wurde umfassend überarbeitet, damit die Karte mehr Platz erhält und die wichtigsten Aktionen flüssiger erreichbar sind: Vollbildsuche, Karte-und-Optionen-Panel, angepasste Informationspanels, Profile und Statistiken über die volle Breite sowie ein reiner Kartenmodus. Via Helvetica bleibt dennoch in erster Linie für die Routenplanung auf grossen Bildschirmen konzipiert.",
+              "details": [
+                "Die Bearbeitungsaktionen wurden kompakter angeordnet, und die Suche öffnet sich auf Mobilgeräten jetzt im Vollbild.",
+                "Der Bereich «Karte und Optionen» bündelt Grundkarten, Informationsebenen, Sprache und den Zugang zu «Über Via Helvetica» und reduziert so die dauerhaft sichtbaren Kartenbedienelemente.",
+                "Informationsfenster, Höhenprofil, Statistik und SchweizMobil-Panels nutzen die verfügbare Breite besser und lassen sich bei längerem Inhalt natürlich scrollen.",
+                "Ausserhalb der Routenbearbeitung blendet ein Tipp auf eine freie Kartenstelle Bedienelemente und Panels vorübergehend aus; ein weiterer Tipp stellt dieselbe Oberfläche wieder her."
+              ]
+            },
+            {
+              "id": "persistentRouteExport",
+              "title": "Export bleibt verfügbar:",
+              "description": "Der Export-Button bleibt jetzt sichtbar, solange eine Route auf der Karte angezeigt wird, auch nachdem der Erstellungs- oder Bearbeitungsmodus verlassen wurde. Er verschwindet erst, wenn keine aktuelle Route mehr ausgewählt ist.",
+              "details": []
+            }
+          ]
+        },
         {
           "version": "1.5.0",
           "summary": "Diese Version macht importierte GPX-Dateien bearbeitbar und vereinheitlicht den Export von Routen.",
@@ -341,7 +387,7 @@
     },
     "it": {
       "dialog": {
-        "title": "Novità di Via Helvetica 1.5.0",
+        "title": "Novità di Via Helvetica 1.6.0",
         "historyLink": "Vedi la cronologia completa",
         "historyLinkNewTabLabel": "si apre in una nuova scheda"
       },
@@ -356,6 +402,29 @@
         "versionLabel": "Versione"
       },
       "releases": [
+        {
+          "version": "1.6.0",
+          "summary": "Questa versione migliora nettamente l’esperienza su mobile, mantenendo Via Helvetica come strumento di preparazione pensato prima di tutto per gli schermi grandi.",
+          "items": [
+            {
+              "id": "refinedMobileExperience",
+              "title": "Esperienza mobile riprogettata:",
+              "description": "L’interfaccia sugli schermi piccoli è stata ampiamente rivista per lasciare più spazio alla carta e rendere più fluide le azioni essenziali: ricerca a schermo intero, pannello Carta e opzioni, pannelli informativi adattati, profili e statistiche a tutta larghezza e una modalità solo mappa. Via Helvetica resta comunque pensata soprattutto per preparare itinerari su schermi grandi.",
+              "details": [
+                "I comandi di modifica sono stati resi più compatti e la ricerca si apre ora a schermo intero sui dispositivi mobili.",
+                "Il pannello «Mappa e opzioni» riunisce le mappe di base, i livelli informativi, la lingua e l’accesso a «Informazioni su Via Helvetica», riducendo i controlli permanenti sulla carta.",
+                "I pannelli informativi, il profilo altimetrico, le statistiche e i pannelli SvizzeraMobile sfruttano meglio la larghezza disponibile e scorrono naturalmente quando il contenuto è più lungo.",
+                "Fuori dalla modifica dell’itinerario, un tocco su una zona vuota della carta nasconde temporaneamente controlli e pannelli per lasciare spazio alla carta; un secondo tocco ripristina la stessa interfaccia."
+              ]
+            },
+            {
+              "id": "persistentRouteExport",
+              "title": "Esportazione sempre disponibile:",
+              "description": "Il pulsante di esportazione rimane ora visibile finché un itinerario è mostrato sulla carta, anche dopo aver lasciato la modalità di creazione o modifica. Scompare soltanto quando non è selezionato alcun itinerario corrente.",
+              "details": []
+            }
+          ]
+        },
         {
           "version": "1.5.0",
           "summary": "Questa versione rende modificabili i GPX importati e riunisce in un unico punto l’esportazione degli itinerari.",
@@ -510,7 +579,7 @@
     },
     "en": {
       "dialog": {
-        "title": "What’s new in Via Helvetica 1.5.0",
+        "title": "What’s new in Via Helvetica 1.6.0",
         "historyLink": "View full release history",
         "historyLinkNewTabLabel": "opens in a new tab"
       },
@@ -525,6 +594,29 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.6.0",
+          "summary": "This release significantly improves the mobile experience while keeping Via Helvetica primarily a route-planning tool designed for large screens.",
+          "items": [
+            {
+              "id": "refinedMobileExperience",
+              "title": "Redesigned mobile experience:",
+              "description": "The interface on smaller screens has been extensively refined to leave more room for the map and make essential actions smoother: full-screen search, a Map and options panel, adapted information panels, full-width profiles and statistics, and a map-only mode. Via Helvetica nevertheless remains designed primarily for planning routes on large screens.",
+              "details": [
+                "Editing controls are more compact, and search now opens full-screen on mobile.",
+                "The “Map and options” panel brings together base maps, information layers, language selection and access to “About Via Helvetica”, reducing permanent controls over the map.",
+                "Information panels, the elevation profile, route statistics and SwitzerlandMobility panels make better use of the available width and scroll naturally when their content is longer.",
+                "Outside route editing, tapping an empty area of the map temporarily hides controls and panels so the map can be examined freely; a second tap restores the same interface."
+              ]
+            },
+            {
+              "id": "persistentRouteExport",
+              "title": "Export stays available:",
+              "description": "The export button now remains visible as long as a route is displayed, even after leaving creation or editing mode. It disappears only when no current route is selected.",
+              "details": []
+            }
+          ]
+        },
         {
           "version": "1.5.0",
           "summary": "This release makes imported GPX files editable and brings route export actions together in one place.",

@@ -1,7 +1,7 @@
 /**
- * Business context: provides a compact, keyboard-accessible search field for
- * official Swiss places or pasted coordinates while keeping the map visible
- * beneath temporary results.
+ * Business context: provides one shared search workflow for official Swiss
+ * places and pasted coordinates. Larger screens keep a compact field over the
+ * map, while phones can present the same state in a temporary full-screen view.
  */
 import {
   useEffect,
@@ -23,6 +23,10 @@ import {
 
 /** Callbacks supplied by the map shell to the presentation-only search control. */
 interface LocationSearchProps {
+  /** Whether the narrow-screen search surface currently covers the map. */
+  isMobileOverlayOpen?: boolean;
+  /** Dismisses the narrow-screen search surface without clearing its query. */
+  onMobileOverlayClose?: () => void;
   /** Closes map information when the search field becomes active. */
   onSearchFocus: () => void;
   /** Moves the map to the selected place or coordinate result. */
@@ -45,18 +49,20 @@ const MINIMUM_QUERY_LENGTH = 2;
 const SEARCH_DELAY_MS = 300;
 
 /**
- * Renders the keyboard-accessible place and coordinate search control. Text
- * searches stay debounced, while coordinate parsing remains immediate and local.
- * Network cancellation and stale-result protection remain local to the control,
- * while map movement is delegated through the supplied callbacks.
+ * Renders the shared keyboard-accessible place and coordinate search control.
+ * Text searches stay debounced, while coordinate parsing remains immediate and
+ * local. Responsive presentation does not duplicate provider or query state.
  */
 export default function LocationSearch({
+  isMobileOverlayOpen = false,
+  onMobileOverlayClose,
   onSearchFocus,
   onSelect,
   onClear,
 }: LocationSearchProps) {
   const { language, t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const selectedLabelRef = useRef<string | null>(null);
   const listboxId = useId();
 
@@ -65,6 +71,14 @@ export default function LocationSearch({
   const [status, setStatus] = useState<SearchStatus>('idle');
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+
+  useEffect(() => {
+    if (isMobileOverlayOpen) {
+      // The full-screen mobile surface is opened by an explicit search action,
+      // so moving focus straight to the shared field avoids a second tap.
+      inputRef.current?.focus();
+    }
+  }, [isMobileOverlayOpen]);
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -205,6 +219,12 @@ export default function LocationSearch({
     setQuery(nextQuery);
   };
 
+  const closeMobileOverlay = () => {
+    setIsOpen(false);
+    setActiveIndex(-1);
+    onMobileOverlayClose?.();
+  };
+
   const selectResult = (result: LocationSearchResult) => {
     selectedLabelRef.current = result.label;
     setQuery(result.label);
@@ -213,12 +233,20 @@ export default function LocationSearch({
     setIsOpen(false);
     setActiveIndex(-1);
     onSelect(result);
+
+    if (isMobileOverlayOpen) {
+      onMobileOverlayClose?.();
+    }
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
       setIsOpen(false);
       setActiveIndex(-1);
+
+      if (isMobileOverlayOpen) {
+        onMobileOverlayClose?.();
+      }
       return;
     }
 
@@ -278,61 +306,84 @@ export default function LocationSearch({
   const showResults = showPanel && results.length > 0;
 
   return (
-    <div className="location-search" ref={containerRef}>
-      <div className="location-search-field">
-        <svg
-          className="location-search-icon"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <circle cx="10.5" cy="10.5" r="6.5" />
-          <path d="m15.5 15.5 5 5" />
-        </svg>
-
-        <input
-          type="search"
-          value={query}
-          placeholder={t('search.placeholder')}
-          aria-label={t('search.label')}
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded={showPanel}
-          aria-controls={showResults ? listboxId : undefined}
-          aria-activedescendant={
-            activeIndex >= 0
-              ? `${listboxId}-${activeIndex}`
-              : undefined
-          }
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(event) => handleQueryChange(event.target.value)}
-          onFocus={() => {
-            // Focusing a populated search can immediately reopen cached
-            // suggestions, so map-information panels must be cleared first.
-            onSearchFocus();
-
-            if (
-              query.trim().length >= MINIMUM_QUERY_LENGTH &&
-              (results.length > 0 || status !== 'idle')
-            ) {
-              setIsOpen(true);
-            }
-          }}
-          onKeyDown={handleKeyDown}
-        />
-
-        {query && (
-          <button
-            type="button"
-            className="location-search-clear"
-            aria-label={t('search.clearLabel')}
-            title={t('search.clearTitle')}
-            onClick={clearSearch}
+    <div
+      className={[
+        'location-search',
+        isMobileOverlayOpen ? 'location-search--mobile-open' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      ref={containerRef}
+    >
+      <div className="location-search-mobile-bar">
+        <div className="location-search-field">
+          <svg
+            className="location-search-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            focusable="false"
           >
-            ×
-          </button>
-        )}
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="m15.5 15.5 5 5" />
+          </svg>
+
+          <input
+            ref={inputRef}
+            type="search"
+            value={query}
+            placeholder={t('search.placeholder')}
+            aria-label={t('search.label')}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={showPanel}
+            aria-controls={showResults ? listboxId : undefined}
+            aria-activedescendant={
+              activeIndex >= 0
+                ? `${listboxId}-${activeIndex}`
+                : undefined
+            }
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => handleQueryChange(event.target.value)}
+            onFocus={() => {
+              // Focusing a populated search can immediately reopen cached
+              // suggestions, so map-information panels must be cleared first.
+              onSearchFocus();
+
+              if (
+                query.trim().length >= MINIMUM_QUERY_LENGTH &&
+                (results.length > 0 || status !== 'idle')
+              ) {
+                setIsOpen(true);
+              }
+            }}
+            onKeyDown={handleKeyDown}
+          />
+
+          {query && (
+            <button
+              type="button"
+              className="location-search-clear"
+              aria-label={t('search.clearLabel')}
+              title={t('search.clearTitle')}
+              onClick={clearSearch}
+            >
+              ×
+            </button>
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="location-search-mobile-close"
+          aria-label={t('search.close')}
+          title={t('search.close')}
+          onClick={closeMobileOverlay}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg>
+        </button>
       </div>
 
       {showPanel && (

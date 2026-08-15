@@ -1,10 +1,17 @@
 /**
  * Business context: groups background selection and optional information
- * overlays behind one compact map control. Each overlay can be shown, hidden,
- * and made more or less opaque without growing the permanent control column.
+ * overlays behind one compact map control. On phones it also absorbs the
+ * infrequently changed language and About actions so the permanent map-control
+ * column stays focused on actions used while planning.
  */
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
+import {
+  LANGUAGE_METADATA,
+  SUPPORTED_LANGUAGES,
+  type Language,
+  type TranslationKey,
+} from '../i18n/translations';
 import {
   MINIMUM_MAP_LAYER_OPACITY,
   type BaseMapStyle,
@@ -13,6 +20,27 @@ import type {
   MapLayerOpacities,
   MapLayerOpacityKey,
 } from '../map/useMapLayerOpacities';
+
+
+/**
+ * Matches the phone layout where empty map taps temporarily hide application chrome.
+ * Keep the 700 px threshold synchronized with the mobile media query in `styles.css`;
+ * otherwise outside-press handling could diverge from the rendered phone layout.
+ */
+const MOBILE_MAP_OPTIONS_MEDIA_QUERY = '(max-width: 700px)';
+
+/** Returns whether an outside press belongs to the mobile map canvas itself. */
+function isMobileMapCanvasPress(target: EventTarget | null): boolean {
+  if (!(target instanceof Element) || !target.closest('.map')) {
+    return false;
+  }
+
+  if (typeof window.matchMedia === 'function') {
+    return window.matchMedia(MOBILE_MAP_OPTIONS_MEDIA_QUERY).matches;
+  }
+
+  return window.innerWidth <= 700;
+}
 
 /** Controlled layer choices owned by the root map component. */
 interface MapLayersSelectorProps {
@@ -47,6 +75,10 @@ interface MapLayersSelectorProps {
     layer: MapLayerOpacityKey,
     opacity: number,
   ) => void;
+  /** Lets the owner dismiss overlapping map information before this menu opens. */
+  onOpen: () => void;
+  /** Opens the existing project-information dialog from the mobile options sheet. */
+  onOpenAbout: () => void;
 }
 
 /** One mutually exclusive base-map choice and its translated label. */
@@ -100,6 +132,14 @@ const BASE_MAP_OPTIONS: BaseMapOption[] = [
   { value: 'gray', labelKey: 'map.baseMap.gray' },
   { value: 'aerial', labelKey: 'map.baseMap.aerial' },
 ];
+
+/** Full language names keep the compact mobile choices accessible to screen readers. */
+const LANGUAGE_LABEL_KEYS: Record<Language, TranslationKey> = {
+  fr: 'language.fr',
+  de: 'language.de',
+  it: 'language.it',
+  en: 'language.en',
+};
 
 /** Converts an OpenLayers opacity ratio to the integer percentage shown in UI. */
 function opacityPercent(opacity: number): number {
@@ -241,8 +281,10 @@ export default function MapLayersSelector({
   onPublicTransportStopsChange,
   layerOpacities,
   onLayerOpacityChange,
+  onOpen,
+  onOpenAbout,
 }: MapLayersSelectorProps) {
-  const { t } = useI18n();
+  const { language, setLanguage, t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [expandedOpacityLayer, setExpandedOpacityLayer] =
@@ -260,9 +302,18 @@ export default function MapLayersSelector({
     }
 
     const closeOnOutsidePress = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        closeMenu();
+      if (rootRef.current?.contains(event.target as Node)) {
+        return;
       }
+
+      // On phones, an empty map tap temporarily hides the whole shell while
+      // preserving panel state. Closing here on pointerdown would destroy the
+      // options sheet before OpenLayers can toggle that map-only presentation.
+      if (isMobileMapCanvasPress(event.target)) {
+        return;
+      }
+
+      closeMenu();
     };
 
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -355,6 +406,7 @@ export default function MapLayersSelector({
           if (isOpen) {
             closeMenu();
           } else {
+            onOpen();
             setIsOpen(true);
           }
         }}
@@ -368,8 +420,24 @@ export default function MapLayersSelector({
 
       {isOpen && (
         <div className="map-layers-menu" role="menu" aria-label={label}>
+          <div className="map-layers-mobile-header">
+            <strong>{t('map.layers.mobileTitle')}</strong>
+            <button
+              type="button"
+              className="map-layers-mobile-close"
+              role="menuitem"
+              aria-label={t('map.layers.close')}
+              title={t('map.layers.close')}
+              onClick={closeMenu}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+
           <section
-            className="map-layers-section"
+            className="map-layers-section map-layers-section--base-maps"
             role="group"
             aria-labelledby="map-layers-base-maps-title"
           >
@@ -457,6 +525,63 @@ export default function MapLayersSelector({
               );
             })}
           </section>
+
+          <section
+            className="map-layers-section map-layers-section--language"
+            role="group"
+            aria-labelledby="map-layers-language-title"
+          >
+            <h2
+              id="map-layers-language-title"
+              className="map-layers-section-title"
+            >
+              {t('map.layers.language')}
+            </h2>
+            <div className="map-layers-language-options">
+              {SUPPORTED_LANGUAGES.map((option) => {
+                const isSelected = option === language;
+                const languageLabel = t(LANGUAGE_LABEL_KEYS[option]);
+
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    className={[
+                      'map-layers-language-option',
+                      isSelected
+                        ? 'map-layers-language-option--selected'
+                        : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    role="menuitemradio"
+                    aria-checked={isSelected}
+                    aria-label={languageLabel}
+                    title={languageLabel}
+                    onClick={() => setLanguage(option)}
+                  >
+                    {LANGUAGE_METADATA[option].shortLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <button
+            type="button"
+            className="map-layers-about-action"
+            role="menuitem"
+            onClick={() => {
+              closeMenu();
+              onOpenAbout();
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 11v6M12 7.5h.01" />
+            </svg>
+            <span>{t('about.open')}</span>
+          </button>
         </div>
       )}
     </div>

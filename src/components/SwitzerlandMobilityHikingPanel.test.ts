@@ -81,6 +81,11 @@ describe('SwitzerlandMobilityHikingPanel', () => {
       );
     });
 
+    expect(
+      container
+        .querySelector('.switzerland-mobility-hiking-summary')
+        ?.classList.contains('switzerland-mobility-hiking-summary--selected'),
+    ).toBe(true);
     expect(container.textContent).toContain('ViaJacobi');
     expect(container.textContent).toContain(
       'Étape 16 : Moudon - Lausanne',
@@ -171,6 +176,16 @@ describe('SwitzerlandMobilityHikingPanel', () => {
         ),
       );
     });
+
+    const summary = container.querySelector(
+      '.switzerland-mobility-hiking-summary',
+    );
+    expect(
+      summary?.classList.contains('switzerland-mobility-hiking-summary--selected'),
+    ).toBe(false);
+    expect(
+      summary?.classList.contains('switzerland-mobility-hiking-summary--choices'),
+    ).toBe(true);
 
     const choice = container.querySelector<HTMLButtonElement>(
       '.switzerland-mobility-hiking-route-choices button',

@@ -10,7 +10,7 @@ export const SUPPORTED_LANGUAGES = ['fr', 'de', 'it', 'en'] as const;
 /** One supported interface language. */
 export type Language = (typeof SUPPORTED_LANGUAGES)[number];
 
-/** Metadata used by number formatting and the compact language selector. */
+/** Metadata used by number formatting and the compact language controls. */
 export const LANGUAGE_METADATA: Record<
   Language,
   { locale: string; shortLabel: string }
@@ -60,6 +60,7 @@ const frenchTranslations = {
 
   'search.placeholder': 'Lieu ou coordonnées…',
   'search.label': 'Rechercher un lieu ou des coordonnées',
+  'search.close': 'Fermer la recherche',
   'search.clearLabel': 'Effacer la recherche',
   'search.clearTitle': 'Effacer',
   'search.loading': 'Recherche…',
@@ -141,8 +142,11 @@ const frenchTranslations = {
   'map.aria': 'Carte nationale suisse interactive',
   'map.controls': 'Contrôles de la carte',
   'map.layers.select': 'Choisir les couches de la carte',
+  'map.layers.mobileTitle': 'Carte et options',
+  'map.layers.close': 'Fermer le panneau Carte et options',
   'map.layers.baseMaps': 'Fond de carte',
   'map.layers.information': 'Couches d’information',
+  'map.layers.language': 'Langue',
   'map.layers.opacity': 'Opacité',
   'map.layers.adjustOpacity': 'Régler l’opacité de la couche « {layer} »',
   'map.baseMap.color': 'Carte couleur',
@@ -294,6 +298,7 @@ const germanTranslations: Record<TranslationKey, string> = {
 
   'search.placeholder': 'Ort oder Koordinaten…',
   'search.label': 'Ort oder Koordinaten suchen',
+  'search.close': 'Suche schliessen',
   'search.clearLabel': 'Suche löschen',
   'search.clearTitle': 'Löschen',
   'search.loading': 'Suche…',
@@ -376,8 +381,11 @@ const germanTranslations: Record<TranslationKey, string> = {
   'map.aria': 'Interaktive Schweizer Landeskarte',
   'map.controls': 'Kartensteuerung',
   'map.layers.select': 'Kartenebenen auswählen',
+  'map.layers.mobileTitle': 'Karte und Optionen',
+  'map.layers.close': 'Karte und Optionen schliessen',
   'map.layers.baseMaps': 'Kartenhintergrund',
   'map.layers.information': 'Informationsebenen',
+  'map.layers.language': 'Sprache',
   'map.layers.opacity': 'Deckkraft',
   'map.layers.adjustOpacity': 'Deckkraft der Ebene „{layer}“ einstellen',
   'map.baseMap.color': 'Farbkarte',
@@ -527,6 +535,7 @@ const italianTranslations: Record<TranslationKey, string> = {
 
   'search.placeholder': 'Luogo o coordinate…',
   'search.label': 'Cerca un luogo o delle coordinate',
+  'search.close': 'Chiudi la ricerca',
   'search.clearLabel': 'Cancella la ricerca',
   'search.clearTitle': 'Cancella',
   'search.loading': 'Ricerca…',
@@ -609,8 +618,11 @@ const italianTranslations: Record<TranslationKey, string> = {
   'map.aria': 'Carta nazionale svizzera interattiva',
   'map.controls': 'Controlli della carta',
   'map.layers.select': 'Scegli i livelli della carta',
+  'map.layers.mobileTitle': 'Mappa e opzioni',
+  'map.layers.close': 'Chiudi il pannello Mappa e opzioni',
   'map.layers.baseMaps': 'Sfondo della carta',
   'map.layers.information': 'Livelli informativi',
+  'map.layers.language': 'Lingua',
   'map.layers.opacity': 'Opacità',
   'map.layers.adjustOpacity': 'Regola l’opacità del livello « {layer} »',
   'map.baseMap.color': 'Carta a colori',
@@ -761,6 +773,7 @@ const englishTranslations: Record<TranslationKey, string> = {
 
   'search.placeholder': 'Place or coordinates…',
   'search.label': 'Search for a place or coordinates',
+  'search.close': 'Close search',
   'search.clearLabel': 'Clear search',
   'search.clearTitle': 'Clear',
   'search.loading': 'Searching…',
@@ -842,8 +855,11 @@ const englishTranslations: Record<TranslationKey, string> = {
   'map.aria': 'Interactive Swiss national map',
   'map.controls': 'Map controls',
   'map.layers.select': 'Choose map layers',
+  'map.layers.mobileTitle': 'Map and options',
+  'map.layers.close': 'Close Map and options panel',
   'map.layers.baseMaps': 'Base map',
   'map.layers.information': 'Information layers',
+  'map.layers.language': 'Language',
   'map.layers.opacity': 'Opacity',
   'map.layers.adjustOpacity': 'Adjust opacity for the “{layer}” layer',
   'map.baseMap.color': 'Colour map',

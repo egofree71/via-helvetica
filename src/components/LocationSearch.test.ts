@@ -1,7 +1,7 @@
 /**
- * Business context: protects the compact search combobox against interaction
- * regressions in keyboard navigation, local coordinate handling, and visible
- * active-option tracking without requiring a browser-level map test.
+ * Business context: protects the shared search combobox against interaction
+ * regressions in keyboard navigation, mobile presentation, local coordinate
+ * handling, and active-option tracking without a browser-level map test.
  */
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -153,6 +153,44 @@ describe('LocationSearch keyboard navigation', () => {
 
     expect(options[0].getAttribute('aria-selected')).toBe('true');
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
+  it('focuses and dismisses the narrow-screen search surface', async () => {
+    const onMobileOverlayClose = vi.fn();
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(LocationSearch, {
+            isMobileOverlayOpen: true,
+            onMobileOverlayClose,
+            onSearchFocus: vi.fn(),
+            onSelect: vi.fn(),
+            onClear: vi.fn(),
+          }),
+        ),
+      );
+    });
+
+    const search = container.querySelector<HTMLElement>('.location-search');
+    const input = container.querySelector<HTMLInputElement>('input');
+    const closeButton = container.querySelector<HTMLButtonElement>(
+      '.location-search-mobile-close',
+    );
+
+    expect(search?.classList.contains('location-search--mobile-open')).toBe(
+      true,
+    );
+    expect(document.activeElement).toBe(input);
+    expect(closeButton?.getAttribute('aria-label')).toBe('Close search');
+
+    await act(async () => {
+      closeButton?.click();
+    });
+
+    expect(onMobileOverlayClose).toHaveBeenCalledTimes(1);
   });
 });
 
