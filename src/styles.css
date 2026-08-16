@@ -2591,6 +2591,15 @@ select {
     transform: none;
   }
 
+  /* Some phones report no bottom safe-area inset in browser fullscreen even
+     though rounded display corners can overlap the full-width profile action.
+     Keep normal mobile layout flush to the usable viewport, but guarantee a
+     small clearance when Via Helvetica itself owns fullscreen. */
+  .app:fullscreen .route-summary,
+  .app:fullscreen .switzerland-mobility-hiking-summary--selected {
+    bottom: max(env(safe-area-inset-bottom, 0px), 1.5rem);
+  }
+
   .route-statistics {
     width: 100%;
     grid-template-columns:
