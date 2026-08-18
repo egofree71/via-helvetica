@@ -39,14 +39,17 @@ class FakeObservable {
   }
 }
 
-function createRuntime(): {
+function createRuntime(
+  initialCoordinate: [number, number] = [2_600_000, 1_200_000],
+): {
   runtime: MapRuntime;
   viewport: HTMLDivElement;
   mapEvents: FakeObservable;
+  setCoordinate: (coordinate: [number, number]) => void;
 } {
   const viewport = document.createElement('div');
   const mapEvents = new FakeObservable();
-  const coordinate = [2_600_000, 1_200_000];
+  let coordinate = initialCoordinate;
   const map = {
     getViewport: () => viewport,
     getEventCoordinate: () => coordinate,
@@ -61,8 +64,12 @@ function createRuntime(): {
     } as unknown as MapRuntime,
     viewport,
     mapEvents,
+    setCoordinate: (nextCoordinate) => {
+      coordinate = nextCoordinate;
+    },
   };
 }
+
 
 const hookHarness: { controller: MapPositionInspectionController | null } = {
   controller: null,
@@ -138,6 +145,14 @@ describe('useMapPositionInspection', () => {
       2_600_000,
       1_200_000,
     ]);
+    expect(hookHarness.controller?.inspection?.wgs84Coordinate[0]).toBeCloseTo(
+      7.43863242,
+      6,
+    );
+    expect(hookHarness.controller?.inspection?.wgs84Coordinate[1]).toBeCloseTo(
+      46.95108277,
+      6,
+    );
     expect(hookHarness.controller?.inspection?.elevationStatus).toBe('ready');
     expect(hookHarness.controller?.inspection?.elevationMeters).toBe(553.6);
     expect(
@@ -148,6 +163,36 @@ describe('useMapPositionInspection', () => {
 
     expect(hookHarness.controller?.inspection).toBeNull();
     expect(runtime.mapPositionMarker.feature.getGeometry()).toBeUndefined();
+  });
+
+  it('preserves the native context menu on OpenLayers controls', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(hover: hover) and (pointer: fine)',
+    }));
+    const { runtime, viewport } = createRuntime();
+    const control = document.createElement('div');
+    control.className = 'ol-control';
+    const attributionLink = document.createElement('a');
+    control.appendChild(attributionLink);
+    viewport.appendChild(control);
+
+    await act(async () => {
+      root?.render(createElement(Harness, { runtime, onOpen: vi.fn() }));
+    });
+
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+    });
+
+    await act(async () => {
+      attributionLink.dispatchEvent(event);
+    });
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(fetchPointHeight).not.toHaveBeenCalled();
+    expect(hookHarness.controller?.inspection).toBeNull();
   });
 
   it('does not replace the native context menu on coarse-pointer devices', async () => {
@@ -173,14 +218,26 @@ describe('useMapPositionInspection', () => {
     expect(hookHarness.controller?.inspection).toBeNull();
   });
 
-  it('aborts an older height lookup when another position is inspected', async () => {
+  it('keeps the newest point when an older height response arrives late', async () => {
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: query === '(hover: hover) and (pointer: fine)',
     }));
-    vi.mocked(fetchPointHeight).mockImplementation(
-      () => new Promise<number>(() => undefined),
-    );
-    const { runtime, viewport } = createRuntime();
+    let resolveFirst: ((value: number) => void) | null = null;
+    let resolveSecond: ((value: number) => void) | null = null;
+    vi.mocked(fetchPointHeight)
+      .mockImplementationOnce(
+        () =>
+          new Promise<number>((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<number>((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+    const { runtime, viewport, setCoordinate } = createRuntime();
 
     await act(async () => {
       root?.render(createElement(Harness, { runtime, onOpen: vi.fn() }));
@@ -190,6 +247,10 @@ describe('useMapPositionInspection', () => {
       viewport.dispatchEvent(
         new MouseEvent('contextmenu', { cancelable: true, button: 2 }),
       );
+    });
+
+    setCoordinate([2_601_000, 1_201_000]);
+    await act(async () => {
       viewport.dispatchEvent(
         new MouseEvent('contextmenu', { cancelable: true, button: 2 }),
       );
@@ -199,5 +260,26 @@ describe('useMapPositionInspection', () => {
     const secondSignal = vi.mocked(fetchPointHeight).mock.calls[1][1];
     expect(firstSignal.aborted).toBe(true);
     expect(secondSignal.aborted).toBe(false);
+
+    await act(async () => {
+      resolveSecond?.(612.4);
+      await Promise.resolve();
+    });
+    expect(hookHarness.controller?.inspection?.coordinate).toEqual([
+      2_601_000,
+      1_201_000,
+    ]);
+    expect(hookHarness.controller?.inspection?.elevationMeters).toBe(612.4);
+
+    await act(async () => {
+      resolveFirst?.(999.9);
+      await Promise.resolve();
+    });
+
+    expect(hookHarness.controller?.inspection?.coordinate).toEqual([
+      2_601_000,
+      1_201_000,
+    ]);
+    expect(hookHarness.controller?.inspection?.elevationMeters).toBe(612.4);
   });
 });

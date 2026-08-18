@@ -143,6 +143,8 @@ export interface MapInformationLayersController {
   handleSwitzerlandMobilityHikingProfileHoverDistanceChange: (
     distanceMeters: number | null,
   ) => void;
+  /** Clears non-route information popups, chooser state, and pending identify work. */
+  clearInformationContext: () => void;
   /** Closes every information popup, selection, and pending request. */
   closeMapInformationPopup: () => void;
   /** Closes the public-route panel without changing the current map view. */
@@ -1232,6 +1234,7 @@ export function useMapInformationLayers(
     switzerlandMobilityHikingPanel,
     switzerlandMobilityHikingMapHoverDistanceMeters,
     handleSwitzerlandMobilityHikingProfileHoverDistanceChange,
+    clearInformationContext,
     closeMapInformationPopup,
     dismissSwitzerlandMobilityHikingPanel,
   };

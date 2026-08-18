@@ -34,6 +34,7 @@ const routeHarness = vi.hoisted(() => ({
   candidates: [] as Array<Record<string, unknown>>,
 }));
 const informationHarness = vi.hoisted(() => ({
+  clearInformationContext: null as (() => void) | null,
   selectMapInformationChoice: null as
     | ((choice: MapInformationChoice) => void)
     | null,
@@ -218,6 +219,7 @@ function Harness({
     onInformationSelected,
     onSwitzerlandMobilityHikingRouteAccepted: onRouteAccepted,
   });
+  informationHarness.clearInformationContext = controller.clearInformationContext;
   informationHarness.selectMapInformationChoice =
     controller.selectMapInformationChoice;
   informationHarness.mapInformationChoices = controller.mapInformationChoices;
@@ -238,6 +240,7 @@ describe('useMapInformationLayers click lifecycle', () => {
     closureHarness.signals.length = 0;
     routeHarness.candidates = [];
     selectionHarness.openPanel = null;
+    informationHarness.clearInformationContext = null;
     informationHarness.selectMapInformationChoice = null;
     informationHarness.mapInformationChoices = null;
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -256,6 +259,25 @@ describe('useMapInformationLayers click lifecycle', () => {
     container.remove();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('clears transient information without destroying the selected public route', async () => {
+    const { runtime } = createRuntime();
+
+    await act(async () => {
+      root?.render(createElement(Harness, { runtime }));
+    });
+    await act(async () => {
+      selectionHarness.openPanel?.();
+    });
+
+    expect(container.textContent).toContain('route:ready');
+
+    await act(async () => {
+      informationHarness.clearInformationContext?.();
+    });
+
+    expect(container.textContent).toContain('route:ready');
   });
 
   it('keeps the identify request alive when the same click closes a public-route panel', async () => {

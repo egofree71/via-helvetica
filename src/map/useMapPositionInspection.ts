@@ -105,6 +105,16 @@ export function useMapPositionInspection(
         return;
       }
 
+      // The OpenLayers viewport also contains attribution and scale controls.
+      // Preserve their native context menu so official source links remain fully
+      // usable; only the actual map canvas area belongs to point inspection.
+      if (
+        event.target instanceof Element &&
+        event.target.closest('.ol-control')
+      ) {
+        return;
+      }
+
       const coordinate = map.getEventCoordinate(event);
 
       if (!containsCoordinate(MAP_EXTENT, coordinate)) {

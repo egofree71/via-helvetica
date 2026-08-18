@@ -718,14 +718,20 @@ workflow takes ownership.
 
 Desktop fine-pointer users can also right-click the map to inspect an exact point
 without entering the left-click information-layer pipeline. The browser context
-menu is suppressed only for this supported desktop gesture. A dedicated marker,
-using the same visual language as exact coordinate search, appears immediately;
-WGS 84 is derived locally from the native LV95 click while the official GeoAdmin
-point-height service loads the terrain elevation independently. A newer right-click,
-ordinary map click, panel dismissal, or unmount aborts obsolete height work. The
-compact lower-map panel temporarily replaces itinerary summaries but does not
-change the current itinerary, route geometry, or information-layer visibility.
-No mobile long-press equivalent is introduced.
+menu is suppressed only for this supported desktop map gesture; OpenLayers controls
+and attribution links retain their native context menu. A dedicated marker, using
+the same visual language as exact coordinate search, appears immediately; WGS 84
+is derived locally from the native LV95 click while the official GeoAdmin
+point-height service loads the terrain elevation independently. The compact
+lower-map panel applies the same minimal `keep-visible` pan as point-information
+panels when it would cover the inspected marker, without changing zoom. A newer
+right-click, ordinary map click, panel dismissal, or unmount aborts obsolete height
+work. The panel temporarily replaces itinerary summaries but preserves the current
+SwitzerlandMobility selection, route geometry, loaded metrics/profile, and
+information-layer visibility. Itinerary summaries stay mounted and are only hidden
+while inspection owns the lower map area, so local presentation state such as an
+expanded elevation profile returns unchanged when inspection closes. No mobile
+long-press equivalent is introduced.
 
 Geolocation is requested only after explicit user action. A valid WGS 84
 position is converted to LV95, checked against the configured extent, displayed,

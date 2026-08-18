@@ -60,6 +60,7 @@ import {
   useMapInformationLayers,
 } from './map/useMapInformationLayers';
 import { useMapRuntime } from './map/useMapRuntime';
+import { ensureMapInformationCoordinateVisible } from './map/mapInformationViewport';
 import { useMapPositionInspection } from './map/useMapPositionInspection';
 import {
   resolveInitialMapLayerOpacities,
@@ -521,6 +522,7 @@ export default function App() {
     switzerlandMobilityHikingPanel,
     switzerlandMobilityHikingMapHoverDistanceMeters,
     handleSwitzerlandMobilityHikingProfileHoverDistanceChange,
+    clearInformationContext,
     closeMapInformationPopup,
     dismissSwitzerlandMobilityHikingPanel,
   } = useMapInformationLayers({
@@ -536,9 +538,12 @@ export default function App() {
   });
 
   const handleMapPositionOpen = useCallback(() => {
-    closeMapInformationPopup();
+    // Right-click inspection is informational: clear competing transient details
+    // without destroying the current SwitzerlandMobility itinerary. Its panel is
+    // hidden temporarily below while the position panel owns the lower map area.
+    clearInformationContext();
     clearSelectedSearchResult();
-  }, [clearSelectedSearchResult, closeMapInformationPopup]);
+  }, [clearInformationContext, clearSelectedSearchResult]);
 
   const {
     inspection: mapPositionInspection,
@@ -547,6 +552,58 @@ export default function App() {
     mapRuntimeRef,
     onOpen: handleMapPositionOpen,
   });
+
+  const mapPositionInspectionCoordinate =
+    mapPositionInspection?.coordinate ?? null;
+
+  /**
+   * Keeps the inspected point visible when the lower-map panel would otherwise
+   * cover the exact marker. The zoom stays unchanged and only the smallest pan
+   * required by the shared point-information placement policy is applied.
+   */
+  useEffect(() => {
+    const runtime = mapRuntimeRef.current;
+    const panelElement = appRef.current?.querySelector<HTMLElement>(
+      '.map-position-summary',
+    );
+
+    if (!runtime || !mapPositionInspectionCoordinate || !panelElement) {
+      return;
+    }
+
+    let animationFrameId: number | null = null;
+    const keepInspectedPointVisible = () => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+
+      animationFrameId = window.requestAnimationFrame(() => {
+        animationFrameId = null;
+        ensureMapInformationCoordinateVisible(
+          runtime.map,
+          mapPositionInspectionCoordinate,
+          panelElement,
+          'keep-visible',
+        );
+      });
+    };
+
+    keepInspectedPointVisible();
+
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(keepInspectedPointVisible);
+    resizeObserver?.observe(panelElement);
+
+    return () => {
+      resizeObserver?.disconnect();
+
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [mapPositionInspectionCoordinate, mapRuntimeRef]);
 
   const closeTransientMapInformation = useCallback(() => {
     closeMapInformationPopup();
@@ -781,6 +838,7 @@ export default function App() {
         isRouteCreationActive ? 'app--route-creation' : '',
         isRouteOperationPending ? 'app--route-busy' : '',
         isMobileMapUiHidden ? 'app--map-ui-hidden' : '',
+        mapPositionInspection ? 'app--map-position-inspection-open' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -1070,8 +1128,7 @@ export default function App() {
       )}
 
       {switzerlandMobilityHikingPanel &&
-        !mapInformationChoices &&
-        !mapPositionInspection && (
+        !mapInformationChoices && (
         <SwitzerlandMobilityHikingPanel
           status={switzerlandMobilityHikingPanel}
           onProfileHoverDistanceChange={
@@ -1086,8 +1143,7 @@ export default function App() {
 
       {activeRouteSegments.length > 0 &&
         !switzerlandMobilityHikingPanel &&
-        !mapInformationChoices &&
-        !mapPositionInspection && (
+        !mapInformationChoices && (
           <RouteStatistics
             distanceMeters={routeDistanceMeters}
             elevationStatus={routeElevationStatus}

@@ -1490,6 +1490,14 @@ select {
   text-align: center;
 }
 
+/* Position inspection temporarily owns the lower map area, but the itinerary
+   summaries stay mounted so local UI state such as an expanded elevation
+   profile is restored unchanged when the inspection closes. */
+.app--map-position-inspection-open .route-summary,
+.app--map-position-inspection-open .switzerland-mobility-hiking-summary {
+  display: none;
+}
+
 .route-summary {
   position: absolute;
   z-index: 20;
@@ -2383,6 +2391,7 @@ select {
   .app--map-ui-hidden .map-controls,
   .app--map-ui-hidden .map-information-popup,
   .app--map-ui-hidden .map-information-choice-summary,
+  .app--map-ui-hidden .map-position-summary,
   .app--map-ui-hidden .route-summary,
   .app--map-ui-hidden .switzerland-mobility-hiking-summary {
     visibility: hidden;
