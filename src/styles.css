@@ -867,16 +867,84 @@ select {
   flex: 0 0 auto;
 }
 
+.public-transport-stop-choice-summary {
+  position: absolute;
+  z-index: 30;
+  bottom: 1rem;
+  left: 50%;
+  display: flex;
+  width: min(36rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  transform: translateX(-50%);
+}
+
+/* Stop ambiguity is a temporary map decision, like the SwitzerlandMobility
+   overlap chooser, rather than a stop-details popup. Keep it compact and
+   anchored to the lower map area before opening the detailed timetable panel. */
+.public-transport-stop-choice-panel {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgb(32 47 60 / 22%);
+  border-radius: 10px;
+  color: #17212b;
+  background: rgb(255 255 255 / 97%);
+  box-shadow: 0 4px 18px rgb(0 0 0 / 22%);
+  backdrop-filter: blur(8px);
+}
+
+.public-transport-stop-choice-panel-header {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.75rem 0.7rem 1rem;
+}
+
+.public-transport-stop-choice-close {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  color: #b71919;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.9rem;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.public-transport-stop-choice-close:hover {
+  background: rgb(183 25 25 / 9%);
+}
+
+.public-transport-stop-choice-close:focus-visible,
+.public-transport-stop-choice:focus-visible {
+  outline: 3px solid rgb(23 105 224 / 40%);
+  outline-offset: 1px;
+}
+
+.public-transport-stop-choice-content {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid rgb(32 47 60 / 13%);
+}
+
 .public-transport-stop-choice-hint {
-  color: #5c6872;
-  font-size: 0.85rem;
+  margin: 0.75rem 0;
+  color: #52606b;
+  font-size: 0.88rem;
   font-weight: 500;
 }
 
 .public-transport-stop-choices {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  display: grid;
+  max-height: min(15rem, calc(100vh - 13rem));
+  gap: 0.45rem;
+  overflow-y: auto;
 }
 
 .public-transport-stop-choice {
@@ -886,24 +954,20 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
-  padding: 0.65rem 0.75rem;
+  padding: 0.7rem 0.8rem;
   border: 1px solid rgb(32 47 60 / 16%);
   border-radius: 8px;
   color: #17212b;
-  background: #fff;
+  background: rgb(23 105 224 / 6%);
   font: inherit;
   font-weight: 650;
+  line-height: 1.3;
   text-align: left;
   cursor: pointer;
 }
 
 .public-transport-stop-choice:hover {
-  background: rgb(23 105 224 / 6%);
-}
-
-.public-transport-stop-choice:focus-visible {
-  outline: 3px solid rgb(23 105 224 / 40%);
-  outline-offset: 2px;
+  background: rgb(23 105 224 / 12%);
 }
 
 .public-transport-stop-choice-modes {
@@ -2474,6 +2538,7 @@ select {
   /* Keep the close glyph compact while giving phone users the same 44 px
      touch target used by the other primary mobile controls. */
   .map-information-popup-close,
+  .public-transport-stop-choice-close,
   .switzerland-mobility-hiking-panel-close {
     width: 2.75rem;
     height: 2.75rem;
@@ -2525,6 +2590,56 @@ select {
   .location-message {
     top: 10.7rem;
     right: 3.55rem;
+  }
+
+  /* Stop-overlap choices share the same transient bottom decision pattern as
+     SwitzerlandMobility route choices; detailed timetable content still uses
+     the regular half-height information sheet after one stop is selected. */
+  .public-transport-stop-choice-summary {
+    z-index: 30;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: auto;
+    max-height: 50vh;
+    max-height: 50dvh;
+    transform: none;
+  }
+
+  .public-transport-stop-choice-panel {
+    display: flex;
+    width: 100%;
+    max-height: 50vh;
+    max-height: 50dvh;
+    min-height: 0;
+    flex-direction: column;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .public-transport-stop-choice-panel-header {
+    min-height: 3.2rem;
+    padding-left: 0.8rem;
+  }
+
+  .public-transport-stop-choice-content {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .public-transport-stop-choices {
+    min-height: 0;
+    max-height: none;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .switzerland-mobility-hiking-summary {

@@ -428,54 +428,56 @@ function PublicTransportStopChoices({
   }, [onClose]);
 
   return (
-    <aside
-      className="map-information-popup public-transport-stop-popup"
-      role="dialog"
-      aria-label={t('transportStops.choicesTitle')}
-    >
-      <header className="map-information-popup-header">
-        <div className="public-transport-stop-heading">
-          <strong>{t('transportStops.choicesTitle')}</strong>
-          <span className="public-transport-stop-choice-hint">
-            {t('transportStops.choicesHint')}
-          </span>
-        </div>
-        <button
-          type="button"
-          className="map-information-popup-close"
-          aria-label={t('transportStops.close')}
-          title={t('transportStops.close')}
-          onClick={onClose}
-        >
-          ×
-        </button>
-      </header>
+    <div className="public-transport-stop-choice-summary">
+      <section
+        className="public-transport-stop-choice-panel"
+        role="dialog"
+        aria-label={t('transportStops.choicesTitle')}
+      >
+        <header className="public-transport-stop-choice-panel-header">
+          <div className="public-transport-stop-heading">
+            <strong>{t('transportStops.choicesTitle')}</strong>
+          </div>
+          <button
+            type="button"
+            className="public-transport-stop-choice-close"
+            aria-label={t('transportStops.close')}
+            title={t('transportStops.close')}
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
 
-      <div className="map-information-popup-body">
-        <div className="public-transport-stop-choices">
-          {stops.map((stop) => (
-            <button
-              key={stop.id}
-              type="button"
-              className="public-transport-stop-choice"
-              onClick={() => onSelectStop(stop)}
-            >
-              <span>{stop.name}</span>
-              <span className="public-transport-stop-choice-modes">
-                {stop.modes.map((mode) => (
-                  <img
-                    key={mode}
-                    src={MODE_ICON_URLS[mode]}
-                    alt={t(MODE_LABEL_KEYS[mode])}
-                    title={t(MODE_LABEL_KEYS[mode])}
-                  />
-                ))}
-              </span>
-            </button>
-          ))}
+        <div className="public-transport-stop-choice-content">
+          <p className="public-transport-stop-choice-hint">
+            {t('transportStops.choicesHint')}
+          </p>
+          <div className="public-transport-stop-choices">
+            {stops.map((stop) => (
+              <button
+                key={stop.id}
+                type="button"
+                className="public-transport-stop-choice"
+                onClick={() => onSelectStop(stop)}
+              >
+                <span>{stop.name}</span>
+                <span className="public-transport-stop-choice-modes">
+                  {stop.modes.map((mode) => (
+                    <img
+                      key={mode}
+                      src={MODE_ICON_URLS[mode]}
+                      alt={t(MODE_LABEL_KEYS[mode])}
+                      title={t(MODE_LABEL_KEYS[mode])}
+                    />
+                  ))}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-    </aside>
+      </section>
+    </div>
   );
 }
 

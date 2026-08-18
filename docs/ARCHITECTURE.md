@@ -667,7 +667,8 @@ route mode:
 The stop layer uses validated structured data and a project-owned popup. At
 coarser stop scales, one rendered symbol can represent nearby stops hidden only
 by presentation decluttering; clicking that rendered symbol opens a compact
-chooser before any timetable request so the user can select the exact stop.
+bottom-centred chooser, matching the SwitzerlandMobility overlap-choice pattern,
+before any timetable request so the user can select the exact stop.
 Closure and military details arrive as official HTML fragments, pass through a
 strict sanitizer, and are rendered inside project-owned popup wrappers. Selected
 military geometry is highlighted in a separate vector layer.

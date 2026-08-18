@@ -74,6 +74,10 @@ describe('PublicTransportStopPopup choices', () => {
     });
 
     expect(container.textContent).toContain('Choisir un arrêt');
+    expect(
+      container.querySelector('.public-transport-stop-choice-summary'),
+    ).not.toBeNull();
+    expect(container.querySelector('.map-information-popup')).toBeNull();
     expect(container.textContent).toContain('Lausanne, gare');
     expect(container.textContent).toContain('Lausanne, gare sud');
     expect(loadStationBoard).not.toHaveBeenCalled();
