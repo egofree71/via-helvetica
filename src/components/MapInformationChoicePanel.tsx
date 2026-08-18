@@ -118,7 +118,7 @@ export default function MapInformationChoicePanel({
       <button
         key={choiceKey(choice)}
         type="button"
-        className="public-transport-stop-choice map-information-choice"
+        className="map-information-choice"
         onClick={() => onSelectChoice(choice)}
       >
         <span>
@@ -134,17 +134,17 @@ export default function MapInformationChoicePanel({
   return (
     <div className="map-information-choice-summary">
       <section
-        className="public-transport-stop-choice-panel"
+        className="map-information-choice-panel"
         role="dialog"
         aria-label={t('mapInformationChoice.title')}
       >
-        <header className="public-transport-stop-choice-panel-header">
-          <div className="public-transport-stop-heading">
+        <header className="map-information-choice-panel-header">
+          <div className="map-information-choice-heading">
             <strong>{t('mapInformationChoice.title')}</strong>
           </div>
           <button
             type="button"
-            className="public-transport-stop-choice-close"
+            className="map-information-choice-close"
             aria-label={t('mapInformationChoice.close')}
             title={t('mapInformationChoice.close')}
             onClick={onClose}
@@ -153,11 +153,11 @@ export default function MapInformationChoicePanel({
           </button>
         </header>
 
-        <div className="public-transport-stop-choice-content">
-          <p className="public-transport-stop-choice-hint">
+        <div className="map-information-choice-content">
+          <p className="map-information-choice-hint">
             {t('mapInformationChoice.hint')}
           </p>
-          <div className="public-transport-stop-choices">
+          <div className="map-information-choices">
             {safetyChoices.length > 0 && (
               <div className="map-information-choice-group">
                 <h2>{t('mapInformationChoice.safety')}</h2>

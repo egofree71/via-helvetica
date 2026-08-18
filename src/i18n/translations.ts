@@ -166,10 +166,6 @@ const frenchTranslations = {
     'Étape {number} : {section}',
   'switzerlandMobilityHiking.routeNumber': 'Itinéraire {number}',
   'switzerlandMobilityHiking.unnamedRoute': 'Itinéraire SuisseMobile',
-  'switzerlandMobilityHiking.multipleTitle':
-    'Plusieurs itinéraires passent ici',
-  'switzerlandMobilityHiking.multipleHint':
-    'Choisissez l’itinéraire à afficher.',
   'switzerlandMobilityHiking.loading': 'Chargement de l’itinéraire…',
   'switzerlandMobilityHiking.loadError':
     'Les informations de cet itinéraire n’ont pas pu être chargées.',
@@ -189,9 +185,6 @@ const frenchTranslations = {
     'Les informations de cette zone de danger n’ont pas pu être chargées.',
   'transportStops.layer': 'Arrêts de transports publics',
   'transportStops.title': 'Arrêt de transport public',
-  'transportStops.choicesTitle': 'Choisir un arrêt',
-  'transportStops.choicesHint':
-    'Plusieurs arrêts se trouvent à cet endroit. Sélectionnez celui à consulter.',
   'transportStops.close': 'Fermer',
   'transportStops.loading': 'Chargement des informations…',
   'transportStops.loadError':
@@ -412,10 +405,6 @@ const germanTranslations: Record<TranslationKey, string> = {
     'Etappe {number}: {section}',
   'switzerlandMobilityHiking.routeNumber': 'Route {number}',
   'switzerlandMobilityHiking.unnamedRoute': 'SchweizMobil-Wanderroute',
-  'switzerlandMobilityHiking.multipleTitle':
-    'Hier verlaufen mehrere Routen',
-  'switzerlandMobilityHiking.multipleHint':
-    'Wählen Sie die Route aus, die angezeigt werden soll.',
   'switzerlandMobilityHiking.loading': 'Route wird geladen…',
   'switzerlandMobilityHiking.loadError':
     'Die Informationen zu dieser Route konnten nicht geladen werden.',
@@ -435,9 +424,6 @@ const germanTranslations: Record<TranslationKey, string> = {
     'Die Informationen zu dieser Gefahrenzone konnten nicht geladen werden.',
   'transportStops.layer': 'Haltestellen des öffentlichen Verkehrs',
   'transportStops.title': 'Haltestelle des öffentlichen Verkehrs',
-  'transportStops.choicesTitle': 'Haltestelle auswählen',
-  'transportStops.choicesHint':
-    'An dieser Stelle liegen mehrere Haltestellen. Wählen Sie die gewünschte aus.',
   'transportStops.close': 'Schliessen',
   'transportStops.loading': 'Informationen werden geladen…',
   'transportStops.loadError':
@@ -657,10 +643,6 @@ const italianTranslations: Record<TranslationKey, string> = {
   'switzerlandMobilityHiking.routeNumber': 'Itinerario {number}',
   'switzerlandMobilityHiking.unnamedRoute':
     'Itinerario escursionistico SvizzeraMobile',
-  'switzerlandMobilityHiking.multipleTitle':
-    'Qui passano diversi itinerari',
-  'switzerlandMobilityHiking.multipleHint':
-    'Scegli l’itinerario da visualizzare.',
   'switzerlandMobilityHiking.loading': 'Caricamento dell’itinerario…',
   'switzerlandMobilityHiking.loadError':
     'Non è stato possibile caricare le informazioni su questo itinerario.',
@@ -680,9 +662,6 @@ const italianTranslations: Record<TranslationKey, string> = {
     'Non è stato possibile caricare le informazioni su questa zona di pericolo.',
   'transportStops.layer': 'Fermate dei trasporti pubblici',
   'transportStops.title': 'Fermata dei trasporti pubblici',
-  'transportStops.choicesTitle': 'Scegliere una fermata',
-  'transportStops.choicesHint':
-    'In questo punto sono presenti più fermate. Seleziona quella da consultare.',
   'transportStops.close': 'Chiudi',
   'transportStops.loading': 'Caricamento delle informazioni…',
   'transportStops.loadError':
@@ -901,10 +880,6 @@ const englishTranslations: Record<TranslationKey, string> = {
   'switzerlandMobilityHiking.routeNumber': 'Route {number}',
   'switzerlandMobilityHiking.unnamedRoute':
     'SwitzerlandMobility hiking route',
-  'switzerlandMobilityHiking.multipleTitle':
-    'Several routes pass here',
-  'switzerlandMobilityHiking.multipleHint':
-    'Choose the route to display.',
   'switzerlandMobilityHiking.loading': 'Loading route…',
   'switzerlandMobilityHiking.loadError':
     'Information for this route could not be loaded.',
@@ -924,9 +899,6 @@ const englishTranslations: Record<TranslationKey, string> = {
     'The information for this danger zone could not be loaded.',
   'transportStops.layer': 'Public transport stops',
   'transportStops.title': 'Public transport stop',
-  'transportStops.choicesTitle': 'Choose a stop',
-  'transportStops.choicesHint':
-    'Several stops are represented here. Select the one you want to inspect.',
   'transportStops.close': 'Close',
   'transportStops.loading': 'Loading information…',
   'transportStops.loadError':

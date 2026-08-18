@@ -14,6 +14,7 @@ import {
   getPublicTransportStopChoicesForVisibleStop,
   getPublicTransportStopFromFeature,
   publicTransportStopsCoverageContainsViewport,
+  updatePublicTransportStopDeclutterPriority,
   updatePublicTransportStopSelection,
   updatePublicTransportStopsViewRotation,
   type PublicTransportStop,
@@ -33,9 +34,6 @@ const routeHarness = vi.hoisted(() => ({
   candidates: [] as Array<Record<string, unknown>>,
 }));
 const informationHarness = vi.hoisted(() => ({
-  selectPublicTransportStop: null as
-    | ((stop: PublicTransportStop) => void)
-    | null,
   selectMapInformationChoice: null as
     | ((choice: MapInformationChoice) => void)
     | null,
@@ -85,7 +83,6 @@ vi.mock('./useSwitzerlandMobilityHikingSelection', async () => {
           [],
         ),
         showIdentifyError: React.useCallback(() => undefined, []),
-        inspectAt: React.useCallback(async () => false, []),
         selectCandidate: React.useCallback(() => undefined, []),
         mapHoverDistanceMeters: null,
         handleProfileHoverDistanceChange: React.useCallback(
@@ -221,8 +218,6 @@ function Harness({
     onInformationSelected,
     onSwitzerlandMobilityHikingRouteAccepted: onRouteAccepted,
   });
-  informationHarness.selectPublicTransportStop =
-    controller.selectPublicTransportStop;
   informationHarness.selectMapInformationChoice =
     controller.selectMapInformationChoice;
   informationHarness.mapInformationChoices = controller.mapInformationChoices;
@@ -243,7 +238,6 @@ describe('useMapInformationLayers click lifecycle', () => {
     closureHarness.signals.length = 0;
     routeHarness.candidates = [];
     selectionHarness.openPanel = null;
-    informationHarness.selectPublicTransportStop = null;
     informationHarness.selectMapInformationChoice = null;
     informationHarness.mapInformationChoices = null;
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -672,6 +666,64 @@ describe('useMapInformationLayers click lifecycle', () => {
       'choices:publicTransportStop,publicTransportStop',
     );
     expect(clickSequence.slice(0, 2)).toEqual(['choices', 'clear']);
+  });
+
+  it('keeps the clicked stop as declutter priority while remote identification is pending', async () => {
+    const hitFeature = {};
+    const { runtime, mapEvents } = createRuntime({ hitFeature });
+    const renderedStop: PublicTransportStop = {
+      id: 'stop-a',
+      stationId: 'station-a',
+      name: 'Stop A',
+      modes: ['bus'],
+      coordinate: [2_553_000, 1_171_000],
+    };
+    let resolveClosure: ((value: null) => void) | null = null;
+
+    vi.mocked(publicTransportStopsCoverageContainsViewport).mockReturnValue(
+      true,
+    );
+    vi.mocked(getPublicTransportStopFromFeature).mockReturnValue(renderedStop);
+    vi.mocked(getPublicTransportStopChoicesForVisibleStop).mockReturnValue([
+      renderedStop,
+    ]);
+    vi.mocked(identifyTrailClosure).mockImplementationOnce(
+      () =>
+        new Promise<null>((resolve) => {
+          resolveClosure = resolve;
+        }),
+    );
+
+    await act(async () => {
+      root?.render(
+        createElement(Harness, {
+          runtime,
+          publicTransportStopsVisible: true,
+        }),
+      );
+    });
+
+    vi.mocked(updatePublicTransportStopDeclutterPriority).mockClear();
+
+    await act(async () => {
+      mapEvents.emit('singleclick', {
+        pixel: [400, 300],
+        coordinate: [2_553_000, 1_171_000],
+      });
+      await Promise.resolve();
+    });
+
+    expect(updatePublicTransportStopDeclutterPriority).toHaveBeenCalledWith(
+      runtime.publicTransportStopsDisplay,
+      renderedStop.id,
+    );
+    expect(container.textContent).toContain('choices:closed');
+
+    await act(async () => {
+      resolveClosure?.(null);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
   });
 
   it('recomputes screen-space decluttering after render rather than on raw resolution changes', async () => {

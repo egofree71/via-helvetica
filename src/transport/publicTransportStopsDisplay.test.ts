@@ -6,7 +6,7 @@
 import type OlMap from 'ol/Map.js';
 import Icon from 'ol/style/Icon.js';
 import type Style from 'ol/style/Style.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { PublicTransportStop } from './publicTransportStopModel';
 import {
   applyPublicTransportStopDeclutterVisibility,
@@ -50,6 +50,7 @@ function createMapHarness(
     getRotation: () => rotation,
   };
   const map = {
+    getSize: () => [1_000, 800],
     getView: () => view,
     getPixelFromCoordinate: (coordinate: [number, number]) => {
       const x = coordinate[0] / resolution;
@@ -93,6 +94,21 @@ function renderedStopIds(
 }
 
 describe('publicTransportStopsDisplay decluttering', () => {
+  it('keeps newly loaded stops hidden until the first rendered-frame declutter pass', () => {
+    const display = createPublicTransportStopsDisplay();
+    const { map } = createMapHarness(10);
+    const stops = [
+      createStop('a', [2_550_000, 1_170_000]),
+      createStop('b', [2_550_100, 1_170_000]),
+    ];
+
+    updatePublicTransportStopsDisplay(display, stops);
+    expect(renderedStopIds(display, 10)).toEqual([]);
+
+    applyPublicTransportStopDeclutterVisibility(display, map);
+    expect(renderedStopIds(display, 10).length).toBeGreaterThan(0);
+  });
+
   it('keeps close stops fanned out and simultaneously renderable', () => {
     const display = createPublicTransportStopsDisplay();
     const { map } = createMapHarness(10);
@@ -233,9 +249,11 @@ describe('publicTransportStopsDisplay decluttering', () => {
 
   it('rotates fan-out displacement into screen axes', () => {
     const display = createPublicTransportStopsDisplay();
+    const { map } = createMapHarness(10);
     const first = createStop('a', [2_550_000, 1_170_000]);
     const second = createStop('b', [2_550_020, 1_170_000]);
     updatePublicTransportStopsDisplay(display, [first, second]);
+    applyPublicTransportStopDeclutterVisibility(display, map);
     const feature = display.source.getFeatureById(first.id);
     const styleFunction = display.layer.getStyleFunction();
 
@@ -270,10 +288,30 @@ describe('publicTransportStopsDisplay decluttering', () => {
     expect(renderedStopIds(display, 2)).toEqual(['a', 'c']);
   });
 
+  it('does not schedule another render from a zero-area map frame', () => {
+    const display = createPublicTransportStopsDisplay();
+    const view = { getResolution: () => 10, getRotation: () => 0 };
+    const map = {
+      getSize: () => [0, 0],
+      getView: () => view,
+    } as unknown as OlMap;
+    const changedSpy = vi.spyOn(display.layer, 'changed');
+
+    updatePublicTransportStopsDisplay(display, [
+      createStop('a', [2_550_000, 1_170_000]),
+    ]);
+    changedSpy.mockClear();
+    applyPublicTransportStopDeclutterVisibility(display, map);
+
+    expect(changedSpy).not.toHaveBeenCalled();
+    expect(display.declutterSnapshot).toBeNull();
+  });
+
   it('does not cache an incomplete declutter pass before pixels can be resolved', () => {
     const display = createPublicTransportStopsDisplay();
     const view = { getResolution: () => 10, getRotation: () => 0 };
     const map = {
+      getSize: () => [1_000, 800],
       getView: () => view,
       getPixelFromCoordinate: () => null,
     } as unknown as OlMap;

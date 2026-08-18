@@ -23,27 +23,18 @@ import type {
   PublicTransportStop,
 } from '../transport/publicTransportStops';
 
-/** Temporary public-transport panel shown after a rendered stop is clicked. */
-export type PublicTransportStopPopupStatus =
-  | {
-      /** Several loaded stops share the visual footprint of the clicked symbol. */
-      state: 'choices';
-      /** Clicked visible stop first, followed by hidden declutter neighbours. */
-      stops: PublicTransportStop[];
-    }
-  | {
-      /** One concrete stop has been selected for timetable inspection. */
-      state: 'stop';
-      /** Stop whose departures and official timetable links are displayed. */
-      stop: PublicTransportStop;
-    };
+/** Selected public-transport stop shown after one concrete map choice is resolved. */
+export interface PublicTransportStopPopupStatus {
+  /** Concrete stop whose timetable is displayed. */
+  state: 'stop';
+  /** Stop whose departures and official timetable links are displayed. */
+  stop: PublicTransportStop;
+}
 
-/** Choice/detail state and callbacks for the temporary stop panel. */
+/** Detail state and dismissal callback for the temporary stop panel. */
 interface PublicTransportStopPopupProps {
-  /** Current overlap chooser or concrete stop detail state. */
+  /** Concrete selected-stop detail state. */
   status: PublicTransportStopPopupStatus;
-  /** Resolves the chooser to one concrete stop. */
-  onSelectStop: (stop: PublicTransportStop) => void;
   /** Dismisses the panel and its map selection halo. */
   onClose: () => void;
 }
@@ -404,99 +395,11 @@ function PublicTransportStopDetails({
   );
 }
 
-/** Lets the user resolve multiple stops represented by one decluttered symbol. */
-function PublicTransportStopChoices({
-  stops,
-  onSelectStop,
-  onClose,
-}: {
-  stops: PublicTransportStop[];
-  onSelectStop: (stop: PublicTransportStop) => void;
-  onClose: () => void;
-}) {
-  const { t } = useI18n();
-
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
-  }, [onClose]);
-
-  return (
-    <div className="public-transport-stop-choice-summary">
-      <section
-        className="public-transport-stop-choice-panel"
-        role="dialog"
-        aria-label={t('transportStops.choicesTitle')}
-      >
-        <header className="public-transport-stop-choice-panel-header">
-          <div className="public-transport-stop-heading">
-            <strong>{t('transportStops.choicesTitle')}</strong>
-          </div>
-          <button
-            type="button"
-            className="public-transport-stop-choice-close"
-            aria-label={t('transportStops.close')}
-            title={t('transportStops.close')}
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </header>
-
-        <div className="public-transport-stop-choice-content">
-          <p className="public-transport-stop-choice-hint">
-            {t('transportStops.choicesHint')}
-          </p>
-          <div className="public-transport-stop-choices">
-            {stops.map((stop) => (
-              <button
-                key={stop.id}
-                type="button"
-                className="public-transport-stop-choice"
-                onClick={() => onSelectStop(stop)}
-              >
-                <span>{stop.name}</span>
-                <span className="public-transport-stop-choice-modes">
-                  {stop.modes.map((mode) => (
-                    <img
-                      key={mode}
-                      src={MODE_ICON_URLS[mode]}
-                      alt={t(MODE_LABEL_KEYS[mode])}
-                      title={t(MODE_LABEL_KEYS[mode])}
-                    />
-                  ))}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-/** Renders either the stop-overlap chooser or the selected stop timetable. */
+/** Renders the timetable for one concrete stop selected from the map workflow. */
 export default function PublicTransportStopPopup({
   status,
-  onSelectStop,
   onClose,
 }: PublicTransportStopPopupProps) {
-  if (status.state === 'choices') {
-    return (
-      <PublicTransportStopChoices
-        stops={status.stops}
-        onSelectStop={onSelectStop}
-        onClose={onClose}
-      />
-    );
-  }
-
   return <PublicTransportStopDetails stop={status.stop} onClose={onClose} />;
 }
 

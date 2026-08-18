@@ -1,7 +1,6 @@
 /**
- * Business context: protects the declutter overlap chooser so several official
- * stops represented by one rendered symbol remain individually selectable
- * before any departure-board request is started.
+ * Business context: protects the concrete public-transport detail panel after
+ * the common map-information chooser has resolved one official stop.
  */
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -15,30 +14,25 @@ vi.mock('../transport/stationBoard', () => ({
   loadStationBoard: vi.fn(),
 }));
 
-const stops: PublicTransportStop[] = [
-  {
-    id: 'a',
-    stationId: 'station-a',
-    name: 'Lausanne, gare',
-    modes: ['train'],
-    coordinate: [2_537_900, 1_152_300],
-  },
-  {
-    id: 'b',
-    stationId: 'station-b',
-    name: 'Lausanne, gare sud',
-    modes: ['bus'],
-    coordinate: [2_537_980, 1_152_300],
-  },
-];
+const stop: PublicTransportStop = {
+  id: 'a',
+  stationId: 'station-a',
+  name: 'Lausanne, gare',
+  modes: ['train'],
+  coordinate: [2_537_900, 1_152_300],
+};
 
-describe('PublicTransportStopPopup choices', () => {
+describe('PublicTransportStopPopup', () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
 
   beforeEach(() => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     window.localStorage.setItem('via-helvetica-language', 'fr');
+    vi.mocked(loadStationBoard).mockResolvedValue({
+      departures: [],
+      modes: ['train'],
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -56,42 +50,27 @@ describe('PublicTransportStopPopup choices', () => {
     vi.restoreAllMocks();
   });
 
-  it('lists represented stops and waits for an explicit stop choice', async () => {
-    const onSelectStop = vi.fn();
-
+  it('loads departures only after one concrete stop detail panel is mounted', async () => {
     await act(async () => {
       root?.render(
         createElement(
           I18nProvider,
           null,
           createElement(PublicTransportStopPopup, {
-            status: { state: 'choices', stops },
-            onSelectStop,
+            status: { state: 'stop', stop },
             onClose: vi.fn(),
           }),
         ),
       );
+      await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('Choisir un arrêt');
-    expect(
-      container.querySelector('.public-transport-stop-choice-summary'),
-    ).not.toBeNull();
-    expect(container.querySelector('.map-information-popup')).toBeNull();
+    expect(container.querySelector('.map-information-popup')).not.toBeNull();
     expect(container.textContent).toContain('Lausanne, gare');
-    expect(container.textContent).toContain('Lausanne, gare sud');
-    expect(loadStationBoard).not.toHaveBeenCalled();
-
-    const buttons = container.querySelectorAll<HTMLButtonElement>(
-      '.public-transport-stop-choice',
+    expect(loadStationBoard).toHaveBeenCalledTimes(1);
+    expect(loadStationBoard).toHaveBeenCalledWith(
+      'station-a',
+      expect.any(AbortSignal),
     );
-    expect(buttons).toHaveLength(2);
-
-    await act(async () => {
-      buttons[1].click();
-    });
-
-    expect(onSelectStop).toHaveBeenCalledWith(stops[1]);
-    expect(loadStationBoard).not.toHaveBeenCalled();
   });
 });

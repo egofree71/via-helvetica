@@ -867,7 +867,6 @@ select {
   flex: 0 0 auto;
 }
 
-.public-transport-stop-choice-summary,
 .map-information-choice-summary {
   position: absolute;
   z-index: 30;
@@ -879,10 +878,7 @@ select {
   transform: translateX(-50%);
 }
 
-/* Map ambiguity is a temporary decision rather than a detail popup. The same
-   compact lower-map shell serves legacy stop overlap choices and the common
-   cross-layer chooser before one concrete information workflow opens. */
-.public-transport-stop-choice-panel {
+.map-information-choice-panel {
   width: 100%;
   overflow: hidden;
   border: 1px solid rgb(32 47 60 / 22%);
@@ -893,7 +889,7 @@ select {
   backdrop-filter: blur(8px);
 }
 
-.public-transport-stop-choice-panel-header {
+.map-information-choice-panel-header {
   display: flex;
   min-height: 3.5rem;
   align-items: center;
@@ -902,7 +898,20 @@ select {
   padding: 0.7rem 0.75rem 0.7rem 1rem;
 }
 
-.public-transport-stop-choice-close {
+.map-information-choice-heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.4rem;
+  line-height: 1.35;
+}
+
+.map-information-choice-heading strong {
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.map-information-choice-close {
   display: grid;
   width: 2.4rem;
   height: 2.4rem;
@@ -919,36 +928,36 @@ select {
   line-height: 1;
 }
 
-.public-transport-stop-choice-close:hover {
+.map-information-choice-close:hover {
   background: rgb(183 25 25 / 9%);
 }
 
-.public-transport-stop-choice-close:focus-visible,
-.public-transport-stop-choice:focus-visible {
+.map-information-choice-close:focus-visible,
+.map-information-choice:focus-visible {
   outline: 3px solid rgb(23 105 224 / 40%);
   outline-offset: 1px;
 }
 
-.public-transport-stop-choice-content {
+.map-information-choice-content {
   padding: 0 1rem 1rem;
   border-top: 1px solid rgb(32 47 60 / 13%);
 }
 
-.public-transport-stop-choice-hint {
+.map-information-choice-hint {
   margin: 0.75rem 0;
   color: #52606b;
   font-size: 0.88rem;
   font-weight: 500;
 }
 
-.public-transport-stop-choices {
+.map-information-choices {
   display: grid;
   max-height: min(15rem, calc(100vh - 13rem));
   gap: 0.45rem;
   overflow-y: auto;
 }
 
-.public-transport-stop-choice {
+.map-information-choice {
   display: flex;
   width: 100%;
   min-height: 2.8rem;
@@ -967,19 +976,8 @@ select {
   cursor: pointer;
 }
 
-.public-transport-stop-choice:hover {
+.map-information-choice:hover {
   background: rgb(23 105 224 / 12%);
-}
-
-.public-transport-stop-choice-modes {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 0.3rem;
-}
-
-.public-transport-stop-choice-modes img {
-  width: 1.35rem;
-  height: 1.35rem;
 }
 
 /* A map click can legitimately match several information layers. Keep the
@@ -1241,12 +1239,6 @@ select {
   backdrop-filter: blur(8px);
 }
 
-/* Route choices contain short public labels rather than metrics or a profile.
-   A narrower panel keeps the decision visually tied to the clicked map area. */
-.switzerland-mobility-hiking-panel--choices {
-  width: min(36rem, 100%);
-  align-self: center;
-}
 
 .switzerland-mobility-hiking-panel-header {
   display: flex;
@@ -1307,8 +1299,7 @@ select {
   background: rgb(183 25 25 / 9%);
 }
 
-.switzerland-mobility-hiking-panel-close:focus-visible,
-.switzerland-mobility-hiking-route-choices button:focus-visible {
+.switzerland-mobility-hiking-panel-close:focus-visible {
   outline: 3px solid rgb(23 105 224 / 40%);
   outline-offset: 1px;
 }
@@ -1361,48 +1352,6 @@ select {
   font-size: 0.82rem;
   font-weight: 600;
   text-align: center;
-}
-
-.switzerland-mobility-hiking-route-choices {
-  padding: 0 1rem 1rem;
-  border-top: 1px solid rgb(32 47 60 / 13%);
-}
-
-.switzerland-mobility-hiking-route-choices > p {
-  margin: 0.75rem 0;
-  color: #52606b;
-  font-size: 0.88rem;
-}
-
-.switzerland-mobility-hiking-route-choices > div {
-  display: grid;
-  max-height: min(15rem, calc(100vh - 13rem));
-  gap: 0.45rem;
-  overflow-y: auto;
-}
-
-.switzerland-mobility-hiking-route-choices button {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 0.18rem;
-  padding: 0.7rem 0.8rem;
-  border: 1px solid rgb(32 47 60 / 16%);
-  border-radius: 8px;
-  color: #17212b;
-  background: rgb(8 127 44 / 6%);
-  cursor: pointer;
-  line-height: 1.3;
-  text-align: left;
-}
-
-.switzerland-mobility-hiking-route-choices button:hover {
-  background: rgb(8 127 44 / 12%);
-}
-
-.switzerland-mobility-hiking-route-choices button span {
-  color: #52606b;
-  font-size: 0.86rem;
 }
 
 .route-summary {
@@ -2297,7 +2246,6 @@ select {
      present before the user inspected or panned the map. */
   .app--map-ui-hidden .map-controls,
   .app--map-ui-hidden .map-information-popup,
-  .app--map-ui-hidden .public-transport-stop-choice-summary,
   .app--map-ui-hidden .map-information-choice-summary,
   .app--map-ui-hidden .route-summary,
   .app--map-ui-hidden .switzerland-mobility-hiking-summary {
@@ -2577,7 +2525,7 @@ select {
   /* Keep the close glyph compact while giving phone users the same 44 px
      touch target used by the other primary mobile controls. */
   .map-information-popup-close,
-  .public-transport-stop-choice-close,
+  .map-information-choice-close,
   .switzerland-mobility-hiking-panel-close {
     width: 2.75rem;
     height: 2.75rem;
@@ -2633,7 +2581,6 @@ select {
 
   /* Ambiguity choices use one transient full-width bottom sheet on phones;
      detailed information still moves to its normal feature-specific surface. */
-  .public-transport-stop-choice-summary,
   .map-information-choice-summary {
     z-index: 30;
     bottom: 0;
@@ -2646,7 +2593,7 @@ select {
     transform: none;
   }
 
-  .public-transport-stop-choice-panel {
+  .map-information-choice-panel {
     display: flex;
     width: 100%;
     max-height: 50vh;
@@ -2659,12 +2606,12 @@ select {
     border-radius: 18px 18px 0 0;
   }
 
-  .public-transport-stop-choice-panel-header {
+  .map-information-choice-panel-header {
     min-height: 3.2rem;
     padding-left: 0.8rem;
   }
 
-  .public-transport-stop-choice-content {
+  .map-information-choice-content {
     display: flex;
     min-height: 0;
     flex: 1 1 auto;
@@ -2672,7 +2619,7 @@ select {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 
-  .public-transport-stop-choices {
+  .map-information-choices {
     min-height: 0;
     max-height: none;
     flex: 1 1 auto;
@@ -2680,6 +2627,7 @@ select {
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
   }
+
 
   .switzerland-mobility-hiking-summary {
     bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
@@ -2692,7 +2640,7 @@ select {
   /* Once a public route is the current itinerary, its metrics and optional
      profile use the same full-width mobile footprint as editable/imported
      itineraries. Transient loading and error states can stay tied to their map
-     click, while overlap choices use a separate full-width content-sized sheet. */
+     click; ambiguity choices use the separate common bottom sheet above. */
   .switzerland-mobility-hiking-summary--selected {
     z-index: 30;
     bottom: env(safe-area-inset-bottom, 0px);
@@ -2701,56 +2649,6 @@ select {
     max-width: 100vw;
   }
 
-  /* A shared-path click needs the full phone width for readable route labels,
-     but short candidate lists should not hide half the map unnecessarily. The
-     viewport-height cap only becomes relevant when many overlapping routes need
-     native scrolling. */
-  .switzerland-mobility-hiking-summary--choices {
-    z-index: 30;
-    bottom: 0;
-    left: 0;
-    width: 100vw;
-    max-width: 100vw;
-    height: auto;
-    max-height: 50vh;
-    max-height: 50dvh;
-  }
-
-  .switzerland-mobility-hiking-summary--choices
-    .switzerland-mobility-hiking-panel--choices {
-    display: flex;
-    width: 100%;
-    max-height: 50vh;
-    max-height: 50dvh;
-    min-height: 0;
-    flex-direction: column;
-    align-self: stretch;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 18px 18px 0 0;
-  }
-
-  .switzerland-mobility-hiking-summary--choices
-    .switzerland-mobility-hiking-route-choices {
-    display: flex;
-    min-height: 0;
-    flex: 1 1 auto;
-    flex-direction: column;
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
-  }
-
-  /* Let flexbox allocate the remaining height below the variable-size header
-     and hint instead of subtracting a brittle fixed rem value from 50dvh. */
-  .switzerland-mobility-hiking-summary--choices
-    .switzerland-mobility-hiking-route-choices > div {
-    min-height: 0;
-    max-height: none;
-    flex: 1 1 auto;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-  }
 
   .switzerland-mobility-hiking-panel-header {
     min-height: 3.2rem;

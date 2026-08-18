@@ -31,9 +31,6 @@ import {
 } from '../dangers/shootingDangerZones';
 import type { Language } from '../i18n/translations';
 import { isAbortedRequest } from '../network/abort';
-import type {
-  SwitzerlandMobilityHikingRouteCandidate,
-} from '../switzerlandMobility/hikingRoutes';
 import {
   applyPublicTransportStopDeclutterVisibility,
   createPublicTransportStopsViewportCoverage,
@@ -138,14 +135,8 @@ export interface MapInformationLayersController {
   mapInformationChoices: MapInformationChoice[] | null;
   /** Resolves the common chooser into the selected feature's detailed workflow. */
   selectMapInformationChoice: (choice: MapInformationChoice) => void;
-  /** Resolves one concrete passenger stop into its timetable panel. */
-  selectPublicTransportStop: (stop: PublicTransportStop) => void;
-  /** Compact public-route panel or overlap chooser shown at the map bottom. */
+  /** Compact selected public-route panel shown at the map bottom. */
   switzerlandMobilityHikingPanel: SwitzerlandMobilityHikingPanelStatus | null;
-  /** Selects one public route after the user resolves an overlap. */
-  selectSwitzerlandMobilityHikingCandidate: (
-    candidate: SwitzerlandMobilityHikingRouteCandidate,
-  ) => void;
   /** Cumulative distance selected by hovering the public route on the map. */
   switzerlandMobilityHikingMapHoverDistanceMeters: number | null;
   /** Mirrors public-route profile distance onto the shared map marker. */
@@ -254,32 +245,43 @@ export function useMapInformationLayers(
     useState<Coordinate | null>(null);
 
   /** Clears rendered non-route information without aborting the click that found a replacement. */
-  const clearDisplayedInformationContext = useCallback(() => {
-    setTrailClosurePopup(null);
-    setShootingDangerZonePopup(null);
-    setPublicTransportStopPopup(null);
-    setMapInformationChoices(null);
-    setInformationAnchorCoordinate(null);
+  const clearDisplayedInformationContext = useCallback(
+    (declutterPriorityStopId: string | null = null) => {
+      setTrailClosurePopup(null);
+      setShootingDangerZonePopup(null);
+      setPublicTransportStopPopup(null);
+      setMapInformationChoices(null);
+      setInformationAnchorCoordinate(null);
 
-    const runtime = mapRuntimeRef.current;
+      const runtime = mapRuntimeRef.current;
 
-    if (!runtime) {
-      return;
-    }
+      if (!runtime) {
+        return;
+      }
 
-    updatePublicTransportStopSelection(
-      runtime.publicTransportStopsDisplay,
-      null,
-    );
-    applyPublicTransportStopDeclutterVisibility(
-      runtime.publicTransportStopsDisplay,
-      runtime.map,
-    );
-    updateShootingDangerZoneSelection(
-      runtime.shootingDangerZoneSelectionDisplay,
-      null,
-    );
-  }, [mapRuntimeRef]);
+      updatePublicTransportStopSelection(
+        runtime.publicTransportStopsDisplay,
+        null,
+      );
+      // A new click can dismiss the old detail panel immediately while keeping
+      // the actually rendered stop stable during slower remote identification.
+      if (declutterPriorityStopId) {
+        updatePublicTransportStopDeclutterPriority(
+          runtime.publicTransportStopsDisplay,
+          declutterPriorityStopId,
+        );
+      }
+      applyPublicTransportStopDeclutterVisibility(
+        runtime.publicTransportStopsDisplay,
+        runtime.map,
+      );
+      updateShootingDangerZoneSelection(
+        runtime.shootingDangerZoneSelectionDisplay,
+        null,
+      );
+    },
+    [mapRuntimeRef],
+  );
 
   /**
    * A public-route match replaces any structured popup only after identification
@@ -997,7 +999,8 @@ export function useMapInformationLayers(
       // actually painted. After that snapshot is captured, desktop can safely
       // dismiss the previous selection while remote layers are identified.
       if (!preserveSelectionOnEmptyClick) {
-        closeMapInformationPopup();
+        clearDisplayedInformationContext(renderedStop?.id ?? null);
+        closeSwitzerlandMobilityHikingSelection();
       }
 
       informationRequestRef.current?.abort();
@@ -1102,22 +1105,9 @@ export function useMapInformationLayers(
           }
 
           if (choices.length > 1) {
-            clearDisplayedInformationContext();
+            clearDisplayedInformationContext(renderedStop?.id ?? null);
             closeSwitzerlandMobilityHikingSelection();
             onInformationSelected();
-            setInformationAnchorCoordinate(context.coordinate);
-
-            if (renderedStop) {
-              updatePublicTransportStopDeclutterPriority(
-                runtime.publicTransportStopsDisplay,
-                renderedStop.id,
-              );
-              applyPublicTransportStopDeclutterVisibility(
-                runtime.publicTransportStopsDisplay,
-                map,
-              );
-            }
-
             setMapInformationChoices(choices);
             return;
           }
@@ -1239,9 +1229,7 @@ export function useMapInformationLayers(
     publicTransportStopPopup,
     mapInformationChoices,
     selectMapInformationChoice,
-    selectPublicTransportStop,
     switzerlandMobilityHikingPanel,
-    selectSwitzerlandMobilityHikingCandidate,
     switzerlandMobilityHikingMapHoverDistanceMeters,
     handleSwitzerlandMobilityHikingProfileHoverDistanceChange,
     closeMapInformationPopup,

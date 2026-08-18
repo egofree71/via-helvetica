@@ -72,7 +72,6 @@ describe('SwitzerlandMobilityHikingPanel', () => {
           null,
           createElement(SwitzerlandMobilityHikingPanel, {
             status: readyStatus,
-            onSelectCandidate: vi.fn(),
             onProfileHoverDistanceChange: vi.fn(),
             routeHoverDistanceMeters: null,
             onClose: vi.fn(),
@@ -115,7 +114,6 @@ describe('SwitzerlandMobilityHikingPanel', () => {
           null,
           createElement(SwitzerlandMobilityHikingPanel, {
             status: readyStatus,
-            onSelectCandidate: vi.fn(),
             onProfileHoverDistanceChange,
             routeHoverDistanceMeters: 15_000,
             onClose: vi.fn(),
@@ -149,66 +147,6 @@ describe('SwitzerlandMobilityHikingPanel', () => {
     expect(onProfileHoverDistanceChange).toHaveBeenLastCalledWith(null);
   });
 
-  it('lets the user choose a route before the map is framed', async () => {
-    const candidate = {
-      featureId: 4016,
-      routeNumber: '4',
-      routeId: '4.16',
-      routeName: 'ViaJacobi',
-      sectionName: 'Moudon - Lausanne',
-      stageNumber: '16',
-      hasStages: true,
-    };
-    const onSelectCandidate = vi.fn();
-
-    await act(async () => {
-      root?.render(
-        createElement(
-          I18nProvider,
-          null,
-          createElement(SwitzerlandMobilityHikingPanel, {
-            status: { state: 'choices', candidates: [candidate] },
-            onSelectCandidate,
-            onProfileHoverDistanceChange: vi.fn(),
-            routeHoverDistanceMeters: null,
-            onClose: vi.fn(),
-          }),
-        ),
-      );
-    });
-
-    const summary = container.querySelector(
-      '.switzerland-mobility-hiking-summary',
-    );
-    expect(
-      summary?.classList.contains('switzerland-mobility-hiking-summary--selected'),
-    ).toBe(false);
-    expect(
-      summary?.classList.contains('switzerland-mobility-hiking-summary--choices'),
-    ).toBe(true);
-
-    const choice = container.querySelector<HTMLButtonElement>(
-      '.switzerland-mobility-hiking-route-choices button',
-    );
-
-    expect(choice).not.toBeNull();
-    expect(
-      container.querySelector(
-        '.switzerland-mobility-hiking-panel--choices',
-      ),
-    ).not.toBeNull();
-    expect(choice?.textContent).toContain('ViaJacobi');
-    expect(choice?.textContent).toContain(
-      'Étape 16 : Moudon - Lausanne',
-    );
-
-    await act(async () => {
-      choice?.click();
-    });
-
-    expect(onSelectCandidate).toHaveBeenCalledWith(candidate);
-  });
-
   it('keeps route-level export outside the information panel', async () => {
     await act(async () => {
       root?.render(
@@ -217,7 +155,6 @@ describe('SwitzerlandMobilityHikingPanel', () => {
           null,
           createElement(SwitzerlandMobilityHikingPanel, {
             status: readyStatus,
-            onSelectCandidate: vi.fn(),
             onProfileHoverDistanceChange: vi.fn(),
             routeHoverDistanceMeters: null,
             onClose: vi.fn(),

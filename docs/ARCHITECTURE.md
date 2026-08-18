@@ -449,8 +449,9 @@ workflow retains independent LV95 segments, public identity metadata, calculated
 metrics, and the elevation samples required by its profile and GPX export.
 
 The previous editable route or imported GPX is cleared only after complete public
-geometry has been retrieved and validated. Identification, overlap choice, or a
-failed geometry request therefore cannot destroy the user's current itinerary.
+geometry has been retrieved and validated. Identification, ambiguity resolution in
+the common chooser, or a failed geometry request therefore cannot destroy the
+user's current itinerary.
 
 ### 4.4 Shared current-itinerary metrics
 
@@ -862,9 +863,11 @@ The stop workflow separates:
 - on-demand timetable loading.
 
 Official stop coordinates never change. Distinct stops within the close-stop
-threshold can be fanned out temporarily when their icons overlap. Decluttering
-runs after that fan-out in CSS-pixel space, hides only the style of lower-priority
-features, and leaves every stop loaded in the vector source. Members of the same
+threshold can be fanned out temporarily when their icons overlap. Newly loaded
+features start visually hidden until the first rendered-frame decluttering pass,
+which avoids flashing the complete dense-city buffer. Decluttering then runs
+after fan-out in CSS-pixel space, hides only the style of lower-priority features,
+and leaves every stop loaded in the vector source. Members of the same
 fan-out group do not suppress each other while that fan-out is active; once real
 coordinates are sufficiently separated and fan-out is released, ordinary
 collision rules apply again. Decluttering is refreshed from a rendered map state
@@ -874,9 +877,11 @@ A rendered stop hit may contribute hidden declutter neighbours to the common
 map-information chooser, but an invisible stop alone is never a click target. If
 the click also intersects safety information or SwitzerlandMobility routes, all
 those candidates remain available in that same chooser, with public transport
-listed before the public routes. The rendered stop representative may temporarily
-win decluttering without being presented as a selected stop; only a concrete user
-selection receives the halo and keeps visual priority. The timetable is requested
+listed before the public routes. The rendered stop representative keeps temporary
+decluttering priority while slower remote identification is pending, so the symbol
+that was actually clicked does not swap with a hidden neighbour. This priority does
+not present the stop as selected; only a concrete user selection receives the halo
+and keeps visual priority. The timetable is requested
 only after one concrete stop has been selected. A buffered request extent reduces
 repeated traffic during nearby pans. Zoom, canvas-size, language, or visibility
 changes invalidate reuse. Timetable errors do not remove the selected stop or its
@@ -1147,8 +1152,8 @@ manual checks include:
   layer-menu stacking above itinerary profiles on narrow and short viewports;
 - official hiking and SwitzerlandMobility portrayals across useful zooms and
   restored opacity preferences after a reload;
-- selection, overlap choice, highlighting, full-route fitting, and profile
-  synchronization for named SwitzerlandMobility routes;
+- selection through the common map-information chooser, highlighting, full-route
+  fitting, and profile synchronization for named SwitzerlandMobility routes;
 - repeated GPX fitting on desktop and narrow viewports, including crisp native-scale raster backgrounds;
 - editable-GPX conversion with no visual geometry shift, local section edits,
   undo back to the pristine trace, adaptive waypoint decluttering across zoom

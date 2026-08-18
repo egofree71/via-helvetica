@@ -516,9 +516,7 @@ export default function App() {
     publicTransportStopPopup,
     mapInformationChoices,
     selectMapInformationChoice,
-    selectPublicTransportStop,
     switzerlandMobilityHikingPanel,
-    selectSwitzerlandMobilityHikingCandidate,
     switzerlandMobilityHikingMapHoverDistanceMeters,
     handleSwitzerlandMobilityHikingProfileHoverDistanceChange,
     closeMapInformationPopup,
@@ -1030,7 +1028,6 @@ export default function App() {
       {publicTransportStopPopup && (
         <PublicTransportStopPopup
           status={publicTransportStopPopup}
-          onSelectStop={selectPublicTransportStop}
           onClose={closeMapInformationPopup}
         />
       )}
@@ -1046,7 +1043,6 @@ export default function App() {
       {switzerlandMobilityHikingPanel && !mapInformationChoices && (
         <SwitzerlandMobilityHikingPanel
           status={switzerlandMobilityHikingPanel}
-          onSelectCandidate={selectSwitzerlandMobilityHikingCandidate}
           onProfileHoverDistanceChange={
             handleSwitzerlandMobilityHikingProfileHoverDistanceChange
           }

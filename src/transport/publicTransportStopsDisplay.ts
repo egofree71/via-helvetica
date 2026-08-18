@@ -396,6 +396,16 @@ export function applyPublicTransportStopDeclutterVisibility(
   display: PublicTransportStopsDisplay,
   map: OlMap,
 ): void {
+  const mapSize = map.getSize();
+
+  // OpenLayers can still dispatch postrender while a temporarily detached or
+  // collapsed map target has zero area. Do not invalidate the layer from that
+  // unusable frame or it would schedule another identical render indefinitely.
+  if (!mapSize || mapSize[0] <= 0 || mapSize[1] <= 0) {
+    display.declutterSnapshot = null;
+    return;
+  }
+
   const resolution = map.getView().getResolution();
   const rotation = map.getView().getRotation();
 
@@ -444,6 +454,11 @@ export function applyPublicTransportStopDeclutterVisibility(
       centerPixels: placement.centerPixels,
       collisionGroup: placement.activeOverlapGroupId,
     });
+  }
+
+  if (hadUnresolvedPixel && candidates.length === 0) {
+    display.declutterSnapshot = null;
+    return;
   }
 
   candidates.sort((first, second) => {
@@ -735,7 +750,7 @@ export function createPublicTransportStopsDisplay(): PublicTransportStopsDisplay
   return display;
 }
 
-/** Replaces visible features after one completed viewport load. */
+/** Replaces loaded stop features after one completed viewport request. */
 export function updatePublicTransportStopsDisplay(
   display: PublicTransportStopsDisplay,
   stops: PublicTransportStop[],
@@ -747,7 +762,9 @@ export function updatePublicTransportStopsDisplay(
     });
     feature.setId(stop.id);
     feature.set(STOP_PROPERTY_NAME, stop);
-    feature.set(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME, true, true);
+    // New viewport data waits for the first coherent rendered-frame declutter
+    // pass instead of flashing every dense-city symbol for one frame.
+    feature.set(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME, false, true);
 
     const overlapLayout = overlapLayouts.get(stop.id);
 
