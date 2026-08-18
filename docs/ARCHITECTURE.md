@@ -809,7 +809,7 @@ The runtime creates one explicit layer order. In broad terms:
 5. public-transport and military information vectors and portrayals;
 6. imported read-only itinerary;
 7. editable route;
-8. temporary search and user-location markers.
+8. temporary search, inspected-position, and user-location markers.
 
 Route and endpoint readability takes priority over informational overlays.
 Layer construction remains centralized so later features do not depend on
@@ -847,8 +847,10 @@ export control reuses the naming dialog and writes the complete selected geometr
 as a GPX 1.1 track, preserving independent line segments and embedding calculated
 elevations when available. A shared synchronization hook grants marker ownership
 only to the visible summary. Starting route creation, hiding the layer, changing
-language, selecting another map information feature, or opening another temporary
-workflow clears the selection and profile state.
+language, or selecting another map information feature clears the selection and
+profile state. Desktop map-position inspection is deliberately non-destructive:
+it temporarily hides the SwitzerlandMobility summary while preserving the selected
+route, loaded metrics/profile, and local panel state.
 
 ### 6.4 Hiking closures and military danger zones
 
@@ -1186,6 +1188,15 @@ manual checks include:
 - provider portrayals and official popup content;
 - stop, closure, and danger-zone clicks near panel and viewport edges on desktop
   and mobile layouts;
+- dense public-transport stop portrayal across broad and detailed zooms, including
+  deterministic decluttering, close-stop fan-out, re-clicking a selected
+  representative, and mixed safety / transport / SwitzerlandMobility candidates
+  in the common chooser;
+- desktop map-position inspection by right-click, including native context menus
+  on OpenLayers controls and attribution links, marker keep-visible panning near
+  the lower panel, WGS 84 / LV95 / elevation values, rapid-click cancellation,
+  and preservation of route geometry, selection, and an already expanded
+  elevation profile;
 - mobile map-only toggling on genuinely empty map taps, including restoration of
   an open information panel, selection of a real information feature while the
   chrome is hidden, and confirmation that route-creation clicks never toggle it;
