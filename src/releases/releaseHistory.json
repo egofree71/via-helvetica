@@ -1,9 +1,9 @@
 {
-  "currentVersion": "1.6.0",
+  "currentVersion": "1.7.0",
   "locales": {
     "fr": {
       "dialog": {
-        "title": "Nouveautés de Via Helvetica 1.6.0",
+        "title": "Nouveautés de Via Helvetica 1.7.0",
         "historyLink": "Voir l’historique complet",
         "historyLinkNewTabLabel": "s’ouvre dans un nouvel onglet"
       },
@@ -18,6 +18,34 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.7.0",
+          "summary": "Cette version améliore la lisibilité des transports publics et unifie l’accès aux informations présentes sous un même clic, tout en ajoutant l’inspection des coordonnées et de l’altitude sur ordinateur.",
+          "items": [
+            {
+              "id": "clearerMapInformation",
+              "title": "Transports publics et informations de carte plus lisibles :",
+              "description": "Les arrêts de transports publics sont désormais affichés de manière plus sélective aux niveaux de zoom faibles et moyens afin de préserver la lisibilité de la carte. Lorsqu’un même clic correspond à plusieurs informations, Via Helvetica les regroupe dans un choix commun.",
+              "details": [
+                "Davantage d’arrêts réapparaissent progressivement en zoomant, tandis que les arrêts très proches conservent leur léger décalage visuel pour rester sélectionnables séparément.",
+                "Les arrêts masqués pour alléger la carte restent accessibles depuis un arrêt visible voisin.",
+                "Le choix commun peut réunir fermetures ou déviations, zones de danger, arrêts de transports publics et itinéraires « À pied SuisseMobile », avec les informations de sécurité en premier.",
+                "Des pictogrammes distincts facilitent l’identification des différents types d’information."
+              ]
+            },
+            {
+              "id": "desktopPositionInspection",
+              "title": "Coordonnées et altitude au clic droit :",
+              "description": "Sur ordinateur, un clic droit sur la carte place un point temporaire et affiche ses coordonnées WGS 84 et LV95 ainsi que l’altitude du terrain, sans interrompre l’itinéraire en cours.",
+              "details": [
+                "Les coordonnées WGS 84 et LV95 peuvent être copiées directement depuis le panneau.",
+                "Un nouveau clic droit déplace le point et remplace l’inspection précédente.",
+                "L’itinéraire courant et l’état ouvert ou fermé de son profil d’altitude sont conservés pendant l’inspection.",
+                "Si nécessaire, la carte se décale légèrement sans changer le zoom afin que le point inspecté reste visible à côté du panneau."
+              ]
+            }
+          ]
+        },
         {
           "version": "1.6.0",
           "summary": "Cette version améliore fortement l’expérience sur mobile tout en conservant Via Helvetica comme outil de préparation pensé d’abord pour les grands écrans.",
@@ -195,7 +223,7 @@
     },
     "de": {
       "dialog": {
-        "title": "Neu in Via Helvetica 1.6.0",
+        "title": "Neu in Via Helvetica 1.7.0",
         "historyLink": "Vollständigen Versionsverlauf anzeigen",
         "historyLinkNewTabLabel": "öffnet in einem neuen Tab"
       },
@@ -210,6 +238,34 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.7.0",
+          "summary": "Diese Version verbessert die Übersichtlichkeit der Haltestellen und bündelt Informationen, die unter demselben Kartenklick liegen. Auf dem Desktop lassen sich ausserdem Koordinaten und Geländehöhe per Rechtsklick abfragen.",
+          "items": [
+            {
+              "id": "clearerMapInformation",
+              "title": "Übersichtlichere Haltestellen und Karteninformationen:",
+              "description": "Haltestellen des öffentlichen Verkehrs werden bei kleinen und mittleren Zoomstufen nun ausgedünnt, damit die Karte lesbar bleibt. Liegen mehrere Informationen unter demselben Klick, bündelt Via Helvetica sie in einer gemeinsamen Auswahl.",
+              "details": [
+                "Beim Hineinzoomen erscheinen schrittweise mehr Haltestellen; sehr nahe Haltestellen behalten ihre leichte visuelle Auffächerung, damit sie getrennt auswählbar bleiben.",
+                "Durch das Ausdünnen ausgeblendete Haltestellen bleiben über eine sichtbare benachbarte Haltestelle erreichbar.",
+                "Die gemeinsame Auswahl kann Sperrungen oder Umleitungen, Gefahrenzonen, Haltestellen des öffentlichen Verkehrs und Wanderwege von SchweizMobil enthalten; Sicherheitsinformationen stehen zuerst.",
+                "Unterschiedliche Piktogramme erleichtern die Zuordnung der Informationstypen."
+              ]
+            },
+            {
+              "id": "desktopPositionInspection",
+              "title": "Koordinaten und Höhe per Rechtsklick:",
+              "description": "Auf dem Desktop setzt ein Rechtsklick auf die Karte einen temporären Punkt und zeigt WGS-84- und LV95-Koordinaten sowie die Geländehöhe an, ohne die aktuelle Route zu unterbrechen.",
+              "details": [
+                "WGS-84- und LV95-Koordinaten können direkt aus dem Panel kopiert werden.",
+                "Ein weiterer Rechtsklick verschiebt den Punkt und ersetzt die vorherige Abfrage.",
+                "Die aktuelle Route und der geöffnete oder geschlossene Zustand ihres Höhenprofils bleiben während der Abfrage erhalten.",
+                "Falls nötig, wird die Karte ohne Zoomänderung leicht verschoben, damit der abgefragte Punkt neben dem Panel sichtbar bleibt."
+              ]
+            }
+          ]
+        },
         {
           "version": "1.6.0",
           "summary": "Diese Version verbessert die mobile Nutzung deutlich, während Via Helvetica weiterhin in erster Linie als Planungswerkzeug für grosse Bildschirme gedacht ist.",
@@ -387,7 +443,7 @@
     },
     "it": {
       "dialog": {
-        "title": "Novità di Via Helvetica 1.6.0",
+        "title": "Novità di Via Helvetica 1.7.0",
         "historyLink": "Vedi la cronologia completa",
         "historyLinkNewTabLabel": "si apre in una nuova scheda"
       },
@@ -402,6 +458,34 @@
         "versionLabel": "Versione"
       },
       "releases": [
+        {
+          "version": "1.7.0",
+          "summary": "Questa versione migliora la leggibilità delle fermate del trasporto pubblico e riunisce le informazioni presenti sotto lo stesso clic, aggiungendo inoltre su desktop l’ispezione di coordinate e altitudine.",
+          "items": [
+            {
+              "id": "clearerMapInformation",
+              "title": "Trasporti pubblici e informazioni di mappa più leggibili:",
+              "description": "Ai livelli di zoom bassi e medi, alcune fermate dei trasporti pubblici vengono ora nascoste in modo selettivo per mantenere leggibile la carta. Quando lo stesso clic corrisponde a più informazioni, Via Helvetica le riunisce in una selezione comune.",
+              "details": [
+                "Aumentando lo zoom ricompaiono progressivamente più fermate, mentre quelle molto vicine mantengono un leggero scostamento visivo per restare selezionabili separatamente.",
+                "Le fermate nascoste per alleggerire la carta restano accessibili tramite una fermata visibile vicina.",
+                "La selezione comune può riunire chiusure o deviazioni, zone di pericolo, fermate dei trasporti pubblici e itinerari «A piedi SvizzeraMobile», con le informazioni di sicurezza in primo piano.",
+                "Pittogrammi distinti rendono più immediata l’identificazione dei diversi tipi di informazione."
+              ]
+            },
+            {
+              "id": "desktopPositionInspection",
+              "title": "Coordinate e altitudine con il clic destro:",
+              "description": "Su desktop, un clic destro sulla carta posiziona un punto temporaneo e mostra le coordinate WGS 84 e LV95 e l’altitudine del terreno, senza interrompere l’itinerario corrente.",
+              "details": [
+                "Le coordinate WGS 84 e LV95 possono essere copiate direttamente dal pannello.",
+                "Un nuovo clic destro sposta il punto e sostituisce l’ispezione precedente.",
+                "L’itinerario corrente e lo stato aperto o chiuso del relativo profilo altimetrico vengono conservati durante l’ispezione.",
+                "Se necessario, la carta viene spostata leggermente senza cambiare lo zoom, in modo che il punto ispezionato rimanga visibile accanto al pannello."
+              ]
+            }
+          ]
+        },
         {
           "version": "1.6.0",
           "summary": "Questa versione migliora nettamente l’esperienza su mobile, mantenendo Via Helvetica come strumento di preparazione pensato prima di tutto per gli schermi grandi.",
@@ -579,7 +663,7 @@
     },
     "en": {
       "dialog": {
-        "title": "What’s new in Via Helvetica 1.6.0",
+        "title": "What’s new in Via Helvetica 1.7.0",
         "historyLink": "View full release history",
         "historyLinkNewTabLabel": "opens in a new tab"
       },
@@ -594,6 +678,34 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.7.0",
+          "summary": "This release improves public-transport map readability and brings information found under the same map click into one chooser, while adding desktop coordinate and elevation inspection.",
+          "items": [
+            {
+              "id": "clearerMapInformation",
+              "title": "Clearer public transport and map information:",
+              "description": "Public-transport stops are now decluttered at lower and medium zoom levels to keep the map readable. When the same click matches several information objects, Via Helvetica brings them together in a common chooser.",
+              "details": [
+                "More stops progressively reappear as you zoom in, while very close stops keep a small visual fan-out so they remain individually selectable.",
+                "Stops hidden to reduce map clutter remain accessible through a nearby visible stop.",
+                "The common chooser can combine closures or detours, danger zones, public-transport stops and Hiking SwitzerlandMobility routes, with safety information shown first.",
+                "Distinct pictograms make the different information types easier to identify."
+              ]
+            },
+            {
+              "id": "desktopPositionInspection",
+              "title": "Coordinates and elevation on right-click:",
+              "description": "On desktop, right-clicking the map places a temporary point and shows its WGS 84 and LV95 coordinates together with terrain elevation, without interrupting the current itinerary.",
+              "details": [
+                "WGS 84 and LV95 coordinates can be copied directly from the panel.",
+                "A new right-click moves the point and replaces the previous inspection.",
+                "The current itinerary and the open or closed state of its elevation profile are preserved during inspection.",
+                "If needed, the map pans slightly without changing zoom so the inspected point remains visible beside the panel."
+              ]
+            }
+          ]
+        },
         {
           "version": "1.6.0",
           "summary": "This release significantly improves the mobile experience while keeping Via Helvetica primarily a route-planning tool designed for large screens.",
