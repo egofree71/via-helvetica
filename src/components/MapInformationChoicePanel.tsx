@@ -4,6 +4,9 @@
  * each selected object then continues in its existing detailed workflow.
  */
 import { useEffect } from 'react';
+import dangerIconUrl from '../assets/map-information/other-dangers.svg';
+import hikingIconUrl from '../assets/map-information/hiking.svg';
+import pedestriansProhibitedIconUrl from '../assets/map-information/pedestrians-prohibited.svg';
 import { useI18n } from '../i18n/I18nContext';
 import type { MapInformationChoice } from '../map/mapInformationChoice';
 import {
@@ -11,6 +14,8 @@ import {
   getSwitzerlandMobilityHikingRouteSubtitle,
 } from '../switzerlandMobility/hikingRoutePresentation';
 import type { PublicTransportMode } from '../transport/publicTransportStops';
+import { getPrimaryPublicTransportMode } from '../transport/publicTransportStopModel';
+import { PUBLIC_TRANSPORT_MODE_ICON_URLS } from '../transport/publicTransportModePresentation';
 
 /** Translation keys for normalized public-transport categories. */
 const MODE_LABEL_KEYS: Record<
@@ -55,6 +60,48 @@ function choiceKey(choice: MapInformationChoice): string {
       return `stop:${choice.stop.id}`;
     case 'switzerlandMobilityHiking':
       return `route:${String(choice.candidate.featureId)}`;
+  }
+}
+
+/** Decorative category icon that makes mixed map choices easier to scan. */
+function ChoiceTypeIcon({ choice }: { choice: MapInformationChoice }) {
+  switch (choice.kind) {
+    case 'trailClosure':
+      return (
+        <img
+          src={pedestriansProhibitedIconUrl}
+          alt=""
+          aria-hidden="true"
+        />
+      );
+    case 'shootingDangerZone':
+      return <img src={dangerIconUrl} alt="" aria-hidden="true" />;
+    case 'publicTransportStop': {
+      const mode = getPrimaryPublicTransportMode(choice.stop.modes);
+      return (
+        <img
+          src={PUBLIC_TRANSPORT_MODE_ICON_URLS[mode]}
+          alt=""
+          aria-hidden="true"
+        />
+      );
+    }
+    case 'switzerlandMobilityHiking':
+      return <img src={hikingIconUrl} alt="" aria-hidden="true" />;
+  }
+}
+
+/** CSS modifier matching the semantic category represented by one choice. */
+function choiceIconModifier(choice: MapInformationChoice): string {
+  switch (choice.kind) {
+    case 'trailClosure':
+      return 'map-information-choice-icon--closure';
+    case 'shootingDangerZone':
+      return 'map-information-choice-icon--danger';
+    case 'publicTransportStop':
+      return 'map-information-choice-icon--transport';
+    case 'switzerlandMobilityHiking':
+      return 'map-information-choice-icon--hiking';
   }
 }
 
@@ -121,7 +168,13 @@ export default function MapInformationChoicePanel({
         className="map-information-choice"
         onClick={() => onSelectChoice(choice)}
       >
-        <span>
+        <span
+          className={`map-information-choice-icon ${choiceIconModifier(choice)}`}
+          aria-hidden="true"
+        >
+          <ChoiceTypeIcon choice={choice} />
+        </span>
+        <span className="map-information-choice-label">
           <strong>{title}</strong>
           {subtitle && (
             <span className="map-information-choice-subtitle">{subtitle}</span>

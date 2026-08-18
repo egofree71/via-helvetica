@@ -16,19 +16,13 @@ import Fill from 'ol/style/Fill.js';
 import Icon from 'ol/style/Icon.js';
 import Stroke from 'ol/style/Stroke.js';
 import Style from 'ol/style/Style.js';
-import boatIconUrl from '../assets/public-transport-stops/boat.svg';
-import busIconUrl from '../assets/public-transport-stops/bus.svg';
-import cableCarIconUrl from '../assets/public-transport-stops/cable-car.svg';
-import chairliftIconUrl from '../assets/public-transport-stops/chairlift.svg';
-import funicularIconUrl from '../assets/public-transport-stops/funicular.svg';
-import trainIconUrl from '../assets/public-transport-stops/train.svg';
-import tramIconUrl from '../assets/public-transport-stops/tram.svg';
 import { LV95_VIEW_RESOLUTIONS } from '../map/projection';
 import {
   getPrimaryPublicTransportMode,
   type PublicTransportMode,
   type PublicTransportStop,
 } from './publicTransportStopModel';
+import { PUBLIC_TRANSPORT_MODE_ICON_URLS } from './publicTransportModePresentation';
 
 /**
  * Stops are useful only at detailed scales. OpenLayers treats this boundary as
@@ -603,22 +597,6 @@ export function getPublicTransportStopChoicesForVisibleStop(
   return [visibleStop, ...hiddenNeighbours];
 }
 
-/**
- * Locally bundled vector symbols remain sharp on high-density displays while
- * preserving the familiar Swiss public-transport map language.
- */
-const MODE_ICON_URLS: Record<PublicTransportMode, string> = {
-  train: trainIconUrl,
-  // Metro keeps its own popup label but uses the clear railway map symbol.
-  metro: trainIconUrl,
-  tram: tramIconUrl,
-  bus: busIconUrl,
-  boat: boatIconUrl,
-  cableCar: cableCarIconUrl,
-  chairlift: chairliftIconUrl,
-  funicular: funicularIconUrl,
-};
-
 /** Cached icon variants keyed by mode, displacement, and CSS-pixel size. */
 const MODE_STYLES = new Map<string, Style>();
 
@@ -641,7 +619,7 @@ function getModeStyle(
 
   const style = new Style({
     image: new Icon({
-      src: MODE_ICON_URLS[mode],
+      src: PUBLIC_TRANSPORT_MODE_ICON_URLS[mode],
       width: iconSize,
       height: iconSize,
       displacement: roundedDisplacement,

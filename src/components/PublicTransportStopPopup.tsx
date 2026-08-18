@@ -5,13 +5,6 @@
  * links to the official SBB/CFF/FFS timetable.
  */
 import { useEffect, useMemo, useState } from 'react';
-import boatIconUrl from '../assets/public-transport-stops/boat.svg';
-import busIconUrl from '../assets/public-transport-stops/bus.svg';
-import cableCarIconUrl from '../assets/public-transport-stops/cable-car.svg';
-import chairliftIconUrl from '../assets/public-transport-stops/chairlift.svg';
-import funicularIconUrl from '../assets/public-transport-stops/funicular.svg';
-import trainIconUrl from '../assets/public-transport-stops/train.svg';
-import tramIconUrl from '../assets/public-transport-stops/tram.svg';
 import { useI18n } from '../i18n/I18nContext';
 import type { Language } from '../i18n/translations';
 import {
@@ -22,6 +15,7 @@ import type {
   PublicTransportMode,
   PublicTransportStop,
 } from '../transport/publicTransportStops';
+import { PUBLIC_TRANSPORT_MODE_ICON_URLS } from '../transport/publicTransportModePresentation';
 
 /** Selected public-transport stop shown after one concrete map choice is resolved. */
 export interface PublicTransportStopPopupStatus {
@@ -83,19 +77,6 @@ const MODE_LABEL_KEYS: Record<
   cableCar: 'transportStops.mode.cableCar',
   chairlift: 'transportStops.mode.chairlift',
   funicular: 'transportStops.mode.funicular',
-};
-
-/** SVG pictograms shared with the stop markers for immediate visual recognition. */
-const MODE_ICON_URLS: Record<PublicTransportMode, string> = {
-  train: trainIconUrl,
-  // Metro has its own translated label but shares the clear railway symbol.
-  metro: trainIconUrl,
-  tram: tramIconUrl,
-  bus: busIconUrl,
-  boat: boatIconUrl,
-  cableCar: cableCarIconUrl,
-  chairlift: chairliftIconUrl,
-  funicular: funicularIconUrl,
 };
 
 /** Manual SBB deep-link location parameters documented for timetable forms. */
@@ -271,7 +252,7 @@ function PublicTransportStopDetails({
               {displayedModes.map((mode, index) => (
                 <img
                   key={mode}
-                  src={MODE_ICON_URLS[mode]}
+                  src={PUBLIC_TRANSPORT_MODE_ICON_URLS[mode]}
                   alt={modeLabels[index]}
                   title={modeLabels[index]}
                 />

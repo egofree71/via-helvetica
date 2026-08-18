@@ -6,8 +6,14 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import dangerIconUrl from '../assets/map-information/other-dangers.svg';
+import hikingIconUrl from '../assets/map-information/hiking.svg';
+import pedestriansProhibitedIconUrl from '../assets/map-information/pedestrians-prohibited.svg';
 import { I18nProvider } from '../i18n/I18nContext';
 import type { MapInformationChoice } from '../map/mapInformationChoice';
+import {
+  PUBLIC_TRANSPORT_MODE_ICON_URLS,
+} from '../transport/publicTransportModePresentation';
 import MapInformationChoicePanel from './MapInformationChoicePanel';
 
 const anchorCoordinate: [number, number] = [2_537_900, 1_152_300];
@@ -133,10 +139,79 @@ describe('MapInformationChoicePanel', () => {
     expect(buttons[2].textContent).toContain('Lausanne, Bel-Air');
     expect(buttons[3].textContent).toContain('ViaJacobi');
 
+    const iconModifiers = Array.from(
+      container.querySelectorAll<HTMLElement>('.map-information-choice-icon'),
+      (icon) =>
+        Array.from(icon.classList).find((className) =>
+          className.startsWith('map-information-choice-icon--'),
+        ),
+    );
+    expect(iconModifiers).toEqual([
+      'map-information-choice-icon--closure',
+      'map-information-choice-icon--danger',
+      'map-information-choice-icon--transport',
+      'map-information-choice-icon--hiking',
+    ]);
+    const imageIcons = container.querySelectorAll<HTMLImageElement>(
+      '.map-information-choice-icon img[aria-hidden="true"]',
+    );
+    expect(imageIcons).toHaveLength(4);
+    expect(imageIcons[0].getAttribute('src')).toBe(
+      pedestriansProhibitedIconUrl,
+    );
+    expect(imageIcons[1].getAttribute('src')).toBe(dangerIconUrl);
+    expect(imageIcons[2].getAttribute('src')).toBe(
+      PUBLIC_TRANSPORT_MODE_ICON_URLS.bus,
+    );
+    expect(imageIcons[3].getAttribute('src')).toBe(hikingIconUrl);
+
     await act(async () => {
       buttons[2].click();
     });
 
     expect(onSelectChoice).toHaveBeenCalledWith(choices[2]);
   });
+
+  it('uses the same mode-specific pictograms as the public-transport layer', async () => {
+    const transportChoices: MapInformationChoice[] = [
+      choices[2],
+      {
+        kind: 'publicTransportStop',
+        stop: {
+          id: 'stop-boat',
+          stationId: 'station-boat',
+          name: 'Lausanne-Ouchy',
+          modes: ['boat'],
+          coordinate: anchorCoordinate,
+        },
+        anchorCoordinate,
+      },
+    ];
+
+    await act(async () => {
+      root?.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(MapInformationChoicePanel, {
+            choices: transportChoices,
+            onSelectChoice: vi.fn(),
+            onClose: vi.fn(),
+          }),
+        ),
+      );
+    });
+
+    const transportIcons = container.querySelectorAll<HTMLImageElement>(
+      '.map-information-choice-icon--transport img',
+    );
+    expect(transportIcons).toHaveLength(2);
+    expect(transportIcons[0].getAttribute('src')).toBe(
+      PUBLIC_TRANSPORT_MODE_ICON_URLS.bus,
+    );
+    expect(transportIcons[1].getAttribute('src')).toBe(
+      PUBLIC_TRANSPORT_MODE_ICON_URLS.boat,
+    );
+  });
+
 });

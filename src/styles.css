@@ -999,9 +999,47 @@ select {
   letter-spacing: 0.02em;
 }
 
-.map-information-choice > span:first-child {
+.map-information-choice-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+}
+
+.map-information-choice-icon img {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.map-information-choice-icon--closure,
+.map-information-choice-icon--danger,
+.map-information-choice-icon--transport {
+  background: transparent;
+}
+
+.map-information-choice-icon--closure img,
+.map-information-choice-icon--danger img,
+.map-information-choice-icon--transport img {
+  width: 1.55rem;
+  height: 1.55rem;
+}
+
+.map-information-choice-icon--hiking {
+  color: #287a3b;
+  background: rgb(40 122 59 / 10%);
+}
+
+.map-information-choice-icon--hiking img {
+  width: 1.55rem;
+  height: 1.55rem;
+}
+
+.map-information-choice-label {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 0.12rem;
 }
