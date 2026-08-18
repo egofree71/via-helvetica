@@ -23,8 +23,33 @@ import type {
   PublicTransportStop,
 } from '../transport/publicTransportStops';
 
-/** Selected passenger stop and close callback for the temporary panel. */
+/** Temporary public-transport panel shown after a rendered stop is clicked. */
+export type PublicTransportStopPopupStatus =
+  | {
+      /** Several loaded stops share the visual footprint of the clicked symbol. */
+      state: 'choices';
+      /** Clicked visible stop first, followed by hidden declutter neighbours. */
+      stops: PublicTransportStop[];
+    }
+  | {
+      /** One concrete stop has been selected for timetable inspection. */
+      state: 'stop';
+      /** Stop whose departures and official timetable links are displayed. */
+      stop: PublicTransportStop;
+    };
+
+/** Choice/detail state and callbacks for the temporary stop panel. */
 interface PublicTransportStopPopupProps {
+  /** Current overlap chooser or concrete stop detail state. */
+  status: PublicTransportStopPopupStatus;
+  /** Resolves the chooser to one concrete stop. */
+  onSelectStop: (stop: PublicTransportStop) => void;
+  /** Dismisses the panel and its map selection halo. */
+  onClose: () => void;
+}
+
+/** Concrete selected-stop detail state. */
+interface PublicTransportStopDetailsProps {
   /** Stop feature already loaded and filtered by the vector overlay. */
   stop: PublicTransportStop;
   /** Dismisses the panel and its map selection halo. */
@@ -119,10 +144,10 @@ function createDepartureDateKey(
 }
 
 /** Renders a compact stop panel with departures and official timetable links. */
-export default function PublicTransportStopPopup({
+function PublicTransportStopDetails({
   stop,
   onClose,
-}: PublicTransportStopPopupProps) {
+}: PublicTransportStopDetailsProps) {
   const { language, locale, t } = useI18n();
   const [stationBoardStatus, setStationBoardStatus] =
     useState<StationBoardStatus>('loading');
@@ -378,3 +403,98 @@ export default function PublicTransportStopPopup({
     </aside>
   );
 }
+
+/** Lets the user resolve multiple stops represented by one decluttered symbol. */
+function PublicTransportStopChoices({
+  stops,
+  onSelectStop,
+  onClose,
+}: {
+  stops: PublicTransportStop[];
+  onSelectStop: (stop: PublicTransportStop) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <aside
+      className="map-information-popup public-transport-stop-popup"
+      role="dialog"
+      aria-label={t('transportStops.choicesTitle')}
+    >
+      <header className="map-information-popup-header">
+        <div className="public-transport-stop-heading">
+          <strong>{t('transportStops.choicesTitle')}</strong>
+          <span className="public-transport-stop-choice-hint">
+            {t('transportStops.choicesHint')}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="map-information-popup-close"
+          aria-label={t('transportStops.close')}
+          title={t('transportStops.close')}
+          onClick={onClose}
+        >
+          ×
+        </button>
+      </header>
+
+      <div className="map-information-popup-body">
+        <div className="public-transport-stop-choices">
+          {stops.map((stop) => (
+            <button
+              key={stop.id}
+              type="button"
+              className="public-transport-stop-choice"
+              onClick={() => onSelectStop(stop)}
+            >
+              <span>{stop.name}</span>
+              <span className="public-transport-stop-choice-modes">
+                {stop.modes.map((mode) => (
+                  <img
+                    key={mode}
+                    src={MODE_ICON_URLS[mode]}
+                    alt={t(MODE_LABEL_KEYS[mode])}
+                    title={t(MODE_LABEL_KEYS[mode])}
+                  />
+                ))}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+/** Renders either the stop-overlap chooser or the selected stop timetable. */
+export default function PublicTransportStopPopup({
+  status,
+  onSelectStop,
+  onClose,
+}: PublicTransportStopPopupProps) {
+  if (status.state === 'choices') {
+    return (
+      <PublicTransportStopChoices
+        stops={status.stops}
+        onSelectStop={onSelectStop}
+        onClose={onClose}
+      />
+    );
+  }
+
+  return <PublicTransportStopDetails stop={status.stop} onClose={onClose} />;
+}
+

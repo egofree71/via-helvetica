@@ -8,6 +8,13 @@ import { act, createElement, useCallback, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { identifyTrailClosure } from '../closures/trailClosures';
+import {
+  getPublicTransportStopChoicesForVisibleStop,
+  getPublicTransportStopFromFeature,
+  publicTransportStopsCoverageContainsViewport,
+  updatePublicTransportStopSelection,
+  type PublicTransportStop,
+} from '../transport/publicTransportStops';
 import { HIKING_TRAILS_MIN_ZOOM } from './config';
 import type { MapRuntime } from './mapRuntime';
 import { useMapInformationLayers } from './useMapInformationLayers';
@@ -88,12 +95,15 @@ vi.mock('../dangers/shootingDangerZones', () => ({
 }));
 
 vi.mock('../transport/publicTransportStops', () => ({
+  applyPublicTransportStopDeclutterVisibility: vi.fn(),
   PUBLIC_TRANSPORT_STOPS_MIN_ZOOM: 8,
   createPublicTransportStopsViewportCoverage: vi.fn(),
+  getPublicTransportStopChoicesForVisibleStop: vi.fn(),
   getPublicTransportStopFromFeature: vi.fn().mockReturnValue(null),
   loadPublicTransportStops: vi.fn().mockResolvedValue([]),
   publicTransportStopsCoverageContainsViewport: vi.fn().mockReturnValue(false),
   updatePublicTransportStopsDisplay: vi.fn(),
+  updatePublicTransportStopDeclutterPriority: vi.fn(),
   updatePublicTransportStopSelection: vi.fn(),
 }));
 
@@ -123,7 +133,7 @@ class FakeObservable {
 }
 
 /** Creates the narrow map runtime surface required by the information hook. */
-function createRuntime(): {
+function createRuntime(options: { hitFeature?: object } = {}): {
   runtime: MapRuntime;
   mapEvents: FakeObservable;
 } {
@@ -132,6 +142,8 @@ function createRuntime(): {
   const target = document.createElement('div');
   const view = {
     getZoom: () => HIKING_TRAILS_MIN_ZOOM + 1,
+    getResolution: () => 10,
+    getRotation: () => 0,
     calculateExtent: () => [2_540_000, 1_160_000, 2_570_000, 1_185_000],
     on: viewEvents.on.bind(viewEvents),
     un: viewEvents.un.bind(viewEvents),
@@ -140,7 +152,10 @@ function createRuntime(): {
     getSize: () => [1_200, 800],
     getView: () => view,
     getTargetElement: () => target,
-    forEachFeatureAtPixel: () => undefined,
+    forEachFeatureAtPixel: (
+      _pixel: unknown,
+      callback: (feature: object) => unknown,
+    ) => options.hitFeature ? callback(options.hitFeature) : undefined,
     on: mapEvents.on.bind(mapEvents),
     un: mapEvents.un.bind(mapEvents),
   };
@@ -162,9 +177,11 @@ function createRuntime(): {
 function Harness({
   runtime,
   onMapClickStart,
+  publicTransportStopsVisible = false,
 }: {
   runtime: MapRuntime;
   onMapClickStart?: () => boolean;
+  publicTransportStopsVisible?: boolean;
 }) {
   const mapRuntimeRef = useRef<MapRuntime | null>(runtime);
   const onInformationSelected = useCallback(() => undefined, []);
@@ -174,7 +191,7 @@ function Harness({
     initialVisibility: {
       trailClosures: true,
       shootingDangerZones: false,
-      publicTransportStops: false,
+      publicTransportStops: publicTransportStopsVisible,
     },
     language: 'fr',
     isSwitzerlandMobilityHikingVisible: true,
@@ -187,7 +204,7 @@ function Harness({
   return createElement(
     'div',
     null,
-    controller.switzerlandMobilityHikingPanel?.state ?? 'closed',
+    `route:${controller.switzerlandMobilityHikingPanel?.state ?? 'closed'};transport:${controller.publicTransportStopPopup?.state ?? 'closed'}`,
   );
 }
 
@@ -266,6 +283,60 @@ describe('useMapInformationLayers click lifecycle', () => {
 
     expect(onMapClickStart).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain('ready');
+  });
+
+  it('opens a stop chooser when one rendered symbol represents hidden neighbours', async () => {
+    const hitFeature = {};
+    const { runtime, mapEvents } = createRuntime({ hitFeature });
+    const visibleStop: PublicTransportStop = {
+      id: 'a',
+      stationId: 'station-a',
+      name: 'Stop A',
+      modes: ['bus'],
+      coordinate: [2_553_000, 1_171_000],
+    };
+    const hiddenStop: PublicTransportStop = {
+      id: 'b',
+      stationId: 'station-b',
+      name: 'Stop B',
+      modes: ['tram'],
+      coordinate: [2_553_100, 1_171_000],
+    };
+    vi.mocked(publicTransportStopsCoverageContainsViewport).mockReturnValue(
+      true,
+    );
+    vi.mocked(getPublicTransportStopFromFeature).mockReturnValue(visibleStop);
+    vi.mocked(getPublicTransportStopChoicesForVisibleStop).mockReturnValue([
+      visibleStop,
+      hiddenStop,
+    ]);
+
+    await act(async () => {
+      root?.render(
+        createElement(Harness, {
+          runtime,
+          publicTransportStopsVisible: true,
+        }),
+      );
+    });
+
+    await act(async () => {
+      mapEvents.emit('singleclick', {
+        pixel: [400, 300],
+        coordinate: [2_553_000, 1_171_000],
+      });
+    });
+
+    expect(getPublicTransportStopChoicesForVisibleStop).toHaveBeenCalledWith(
+      runtime.publicTransportStopsDisplay,
+      runtime.map,
+      visibleStop,
+    );
+    expect(container.textContent).toContain('transport:choices');
+    expect(updatePublicTransportStopSelection).not.toHaveBeenCalledWith(
+      runtime.publicTransportStopsDisplay,
+      visibleStop,
+    );
   });
 
   it('keeps the historical desktop dismissal when the shell does not handle an empty click', async () => {

@@ -664,9 +664,12 @@ route mode:
 3. visible SwitzerlandMobility hiking routes;
 4. visible military danger zones.
 
-The stop layer uses validated structured data and a project-owned popup. Closure
-and military details arrive as official HTML fragments, pass through a strict
-sanitizer, and are rendered inside project-owned popup wrappers. Selected
+The stop layer uses validated structured data and a project-owned popup. At
+coarser stop scales, one rendered symbol can represent nearby stops hidden only
+by presentation decluttering; clicking that rendered symbol opens a compact
+chooser before any timetable request so the user can select the exact stop.
+Closure and military details arrive as official HTML fragments, pass through a
+strict sanitizer, and are rendered inside project-owned popup wrappers. Selected
 military geometry is highlighted in a separate vector layer.
 
 For stop, closure, and danger-zone panels, the exact click coordinate remains
@@ -840,12 +843,24 @@ The stop workflow separates:
 - passenger-mode normalization and filtering;
 - buffered viewport reuse;
 - OpenLayers rendering and collision fan-out;
+- deterministic screen-space decluttering at broad and medium scales;
 - selected-stop presentation;
 - on-demand timetable loading.
 
-A buffered request extent reduces repeated traffic during nearby pans. Zoom,
-canvas-size, language, or visibility changes invalidate reuse. Timetable errors
-do not remove the selected stop or its official SBB/CFF/FFS links.
+Official stop coordinates never change. Distinct stops within the close-stop
+threshold can be fanned out temporarily when their icons overlap. Decluttering
+runs after that fan-out in CSS-pixel space, hides only the style of lower-priority
+features, and leaves every stop loaded in the vector source. Members of the same
+fan-out group do not suppress each other. The selected stop always wins the
+decluttering order, and more stops reappear naturally as zoom makes their symbol
+centres distinct.
+
+A rendered stop hit may expose hidden declutter neighbours in a chooser, but an
+invisible stop alone is never a click target. The timetable is requested only
+after one concrete stop has been selected. A buffered request extent reduces
+repeated traffic during nearby pans. Zoom, canvas-size, language, or visibility
+changes invalidate reuse. Timetable errors do not remove the selected stop or
+its official SBB/CFF/FFS links.
 
 ## 7. Routing boundary
 

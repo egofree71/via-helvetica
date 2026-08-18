@@ -867,6 +867,56 @@ select {
   flex: 0 0 auto;
 }
 
+.public-transport-stop-choice-hint {
+  color: #5c6872;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.public-transport-stop-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.public-transport-stop-choice {
+  display: flex;
+  width: 100%;
+  min-height: 2.8rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgb(32 47 60 / 16%);
+  border-radius: 8px;
+  color: #17212b;
+  background: #fff;
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.public-transport-stop-choice:hover {
+  background: rgb(23 105 224 / 6%);
+}
+
+.public-transport-stop-choice:focus-visible {
+  outline: 3px solid rgb(23 105 224 / 40%);
+  outline-offset: 2px;
+}
+
+.public-transport-stop-choice-modes {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+}
+
+.public-transport-stop-choice-modes img {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
 .public-transport-departures {
   margin-bottom: 1rem;
 }

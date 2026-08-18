@@ -513,6 +513,7 @@ export default function App() {
     trailClosurePopup,
     shootingDangerZonePopup,
     publicTransportStopPopup,
+    selectPublicTransportStop,
     switzerlandMobilityHikingPanel,
     selectSwitzerlandMobilityHikingCandidate,
     switzerlandMobilityHikingMapHoverDistanceMeters,
@@ -1025,7 +1026,8 @@ export default function App() {
 
       {publicTransportStopPopup && (
         <PublicTransportStopPopup
-          stop={publicTransportStopPopup}
+          status={publicTransportStopPopup}
+          onSelectStop={selectPublicTransportStop}
           onClose={closeMapInformationPopup}
         />
       )}
