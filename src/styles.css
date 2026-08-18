@@ -2260,6 +2260,7 @@ select {
      present before the user inspected or panned the map. */
   .app--map-ui-hidden .map-controls,
   .app--map-ui-hidden .map-information-popup,
+  .app--map-ui-hidden .public-transport-stop-choice-summary,
   .app--map-ui-hidden .route-summary,
   .app--map-ui-hidden .switzerland-mobility-hiking-summary {
     visibility: hidden;

@@ -24,6 +24,7 @@ export {
   updatePublicTransportStopDeclutterPriority,
   updatePublicTransportStopSelection,
   updatePublicTransportStopsDisplay,
+  updatePublicTransportStopsViewRotation,
   type PublicTransportStopsDisplay,
 } from './publicTransportStopsDisplay';
 export {

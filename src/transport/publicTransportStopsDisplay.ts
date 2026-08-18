@@ -100,8 +100,12 @@ export interface PublicTransportStopsDisplay {
   selectionLayer: VectorLayer<VectorSource<Feature<Point>>>;
   /** Source containing at most one selected-stop marker. */
   selectionSource: VectorSource<Feature<Point>>;
-  /** Stop that must win decluttering while the current stop panel refers to it. */
+  /** Concrete stop currently selected by the user and represented by a halo. */
   selectedStopId: string | null;
+  /** Stop that temporarily wins decluttering, including a chooser representative. */
+  declutterPriorityStopId: string | null;
+  /** Current view rotation used by screen-aligned fan-out icon displacement. */
+  viewRotation: number;
   /** Last screen-space inputs used to avoid redundant decluttering passes. */
   declutterSnapshot: string | null;
 }
@@ -243,31 +247,46 @@ function getStopOverlapLayout(
     : null;
 }
 
+/** Returns whether a close-stop group is still being visually fanned out. */
+function isStopOverlapLayoutActive(
+  layout: StopOverlapLayout | null,
+  resolution: number,
+  iconSize: number,
+): layout is StopOverlapLayout {
+  return Boolean(
+    layout &&
+      Number.isFinite(resolution) &&
+      resolution > 0 &&
+      layout.radiusMapUnits / resolution <
+        getStopOverlapReleaseRadius(iconSize),
+  );
+}
+
 /**
- * Converts a close-stop layout into an OpenLayers pixel displacement.
- * At detailed zoom levels the real coordinates become sufficiently separated,
- * so displacement disappears instead of permanently distorting the map.
+ * Converts a close-stop layout into an OpenLayers screen-aligned displacement.
+ * Real map offsets are rotated into view axes before subtraction; otherwise a
+ * rotated map would fan symbols around a different centre than the one painted.
  */
 function calculateStopDisplacement(
   coordinate: Coordinate,
   layout: StopOverlapLayout | null,
   resolution: number,
   iconSize: number,
+  rotation: number,
 ): Coordinate {
-  if (!layout || !Number.isFinite(resolution) || resolution <= 0) {
+  if (!isStopOverlapLayoutActive(layout, resolution, iconSize)) {
     return [0, 0];
   }
 
-  if (
-    layout.radiusMapUnits / resolution >=
-    getStopOverlapReleaseRadius(iconSize)
-  ) {
-    return [0, 0];
-  }
-
+  const mapOffsetX = (coordinate[0] - layout.center[0]) / resolution;
+  const mapOffsetY = (coordinate[1] - layout.center[1]) / resolution;
+  const cosRotation = Math.cos(rotation);
+  const sinRotation = Math.sin(rotation);
+  // Positive OpenLayers view rotation turns the map clockwise on screen, so the
+  // map-space offset must be rotated by the opposite angle into icon axes.
   const naturalOffsetPixels: Coordinate = [
-    (coordinate[0] - layout.center[0]) / resolution,
-    (coordinate[1] - layout.center[1]) / resolution,
+    mapOffsetX * cosRotation + mapOffsetY * sinRotation,
+    -mapOffsetX * sinRotation + mapOffsetY * cosRotation,
   ];
   const targetRadiusScale =
     getStopOverlapDisplayRadius(iconSize) /
@@ -291,16 +310,23 @@ function isStopDeclutterVisible(feature: FeatureLike): boolean {
   return feature.get(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME) !== false;
 }
 
+/** Screen-space placement derived from the exact fan-out used for rendering. */
+interface StopVisualPlacement {
+  /** CSS-pixel centre after applying any close-stop fan-out. */
+  centerPixels: Coordinate;
+  /** Fan-out group exempt from collisions only while fan-out is actually active. */
+  activeOverlapGroupId: string | null;
+}
+
 /**
- * Converts one stop's official coordinate plus any fan-out displacement to the
- * exact CSS-pixel centre used by OpenLayers. Rotation matters because icon
- * displacement stays screen-aligned while the underlying map coordinate turns.
+ * Converts one stop's official coordinate plus any active fan-out displacement
+ * to the exact CSS-pixel centre used by OpenLayers for the current rendered view.
  */
-function getStopVisualCenterPixels(
+function getStopVisualPlacement(
   map: OlMap,
   feature: Feature<Point>,
   resolution: number,
-): Coordinate | null {
+): StopVisualPlacement | null {
   const stop = getPublicTransportStopFromFeature(feature);
 
   if (!stop) {
@@ -313,16 +339,31 @@ function getStopVisualCenterPixels(
     return null;
   }
 
+  const layout = getStopOverlapLayout(feature);
+  const iconSize = getStopIconSize(resolution);
   const displacement = calculateStopDisplacement(
     stop.coordinate,
-    getStopOverlapLayout(feature),
+    layout,
     resolution,
-    getStopIconSize(resolution),
+    iconSize,
+    map.getView().getRotation(),
   );
 
   // OpenLayers icon displacement uses a positive Y value upwards, whereas map
   // screen pixels grow downwards. Mirror that axis when comparing real centres.
-  return [basePixel[0] + displacement[0], basePixel[1] - displacement[1]];
+  return {
+    centerPixels: [
+      basePixel[0] + displacement[0],
+      basePixel[1] - displacement[1],
+    ],
+    activeOverlapGroupId: isStopOverlapLayoutActive(
+      layout,
+      resolution,
+      iconSize,
+    )
+      ? layout.groupId
+      : null,
+  };
 }
 
 /** Spatial-grid entry used to keep dense-city decluttering close to O(n). */
@@ -344,8 +385,9 @@ function declutterGridKey(x: number, y: number): string {
 
 /**
  * Applies deterministic screen-space decluttering without removing any stop
- * feature from the source. The selected stop is considered first, while stops
- * deliberately separated by the same fan-out group never hide each other.
+ * feature from the source. The current declutter-priority stop is considered
+ * first, while members of the same actively fanned-out group never hide each
+ * other.
  *
  * @param display - Persistent OpenLayers resources for public-transport stops.
  * @param map - Mounted map used to resolve exact rotated screen positions.
@@ -371,7 +413,7 @@ export function applyPublicTransportStopDeclutterVisibility(
     sourceRevision,
     resolution,
     rotation,
-    display.selectedStopId ?? '',
+    display.declutterPriorityStopId ?? '',
   ].join(':');
 
   if (display.declutterSnapshot === snapshot) {
@@ -382,27 +424,31 @@ export function applyPublicTransportStopDeclutterVisibility(
     getPublicTransportStopDeclutterSeparationPixels(resolution);
   const separationSquared = separation * separation;
   const candidates: DeclutterCandidate[] = [];
+  let hadUnresolvedPixel = false;
 
   for (const feature of display.source.getFeatures()) {
     const stop = getPublicTransportStopFromFeature(feature);
-    const centerPixels = getStopVisualCenterPixels(map, feature, resolution);
+    const placement = getStopVisualPlacement(map, feature, resolution);
 
-    if (!stop || !centerPixels) {
-      feature.set(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME, false, true);
+    if (!stop || !placement) {
+      // Missing frame transforms are transient. Degrade to visible and avoid
+      // caching this incomplete pass so the next rendered frame can retry.
+      feature.set(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME, true, true);
+      hadUnresolvedPixel = hadUnresolvedPixel || Boolean(stop);
       continue;
     }
 
     candidates.push({
       feature,
       stopId: stop.id,
-      centerPixels,
-      collisionGroup: getStopOverlapLayout(feature)?.groupId ?? null,
+      centerPixels: placement.centerPixels,
+      collisionGroup: placement.activeOverlapGroupId,
     });
   }
 
   candidates.sort((first, second) => {
-    const firstSelected = first.stopId === display.selectedStopId;
-    const secondSelected = second.stopId === display.selectedStopId;
+    const firstSelected = first.stopId === display.declutterPriorityStopId;
+    const secondSelected = second.stopId === display.declutterPriorityStopId;
 
     if (firstSelected !== secondSelected) {
       return firstSelected ? -1 : 1;
@@ -463,7 +509,7 @@ export function applyPublicTransportStopDeclutterVisibility(
     }
   }
 
-  display.declutterSnapshot = snapshot;
+  display.declutterSnapshot = hadUnresolvedPixel ? null : snapshot;
   display.layer.changed();
 }
 
@@ -494,13 +540,13 @@ export function getPublicTransportStopChoicesForVisibleStop(
     return [visibleStop];
   }
 
-  const visibleCenter = getStopVisualCenterPixels(
+  const visiblePlacement = getStopVisualPlacement(
     map,
     visibleFeature,
     resolution,
   );
 
-  if (!visibleCenter) {
+  if (!visiblePlacement) {
     return [visibleStop];
   }
 
@@ -521,14 +567,16 @@ export function getPublicTransportStopChoicesForVisibleStop(
       continue;
     }
 
-    const center = getStopVisualCenterPixels(map, feature, resolution);
+    const placement = getStopVisualPlacement(map, feature, resolution);
 
-    if (!center) {
+    if (!placement) {
       continue;
     }
 
-    const deltaX = center[0] - visibleCenter[0];
-    const deltaY = center[1] - visibleCenter[1];
+    const deltaX =
+      placement.centerPixels[0] - visiblePlacement.centerPixels[0];
+    const deltaY =
+      placement.centerPixels[1] - visiblePlacement.centerPixels[1];
 
     if (deltaX * deltaX + deltaY * deltaY < separationSquared) {
       seenStopIds.add(stop.id);
@@ -621,6 +669,7 @@ function getSelectedStopStyle(
 
 /** Creates the persistent vector layers for filtered and selected stops. */
 export function createPublicTransportStopsDisplay(): PublicTransportStopsDisplay {
+  let display: PublicTransportStopsDisplay | null = null;
   const source = new VectorSource<Feature<Point>>({
     attributions: PUBLIC_TRANSPORT_STOPS_ATTRIBUTION,
   });
@@ -640,6 +689,7 @@ export function createPublicTransportStopsDisplay(): PublicTransportStopsDisplay
             getStopOverlapLayout(feature),
             resolution,
             iconSize,
+            display?.viewRotation ?? 0,
           )
         : [0, 0];
       return getSelectedStopStyle(displacement, iconSize);
@@ -662,6 +712,7 @@ export function createPublicTransportStopsDisplay(): PublicTransportStopsDisplay
         getStopOverlapLayout(feature),
         resolution,
         iconSize,
+        display?.viewRotation ?? 0,
       );
       return getModeStyle(
         getPrimaryPublicTransportMode(stop.modes),
@@ -671,14 +722,17 @@ export function createPublicTransportStopsDisplay(): PublicTransportStopsDisplay
     },
   });
 
-  return {
+  display = {
     layer,
     source,
     selectionLayer,
     selectionSource,
     selectedStopId: null,
+    declutterPriorityStopId: null,
+    viewRotation: 0,
     declutterSnapshot: null,
   };
+  return display;
 }
 
 /** Replaces visible features after one completed viewport load. */
@@ -734,8 +788,26 @@ export function updatePublicTransportStopDeclutterPriority(
   display: PublicTransportStopsDisplay,
   stopId: string | null,
 ): void {
-  display.selectedStopId = stopId;
+  display.declutterPriorityStopId = stopId;
   display.declutterSnapshot = null;
+}
+
+/**
+ * Updates the view rotation used by screen-aligned fan-out styles. Decluttering
+ * itself waits for a rendered frame so its coordinate-to-pixel transform matches.
+ */
+export function updatePublicTransportStopsViewRotation(
+  display: PublicTransportStopsDisplay,
+  rotation: number,
+): void {
+  if (display.viewRotation === rotation) {
+    return;
+  }
+
+  display.viewRotation = rotation;
+  display.declutterSnapshot = null;
+  display.layer.changed();
+  display.selectionLayer.changed();
 }
 
 /** Updates the selected-stop halo without changing loaded stop features. */
@@ -744,6 +816,7 @@ export function updatePublicTransportStopSelection(
   stop: PublicTransportStop | null,
 ): void {
   display.selectionSource.clear();
+  display.selectedStopId = stop?.id ?? null;
   updatePublicTransportStopDeclutterPriority(display, stop?.id ?? null);
 
   if (!stop) {

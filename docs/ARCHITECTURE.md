@@ -852,16 +852,19 @@ Official stop coordinates never change. Distinct stops within the close-stop
 threshold can be fanned out temporarily when their icons overlap. Decluttering
 runs after that fan-out in CSS-pixel space, hides only the style of lower-priority
 features, and leaves every stop loaded in the vector source. Members of the same
-fan-out group do not suppress each other. The selected stop always wins the
-decluttering order, and more stops reappear naturally as zoom makes their symbol
-centres distinct.
+fan-out group do not suppress each other while that fan-out is active; once real
+coordinates are sufficiently separated and fan-out is released, ordinary
+collision rules apply again. Decluttering is refreshed from a rendered map state
+so symbol sizes and coordinate-to-pixel transforms describe the same view.
 
 A rendered stop hit may expose hidden declutter neighbours in a chooser, but an
-invisible stop alone is never a click target. The timetable is requested only
-after one concrete stop has been selected. A buffered request extent reduces
-repeated traffic during nearby pans. Zoom, canvas-size, language, or visibility
-changes invalidate reuse. Timetable errors do not remove the selected stop or
-its official SBB/CFF/FFS links.
+invisible stop alone is never a click target. The chooser representative may
+temporarily win decluttering without being presented as a selected stop; only a
+concrete user selection receives the halo and keeps visual priority. The
+timetable is requested only after one concrete stop has been selected. A buffered
+request extent reduces repeated traffic during nearby pans. Zoom, canvas-size,
+language, or visibility changes invalidate reuse. Timetable errors do not remove
+the selected stop or its official SBB/CFF/FFS links.
 
 ## 7. Routing boundary
 

@@ -46,6 +46,7 @@ import {
   updatePublicTransportStopsDisplay,
   updatePublicTransportStopDeclutterPriority,
   updatePublicTransportStopSelection,
+  updatePublicTransportStopsViewRotation,
 } from '../transport/publicTransportStops';
 import {
   HIKING_TRAILS_MIN_ZOOM,
@@ -589,8 +590,10 @@ export function useMapInformationLayers(
           }
 
           loadedCoverage = coverage;
+          // Source replacement schedules a render. Let the post-render pass
+          // declutter against that frame instead of caching stale pixel geometry
+          // if the buffered response arrives during an in-progress map movement.
           updatePublicTransportStopsDisplay(display, stops);
-          applyPublicTransportStopDeclutterVisibility(display, map);
         })
         .catch((error: unknown) => {
           if (isAbortedRequest(error, request.signal)) {
@@ -649,22 +652,33 @@ export function useMapInformationLayers(
       );
     };
 
-    const refreshStopDeclutter = () => {
+    const refreshStopDeclutterAfterRender = () => {
+      // `getPixelFromCoordinate()` uses the last rendered frame transform. Run
+      // collision decisions after a frame so symbol size and pixel positions
+      // describe the same view state instead of mixing animation generations.
       applyPublicTransportStopDeclutterVisibility(display, map);
+    };
+    const refreshStopRotation = () => {
+      // Fan-out displacement is screen-aligned, so style rotation can update as
+      // soon as the view changes; decluttering itself waits for `postrender`.
+      updatePublicTransportStopsViewRotation(
+        display,
+        map.getView().getRotation(),
+      );
     };
 
     map.on('moveend', scheduleVisibleStopsLoad);
     map.on('change:size', scheduleVisibleStopsLoad);
-    map.getView().on('change:resolution', refreshStopDeclutter);
-    map.getView().on('change:rotation', refreshStopDeclutter);
+    map.on('postrender', refreshStopDeclutterAfterRender);
+    map.getView().on('change:rotation', refreshStopRotation);
+    refreshStopRotation();
     loadVisibleStops();
-    refreshStopDeclutter();
 
     return () => {
       map.un('moveend', scheduleVisibleStopsLoad);
       map.un('change:size', scheduleVisibleStopsLoad);
-      map.getView().un('change:resolution', refreshStopDeclutter);
-      map.getView().un('change:rotation', refreshStopDeclutter);
+      map.un('postrender', refreshStopDeclutterAfterRender);
+      map.getView().un('change:rotation', refreshStopRotation);
       clearDebounce();
       cancelPendingRequest();
     };
@@ -785,12 +799,6 @@ export function useMapInformationLayers(
       // leaves the optimistic toggle in place.
       const preserveSelectionOnEmptyClick = onMapClickStart?.() ?? false;
 
-      if (!preserveSelectionOnEmptyClick) {
-        // Desktop keeps the established immediate-dismiss behaviour rather than
-        // waiting for the asynchronous identify pipeline to prove the click empty.
-        closeMapInformationPopup();
-      }
-
       const canInspectStops =
         arePublicTransportStopsVisible &&
         zoom > PUBLIC_TRANSPORT_STOPS_MIN_ZOOM;
@@ -851,6 +859,13 @@ export function useMapInformationLayers(
           }
           return;
         }
+      }
+
+      if (!preserveSelectionOnEmptyClick) {
+        // A stop hit must be resolved against the decluttering state that was
+        // actually painted. Only after that synchronous hit-test may desktop
+        // dismiss the previous selection before starting remote identification.
+        closeMapInformationPopup();
       }
 
       if (
