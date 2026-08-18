@@ -727,7 +727,15 @@ export function createRouteDragInteraction(
 
   interaction = new PointerInteraction({
     handleDownEvent: (event: MapBrowserEvent) => {
-      const pointerType = (event.originalEvent as PointerEvent).pointerType;
+      const pointerEvent = event.originalEvent as PointerEvent;
+      const pointerType = pointerEvent.pointerType;
+
+      // Route shaping belongs to the primary pointer button. Keeping secondary
+      // mouse buttons out of this interaction lets desktop context-menu actions
+      // inspect a map position without starting a waypoint or section drag.
+      if (pointerType !== 'touch' && pointerEvent.button !== 0) {
+        return false;
+      }
 
       if (!callbacks.canStart()) {
         return false;
@@ -786,7 +794,7 @@ export function createRouteDragInteraction(
       hasStartedEdit = !isTouchInteraction;
       startPointerLivenessMonitoring(
         event.map,
-        event.originalEvent as PointerEvent,
+        pointerEvent,
       );
       callbacks.onHover(null, null);
       updateRouteEditCursor(event.map, dragTarget.type, false);

@@ -68,6 +68,7 @@ interface InteractionHarness {
     pointerType?: string,
     pointerCount?: number,
     pointerId?: number,
+    button?: number,
   ) => MapBrowserEvent;
   /** Returns the mutable view centre used by auto-pan assertions. */
   getViewCenter: () => Coordinate;
@@ -188,10 +189,12 @@ function createHarness(
     pointerType = 'touch',
     pointerCount = 1,
     pointerId = 1,
+    button = 0,
   ) => {
     const originalEvent = {
       pointerId,
       pointerType,
+      button,
       preventDefault: vi.fn(),
     } as unknown as PointerEvent;
     const activePointers = Array.from(
@@ -233,6 +236,18 @@ describe('route pointer interaction', () => {
 
     expect(shouldPropagate).toBe(true);
     expect(callbacks.onStart).not.toHaveBeenCalled();
+  });
+
+  it('leaves the secondary mouse button available to map position inspection', () => {
+    const { interaction, callbacks, createEvent } = createHarness('waypoint');
+
+    const shouldPropagate = interaction.handleEvent(
+      createEvent('pointerdown', [100, 100], 'mouse', 1, 1, 2),
+    );
+
+    expect(shouldPropagate).toBe(true);
+    expect(callbacks.onStart).not.toHaveBeenCalled();
+    expect(callbacks.onTapWaypoint).not.toHaveBeenCalled();
   });
 
   it('reports a waypoint tap without starting a drag preview', () => {

@@ -13,6 +13,7 @@ import MapLayersSelector from './components/MapLayersSelector';
 import LanguageSelector from './components/LanguageSelector';
 import LocationSearch from './components/LocationSearch';
 import MapInformationChoicePanel from './components/MapInformationChoicePanel';
+import MapPositionPanel from './components/MapPositionPanel';
 import RouteImportControl from './components/RouteImportControl';
 import RouteControls from './components/RouteControls';
 import RouteExportDialog from './components/RouteExportDialog';
@@ -59,6 +60,7 @@ import {
   useMapInformationLayers,
 } from './map/useMapInformationLayers';
 import { useMapRuntime } from './map/useMapRuntime';
+import { useMapPositionInspection } from './map/useMapPositionInspection';
 import {
   resolveInitialMapLayerOpacities,
   useMapLayerOpacities,
@@ -533,6 +535,24 @@ export default function App() {
       handleSwitzerlandMobilityHikingRouteAccepted,
   });
 
+  const handleMapPositionOpen = useCallback(() => {
+    closeMapInformationPopup();
+    clearSelectedSearchResult();
+  }, [clearSelectedSearchResult, closeMapInformationPopup]);
+
+  const {
+    inspection: mapPositionInspection,
+    closeInspection: closeMapPositionInspection,
+  } = useMapPositionInspection({
+    mapRuntimeRef,
+    onOpen: handleMapPositionOpen,
+  });
+
+  const closeTransientMapInformation = useCallback(() => {
+    closeMapInformationPopup();
+    closeMapPositionInspection();
+  }, [closeMapInformationPopup, closeMapPositionInspection]);
+
   useEffect(() => {
     if (isRouteCreationActive) {
       // Route clicks own the map while editing, so the planning controls must
@@ -570,8 +590,9 @@ export default function App() {
   /** Opens project information after dismissing any map-feature popup behind it. */
   const openAboutDialog = useCallback(() => {
     closeMapInformationPopup();
+    closeMapPositionInspection();
     setIsAboutDialogOpen(true);
-  }, [closeMapInformationPopup]);
+  }, [closeMapInformationPopup, closeMapPositionInspection]);
 
   /** Acknowledges the current release before dismissing its one-time dialog. */
   const closeReleaseNotesDialog = useCallback(() => {
@@ -601,6 +622,7 @@ export default function App() {
       return;
     }
 
+    closeMapPositionInspection();
     updateSearchResultMarker(marker, coordinate);
 
     const isCoordinateResult =
@@ -796,7 +818,7 @@ export default function App() {
         key={`${language}:${locationSearchResetVersion}`}
         isMobileOverlayOpen={isMobileSearchOpen}
         onMobileOverlayClose={() => setIsMobileSearchOpen(false)}
-        onSearchFocus={closeMapInformationPopup}
+        onSearchFocus={closeTransientMapInformation}
         onSelect={selectSearchResult}
         onClear={clearSearchResultMarkerOnly}
       />
@@ -837,7 +859,7 @@ export default function App() {
           aria-label={t('search.label')}
           title={t('search.label')}
           onClick={() => {
-            closeMapInformationPopup();
+            closeTransientMapInformation();
             setIsMobileSearchOpen(true);
           }}
         >
@@ -873,7 +895,7 @@ export default function App() {
         )}
 
         <RouteImportControl
-          onOpen={closeMapInformationPopup}
+          onOpen={closeTransientMapInformation}
           onSelectFile={importRouteFile}
         />
 
@@ -897,7 +919,7 @@ export default function App() {
           onPublicTransportStopsChange={setArePublicTransportStopsVisible}
           layerOpacities={layerOpacities}
           onLayerOpacityChange={setLayerOpacity}
-          onOpen={closeMapInformationPopup}
+          onOpen={closeTransientMapInformation}
           onOpenAbout={openAboutDialog}
         />
 
@@ -1040,7 +1062,16 @@ export default function App() {
         />
       )}
 
-      {switzerlandMobilityHikingPanel && !mapInformationChoices && (
+      {mapPositionInspection && (
+        <MapPositionPanel
+          inspection={mapPositionInspection}
+          onClose={closeMapPositionInspection}
+        />
+      )}
+
+      {switzerlandMobilityHikingPanel &&
+        !mapInformationChoices &&
+        !mapPositionInspection && (
         <SwitzerlandMobilityHikingPanel
           status={switzerlandMobilityHikingPanel}
           onProfileHoverDistanceChange={
@@ -1055,7 +1086,8 @@ export default function App() {
 
       {activeRouteSegments.length > 0 &&
         !switzerlandMobilityHikingPanel &&
-        !mapInformationChoices && (
+        !mapInformationChoices &&
+        !mapPositionInspection && (
           <RouteStatistics
             distanceMeters={routeDistanceMeters}
             elevationStatus={routeElevationStatus}

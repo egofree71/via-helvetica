@@ -196,7 +196,7 @@ flowchart LR
     Map --> WMS[GeoAdmin WMS]
     UI --> Search[GeoAdmin SearchServer]
     UI --> Identify[GeoAdmin identify and popup APIs]
-    UI --> Elevation[GeoAdmin elevation profile]
+    UI --> Elevation[GeoAdmin point height and elevation profile]
     UI --> Timetable[transport.opendata.ch]
     Worker --> Identify
     Worker --> RoutingData[Versioned binary routing cells]
@@ -221,7 +221,7 @@ flowchart LR
 | GeoAdmin identify | swissTLM3D routing data and map-feature inspection | Routing requests may fail; information overlays remain non-blocking |
 | GeoAdmin HTML popup | Localized closure and military metadata | Popup reports a local error without changing route state |
 | GeoAdmin WMS | Closure, detour, and military danger portrayals | Overlay failure does not block map use |
-| GeoAdmin elevation profile | Elevation, ascent, descent, and walking-time samples | Distance remains available; altitude-dependent metrics become unavailable |
+| GeoAdmin point height and elevation profile | Explicit desktop point elevation plus route ascent, descent, and walking-time samples | Coordinates and distance remain available; altitude-dependent values become unavailable |
 | Versioned static routing storage | Optional precomputed Swiss graph cells used by the Worker | Coverage misses use GeoAdmin for the affected operation; persistent delivery, compatibility, or integrity failures switch the complete session to GeoAdmin |
 | Federal Office of Transport data | Passenger-stop geometry and attributes | Optional stop layer may be incomplete or unavailable |
 | transport.opendata.ch | On-demand departure board | Stop remains visible even when departures fail |
@@ -286,6 +286,7 @@ flowchart TB
 | Map lifetime | `src/map/mapRuntime.ts`, `src/map/useMapRuntime.ts` | Creates and disposes the single OpenLayers runtime; synchronizes startup and fullscreen state |
 | Map controls | `src/map/useMapViewControls.ts`, `src/map/useMapLayerOpacities.ts`, `src/components/MapLayersSelector.tsx` | Background choice, persisted overlay visibility and opacity, zoom, fullscreen, and explicit geolocation; redundant +/- zoom buttons are hidden on small coarse-pointer devices |
 | Information overlays | `src/map/useMapInformationLayers.ts`, `src/map/mapInformationChoice.ts`, `src/components/MapInformationChoicePanel.tsx`, `src/map/mapInformationViewport.ts`, `src/map/useSwitzerlandMobilityHikingSelection.ts`, `src/switzerlandMobility/hikingRoutes.ts` | Visibility, loading, cross-layer click candidate aggregation, common ambiguity choice, click-anchor visibility beside temporary panels, public-route selection and fitting, popup state, caching, and cancellation |
+| Desktop point inspection | `src/map/useMapPositionInspection.ts`, `src/map/pointHeight.ts`, `src/map/mapPositionMarker.ts`, `src/components/MapPositionPanel.tsx` | Fine-pointer context-menu handling, temporary point marker, WGS 84/LV95 presentation and copy actions, cancellable GeoAdmin point-height lookup, and dismissal on the next map click |
 | Editable-route domain | `src/map/routeState.ts`, `src/map/useEditableRoute.ts`, `src/map/importedRouteConversion.ts` | Immutable route state and section provenance, history, lossless single-trace GPX conversion, snap mode, serialized mutations, and route actions |
 | Pointer interaction | `src/map/useRouteInteractions.ts`, `src/map/routePointerInteraction.ts` | Waypoint and section hit detection, drag previews, click/drag lifecycle, and semantic edit requests |
 | Route presentation | `src/map/routeDisplay.ts`, `src/map/itineraryDirection.ts`, `src/map/itineraryEndpoints.ts` | Committed geometry, previews, zoom-aware waypoint decluttering, direction arrows, and A/B markers |
@@ -714,6 +715,17 @@ to plain text before React renders them. Selecting a place frames the broader
 planning context; selecting an exact coordinate uses the closer geolocation scale.
 Either result creates a temporary marker that is cleared when a higher-priority
 workflow takes ownership.
+
+Desktop fine-pointer users can also right-click the map to inspect an exact point
+without entering the left-click information-layer pipeline. The browser context
+menu is suppressed only for this supported desktop gesture. A dedicated marker,
+using the same visual language as exact coordinate search, appears immediately;
+WGS 84 is derived locally from the native LV95 click while the official GeoAdmin
+point-height service loads the terrain elevation independently. A newer right-click,
+ordinary map click, panel dismissal, or unmount aborts obsolete height work. The
+compact lower-map panel temporarily replaces itinerary summaries but does not
+change the current itinerary, route geometry, or information-layer visibility.
+No mobile long-press equivalent is introduced.
 
 Geolocation is requested only after explicit user action. A valid WGS 84
 position is converted to LV95, checked against the configured extent, displayed,
