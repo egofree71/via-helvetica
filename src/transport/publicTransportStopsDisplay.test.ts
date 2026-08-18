@@ -109,6 +109,51 @@ describe('publicTransportStopsDisplay decluttering', () => {
     expect(renderedStopIds(display, 10).length).toBeGreaterThan(0);
   });
 
+  it('preserves rendered shared stops while a buffered viewport adds new data', () => {
+    const display = createPublicTransportStopsDisplay();
+    const { map } = createMapHarness(10);
+    const first = createStop('a', [2_550_000, 1_170_000]);
+    const second = createStop('b', [2_550_500, 1_170_000]);
+
+    updatePublicTransportStopsDisplay(display, [first, second]);
+    applyPublicTransportStopDeclutterVisibility(display, map);
+    const originalFirstFeature = display.source.getFeatureById(first.id);
+
+    expect(renderedStopIds(display, 10)).toEqual(['a', 'b']);
+
+    const enteringStop = createStop('c', [2_551_000, 1_170_000]);
+    updatePublicTransportStopsDisplay(display, [first, second, enteringStop]);
+
+    // Existing symbols stay painted while brand-new buffer members wait for the
+    // postrender declutter pass. This avoids a whole-layer blink on coverage refresh.
+    expect(display.source.getFeatureById(first.id)).toBe(originalFirstFeature);
+    expect(renderedStopIds(display, 10)).toEqual(['a', 'b']);
+
+    applyPublicTransportStopDeclutterVisibility(display, map);
+    expect(renderedStopIds(display, 10)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('does not invalidate the layer when a declutter pass keeps the same visibility', () => {
+    const display = createPublicTransportStopsDisplay();
+    const { map } = createMapHarness(10);
+    const changedSpy = vi.spyOn(display.layer, 'changed');
+    const stops = [
+      createStop('a', [2_550_000, 1_170_000]),
+      createStop('b', [2_550_500, 1_170_000]),
+    ];
+
+    updatePublicTransportStopsDisplay(display, stops);
+    applyPublicTransportStopDeclutterVisibility(display, map);
+    changedSpy.mockClear();
+
+    // Giving priority to an already visible stop invalidates the snapshot but
+    // should not rebuild the OpenLayers replay group if visibility is unchanged.
+    updatePublicTransportStopDeclutterPriority(display, 'a');
+    applyPublicTransportStopDeclutterVisibility(display, map);
+
+    expect(changedSpy).not.toHaveBeenCalled();
+  });
+
   it('keeps close stops fanned out and simultaneously renderable', () => {
     const display = createPublicTransportStopsDisplay();
     const { map } = createMapHarness(10);
