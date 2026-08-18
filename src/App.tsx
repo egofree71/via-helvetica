@@ -12,6 +12,7 @@ import ReleaseNotesDialog from './components/ReleaseNotesDialog';
 import MapLayersSelector from './components/MapLayersSelector';
 import LanguageSelector from './components/LanguageSelector';
 import LocationSearch from './components/LocationSearch';
+import MapInformationChoicePanel from './components/MapInformationChoicePanel';
 import RouteImportControl from './components/RouteImportControl';
 import RouteControls from './components/RouteControls';
 import RouteExportDialog from './components/RouteExportDialog';
@@ -513,6 +514,8 @@ export default function App() {
     trailClosurePopup,
     shootingDangerZonePopup,
     publicTransportStopPopup,
+    mapInformationChoices,
+    selectMapInformationChoice,
     selectPublicTransportStop,
     switzerlandMobilityHikingPanel,
     selectSwitzerlandMobilityHikingCandidate,
@@ -1032,7 +1035,15 @@ export default function App() {
         />
       )}
 
-      {switzerlandMobilityHikingPanel && (
+      {mapInformationChoices && (
+        <MapInformationChoicePanel
+          choices={mapInformationChoices}
+          onSelectChoice={selectMapInformationChoice}
+          onClose={closeMapInformationPopup}
+        />
+      )}
+
+      {switzerlandMobilityHikingPanel && !mapInformationChoices && (
         <SwitzerlandMobilityHikingPanel
           status={switzerlandMobilityHikingPanel}
           onSelectCandidate={selectSwitzerlandMobilityHikingCandidate}
@@ -1047,7 +1058,8 @@ export default function App() {
       )}
 
       {activeRouteSegments.length > 0 &&
-        !switzerlandMobilityHikingPanel && (
+        !switzerlandMobilityHikingPanel &&
+        !mapInformationChoices && (
           <RouteStatistics
             distanceMeters={routeDistanceMeters}
             elevationStatus={routeElevationStatus}

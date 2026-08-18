@@ -186,7 +186,9 @@ Machine-specific infrastructure and credentials remain outside version control.
   synchronized with the map. Once its complete geometry is available, it replaces
   any editable route or imported GPX as the single current itinerary. The shared
   export action in the map controls downloads that selected stage as GPX. When
-  several named routes share the clicked path, choose one before framing.
+  several information objects share the same click—for example a transport stop
+  on a SwitzerlandMobility route—choose the one to inspect from the common map
+  chooser before its detailed workflow opens.
 - Use the information button to open the localized About dialog with the
   project summary, support contact, source code, license, professional profile,
   release history, and official data credits. Returning visitors are introduced

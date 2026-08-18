@@ -6,11 +6,14 @@
  */
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
-import type { TranslationKey } from '../i18n/translations';
 import type {
   SwitzerlandMobilityHikingPanelStatus,
 } from '../map/useSwitzerlandMobilityHikingSelection';
 import type { SwitzerlandMobilityHikingRouteCandidate } from '../switzerlandMobility/hikingRoutes';
+import {
+  getSwitzerlandMobilityHikingRouteName,
+  getSwitzerlandMobilityHikingRouteSubtitle,
+} from '../switzerlandMobility/hikingRoutePresentation';
 import RouteElevationProfile from './RouteElevationProfile';
 
 /** Props required by the compact public-route information panel. */
@@ -31,51 +34,6 @@ interface SwitzerlandMobilityHikingPanelProps {
 
 /** Duration is rounded to five minutes because it remains a planning estimate. */
 const DURATION_ROUNDING_MINUTES = 5;
-
-/** Translation helper subset used by route heading construction. */
-type Translate = (
-  key: TranslationKey,
-  parameters?: Record<string, string | number>,
-) => string;
-
-/** Returns the best public route name, then a localized numeric fallback. */
-function routeName(
-  candidate: SwitzerlandMobilityHikingRouteCandidate,
-  t: Translate,
-): string {
-  if (candidate.routeName) {
-    return candidate.routeName;
-  }
-
-  if (candidate.routeNumber) {
-    return t('switzerlandMobilityHiking.routeNumber', {
-      number: candidate.routeNumber,
-    });
-  }
-
-  return t('switzerlandMobilityHiking.unnamedRoute');
-}
-
-/** Builds the subtitle shown below a public route name. */
-function routeSubtitle(
-  candidate: SwitzerlandMobilityHikingRouteCandidate,
-  t: Translate,
-): string | null {
-  const stageLabel = candidate.stageNumber
-    ? t('switzerlandMobilityHiking.stage', {
-        number: candidate.stageNumber,
-      })
-    : null;
-
-  if (candidate.stageNumber && candidate.sectionName) {
-    return t('switzerlandMobilityHiking.stageSection', {
-      number: candidate.stageNumber,
-      section: candidate.sectionName,
-    });
-  }
-
-  return stageLabel ?? candidate.sectionName;
-}
 
 /** Formats short geometry in metres and hiking routes in localized kilometres. */
 function formatDistance(
@@ -165,7 +123,9 @@ export default function SwitzerlandMobilityHikingPanel({
     : status.state === 'ready' && status.elevationStatus === 'loading'
       ? t('profile.loading')
       : t('profile.unavailable');
-  const candidateSubtitle = candidate ? routeSubtitle(candidate, t) : null;
+  const candidateSubtitle = candidate
+    ? getSwitzerlandMobilityHikingRouteSubtitle(candidate, t)
+    : null;
 
   // A new stage must never inherit an expanded chart or marker position from
   // the previously selected public route, even if both use the same panel.
@@ -224,7 +184,7 @@ export default function SwitzerlandMobilityHikingPanel({
               {status.state === 'choices'
                 ? t('switzerlandMobilityHiking.multipleTitle')
                 : candidate
-                  ? routeName(candidate, t)
+                  ? getSwitzerlandMobilityHikingRouteName(candidate, t)
                   : t('switzerlandMobilityHiking.unnamedRoute')}
             </strong>
             {candidateSubtitle && <span>{candidateSubtitle}</span>}
@@ -248,7 +208,11 @@ export default function SwitzerlandMobilityHikingPanel({
             <p>{t('switzerlandMobilityHiking.multipleHint')}</p>
             <div>
               {status.candidates.map((routeCandidate) => {
-                const subtitle = routeSubtitle(routeCandidate, t);
+                const subtitle =
+                  getSwitzerlandMobilityHikingRouteSubtitle(
+                    routeCandidate,
+                    t,
+                  );
 
                 return (
                   <button
@@ -256,7 +220,12 @@ export default function SwitzerlandMobilityHikingPanel({
                     key={String(routeCandidate.featureId)}
                     onClick={() => onSelectCandidate(routeCandidate)}
                   >
-                    <strong>{routeName(routeCandidate, t)}</strong>
+                    <strong>
+                      {getSwitzerlandMobilityHikingRouteName(
+                        routeCandidate,
+                        t,
+                      )}
+                    </strong>
                     {subtitle && <span>{subtitle}</span>}
                   </button>
                 );

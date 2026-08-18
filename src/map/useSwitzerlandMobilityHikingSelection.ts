@@ -100,6 +100,13 @@ export interface UseSwitzerlandMobilityHikingSelectionOptions {
 export interface SwitzerlandMobilityHikingSelectionController {
   /** Current compact panel state, or `null` when no route is selected. */
   panelStatus: SwitzerlandMobilityHikingPanelStatus | null;
+  /** Identifies lightweight public-route candidates without changing selection UI. */
+  identifyCandidatesAt: (
+    context: SwitzerlandMobilityHikingIdentifyContext,
+    signal: AbortSignal,
+  ) => Promise<SwitzerlandMobilityHikingRouteCandidate[]>;
+  /** Shows the existing public-route identify error state without retrying identification. */
+  showIdentifyError: () => void;
   /** Identifies routes at a click and starts selection or overlap choice. */
   inspectAt: (
     context: SwitzerlandMobilityHikingIdentifyContext,
@@ -426,10 +433,44 @@ export function useSwitzerlandMobilityHikingSelection(
   );
 
   /**
+   * Identifies public-route candidates without taking ownership of the panel.
+   * The shared map-information coordinator uses this to combine route matches
+   * with safety and public-transport candidates from the same click.
+   *
+   * @param context - Click coordinate and current map rendering context.
+   * @param signal - Abort signal owned by the map-information click pipeline.
+   * @returns Distinct lightweight public-route candidates at the click position.
+   */
+  const identifyCandidatesAt = useCallback(
+    (
+      context: SwitzerlandMobilityHikingIdentifyContext,
+      signal: AbortSignal,
+    ) => identifySwitzerlandMobilityHikingRoutes(context, signal),
+    [],
+  );
+
+  /**
+   * Presents a public-route identify failure without starting another provider
+   * request. A previously validated route remains usable on transient failures.
+   */
+  const showIdentifyError = useCallback(() => {
+    options.onInformationSelected();
+    const readySelection = readySelectionRef.current;
+
+    if (readySelection) {
+      setPanelStatus(readySelection);
+      return;
+    }
+
+    clearProfileHover();
+    setPanelStatus({ state: 'error', candidate: null });
+  }, [clearProfileHover, options.onInformationSelected]);
+
+  /**
    * Identifies routes at one click and preserves explicit choice for overlaps.
    *
    * @param context - Click coordinate and current map rendering context.
-   * @param signal - Abort signal owned by the prioritized information pipeline.
+   * @param signal - Abort signal owned by the caller's map-inspection pipeline.
    * @returns `true` when a route panel or error state consumed the click.
    */
   const inspectAt = useCallback(
@@ -438,10 +479,7 @@ export function useSwitzerlandMobilityHikingSelection(
       signal: AbortSignal,
     ): Promise<boolean> => {
       try {
-        const candidates = await identifySwitzerlandMobilityHikingRoutes(
-          context,
-          signal,
-        );
+        const candidates = await identifyCandidatesAt(context, signal);
 
         if (candidates.length === 0 || signal.aborted) {
           return false;
@@ -472,25 +510,17 @@ export function useSwitzerlandMobilityHikingSelection(
           'Unable to identify SwitzerlandMobility hiking routes.',
           error,
         );
-        options.onInformationSelected();
-        const readySelection = readySelectionRef.current;
-
-        if (readySelection) {
-          // A transient identify failure must not discard a complete route that
-          // is already selected and usable on the map.
-          setPanelStatus(readySelection);
-        } else {
-          clearProfileHover();
-          setPanelStatus({ state: 'error', candidate: null });
-        }
+        showIdentifyError();
         return true;
       }
     },
     [
       clearProfileHover,
+      identifyCandidatesAt,
       options.mapRuntimeRef,
       options.onInformationSelected,
       selectCandidate,
+      showIdentifyError,
     ],
   );
 
@@ -504,6 +534,8 @@ export function useSwitzerlandMobilityHikingSelection(
 
   return {
     panelStatus,
+    identifyCandidatesAt,
+    showIdentifyError,
     inspectAt,
     selectCandidate,
     mapHoverDistanceMeters,

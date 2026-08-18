@@ -153,10 +153,13 @@ only while map/options is open so itinerary summaries can otherwise remain above
 the permanent floating controls. On phones the layer sheet is titled "Map and
 options" and also contains the four language choices plus an About entry,
 removing infrequently used permanent controls from the narrow map edge; desktop
-keeps the direct language selector and About button. The SwitzerlandMobility overlap chooser is also
-full-width on phones, but keeps a content-driven height for short candidate lists
+keeps the direct language selector and About button. The common map-information
+chooser used for overlapping safety, transport, and SwitzerlandMobility candidates
+is also full-width on phones, but keeps a content-driven height for short lists
 and only caps itself at half the viewport when native scrolling is actually
-needed. Its candidate list uses the flexbox space left by the localized header,
+needed. While open, it temporarily owns the lower-map decision area instead of
+competing with the current itinerary summary. Its candidate list uses the flexbox
+space left by the localized header,
 hint, and safe-area padding rather than a fixed height subtraction. These sheets
 deliberately avoid custom drag gestures so ordinary taps, links, and scrolling
 remain browser-native on touch devices. Outside route creation/editing, an empty
@@ -282,7 +285,7 @@ flowchart TB
 | Application composition | `src/App.tsx` | Connects focused hooks, resolves which temporary workflow owns the current itinerary, and owns modal state |
 | Map lifetime | `src/map/mapRuntime.ts`, `src/map/useMapRuntime.ts` | Creates and disposes the single OpenLayers runtime; synchronizes startup and fullscreen state |
 | Map controls | `src/map/useMapViewControls.ts`, `src/map/useMapLayerOpacities.ts`, `src/components/MapLayersSelector.tsx` | Background choice, persisted overlay visibility and opacity, zoom, fullscreen, and explicit geolocation; redundant +/- zoom buttons are hidden on small coarse-pointer devices |
-| Information overlays | `src/map/useMapInformationLayers.ts`, `src/map/mapInformationViewport.ts`, `src/map/useSwitzerlandMobilityHikingSelection.ts`, `src/switzerlandMobility/hikingRoutes.ts` | Visibility, loading, inspection priority, click-anchor visibility beside temporary panels, public-route selection and fitting, popup state, caching, and cancellation |
+| Information overlays | `src/map/useMapInformationLayers.ts`, `src/map/mapInformationChoice.ts`, `src/components/MapInformationChoicePanel.tsx`, `src/map/mapInformationViewport.ts`, `src/map/useSwitzerlandMobilityHikingSelection.ts`, `src/switzerlandMobility/hikingRoutes.ts` | Visibility, loading, cross-layer click candidate aggregation, common ambiguity choice, click-anchor visibility beside temporary panels, public-route selection and fitting, popup state, caching, and cancellation |
 | Editable-route domain | `src/map/routeState.ts`, `src/map/useEditableRoute.ts`, `src/map/importedRouteConversion.ts` | Immutable route state and section provenance, history, lossless single-trace GPX conversion, snap mode, serialized mutations, and route actions |
 | Pointer interaction | `src/map/useRouteInteractions.ts`, `src/map/routePointerInteraction.ts` | Waypoint and section hit detection, drag previews, click/drag lifecycle, and semantic edit requests |
 | Route presentation | `src/map/routeDisplay.ts`, `src/map/itineraryDirection.ts`, `src/map/itineraryEndpoints.ts` | Committed geometry, previews, zoom-aware waypoint decluttering, direction arrows, and A/B markers |
@@ -656,22 +659,30 @@ original document contract.
 
 ### 5.6 Information-layer inspection
 
-`useMapInformationLayers` owns one deterministic map-click pipeline outside
-route mode:
+`useMapInformationLayers` owns one map-click pipeline outside route mode. A click
+is treated as a geographic question rather than as a request for whichever layer
+happens to answer first. The coordinator first resolves any genuinely rendered
+public-transport stop hit, including its hidden declutter neighbours, then
+identifies every visible remote information layer that can participate at the
+current zoom. Closure, SwitzerlandMobility, and military danger-zone identify
+requests run concurrently so provider latency cannot become an accidental
+selection priority.
 
-1. already loaded public-transport stop vectors;
-2. visible hiking closures;
-3. visible SwitzerlandMobility hiking routes;
-4. visible military danger zones.
+When exactly one candidate matches, its existing detailed workflow opens
+directly. When several candidates share the click, one compact bottom-centred
+chooser groups them in explicit product order:
 
-The stop layer uses validated structured data and a project-owned popup. At
-coarser stop scales, one rendered symbol can represent nearby stops hidden only
-by presentation decluttering; clicking that rendered symbol opens a compact
-bottom-centred chooser, matching the SwitzerlandMobility overlap-choice pattern,
-before any timetable request so the user can select the exact stop.
-Closure and military details arrive as official HTML fragments, pass through a
-strict sanitizer, and are rendered inside project-owned popup wrappers. Selected
-military geometry is highlighted in a separate vector layer.
+1. hiking safety information: closures/detours, then shooting notices/danger zones;
+2. public-transport stops;
+3. SwitzerlandMobility hiking routes.
+
+The chooser contains only lightweight identify data. Closure and military HTML,
+public-transport departures, and complete SwitzerlandMobility geometry are loaded
+only after one concrete item has been selected. This keeps the map responsive and
+ensures that a local service feature such as a bus stop can never prevent access
+to official safety information or a named hiking route beneath the same click. A
+failing remote identify service is logged but does not discard successful
+candidates from other layers.
 
 For stop, closure, and danger-zone panels, the exact click coordinate remains
 the visual anchor and the zoom remains unchanged. Stops use the smallest pan
@@ -789,9 +800,11 @@ implicit insertion order.
 
 Outside route-creation mode, the information-layer click pipeline can identify a
 feature beneath the optional `ch.astra.wanderland` portrayal. Identification first
-requests public metadata only. A single match is selected immediately; when
-several named routes share the same path, the compact bottom panel presents an
-explicit chooser before any map movement.
+requests public metadata only. A single route is selected immediately only when
+no other map-information candidate shares the click; multiple named routes, or a
+route coinciding with safety or public-transport information, are resolved by the
+common bottom-centred map-information chooser before any complete geometry is
+loaded.
 
 After selection, a focused get-feature request retrieves the complete public
 geometry in LV95. Once that geometry is validated, the workflow clears any
@@ -857,14 +870,17 @@ coordinates are sufficiently separated and fan-out is released, ordinary
 collision rules apply again. Decluttering is refreshed from a rendered map state
 so symbol sizes and coordinate-to-pixel transforms describe the same view.
 
-A rendered stop hit may expose hidden declutter neighbours in a chooser, but an
-invisible stop alone is never a click target. The chooser representative may
-temporarily win decluttering without being presented as a selected stop; only a
-concrete user selection receives the halo and keeps visual priority. The
-timetable is requested only after one concrete stop has been selected. A buffered
-request extent reduces repeated traffic during nearby pans. Zoom, canvas-size,
-language, or visibility changes invalidate reuse. Timetable errors do not remove
-the selected stop or its official SBB/CFF/FFS links.
+A rendered stop hit may contribute hidden declutter neighbours to the common
+map-information chooser, but an invisible stop alone is never a click target. If
+the click also intersects safety information or SwitzerlandMobility routes, all
+those candidates remain available in that same chooser, with public transport
+listed before the public routes. The rendered stop representative may temporarily
+win decluttering without being presented as a selected stop; only a concrete user
+selection receives the halo and keeps visual priority. The timetable is requested
+only after one concrete stop has been selected. A buffered request extent reduces
+repeated traffic during nearby pans. Zoom, canvas-size, language, or visibility
+changes invalidate reuse. Timetable errors do not remove the selected stop or its
+official SBB/CFF/FFS links.
 
 ## 7. Routing boundary
 

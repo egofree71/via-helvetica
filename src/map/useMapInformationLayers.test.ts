@@ -1,13 +1,14 @@
 /**
  * Business context: protects the shared map-information click pipeline against
- * React lifecycle regressions. A click may close an existing
- * SwitzerlandMobility panel while its new identify request continues; empty
- * mobile clicks may instead preserve that panel for temporary map-only mode.
+ * React lifecycle and cross-layer ambiguity regressions. One click can combine
+ * safety, public transport, and SwitzerlandMobility candidates, while empty
+ * mobile clicks may preserve the current panel for temporary map-only mode.
  */
 import { act, createElement, useCallback, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { identifyTrailClosure } from '../closures/trailClosures';
+import { identifyShootingDangerZone } from '../dangers/shootingDangerZones';
 import {
   applyPublicTransportStopDeclutterVisibility,
   getPublicTransportStopChoicesForVisibleStop,
@@ -18,6 +19,7 @@ import {
   type PublicTransportStop,
 } from '../transport/publicTransportStops';
 import { HIKING_TRAILS_MIN_ZOOM } from './config';
+import type { MapInformationChoice } from './mapInformationChoice';
 import type { MapRuntime } from './mapRuntime';
 import { useMapInformationLayers } from './useMapInformationLayers';
 
@@ -27,10 +29,17 @@ const selectionHarness = vi.hoisted(() => ({
 const closureHarness = vi.hoisted(() => ({
   signals: [] as AbortSignal[],
 }));
+const routeHarness = vi.hoisted(() => ({
+  candidates: [] as Array<Record<string, unknown>>,
+}));
 const informationHarness = vi.hoisted(() => ({
   selectPublicTransportStop: null as
     | ((stop: PublicTransportStop) => void)
     | null,
+  selectMapInformationChoice: null as
+    | ((choice: MapInformationChoice) => void)
+    | null,
+  mapInformationChoices: null as MapInformationChoice[] | null,
 }));
 
 vi.mock('./useSwitzerlandMobilityHikingSelection', async () => {
@@ -71,6 +80,11 @@ vi.mock('./useSwitzerlandMobilityHikingSelection', async () => {
 
       return {
         panelStatus,
+        identifyCandidatesAt: React.useCallback(
+          async () => routeHarness.candidates,
+          [],
+        ),
+        showIdentifyError: React.useCallback(() => undefined, []),
         inspectAt: React.useCallback(async () => false, []),
         selectCandidate: React.useCallback(() => undefined, []),
         mapHoverDistanceMeters: null,
@@ -86,12 +100,7 @@ vi.mock('./useSwitzerlandMobilityHikingSelection', async () => {
 });
 
 vi.mock('../closures/trailClosures', () => ({
-  identifyTrailClosure: vi.fn(
-    (_context: unknown, signal: AbortSignal) =>
-      new Promise<null>(() => {
-        closureHarness.signals.push(signal);
-      }),
-  ),
+  identifyTrailClosure: vi.fn().mockResolvedValue(null),
   fetchTrailClosurePopup: vi.fn(),
 }));
 
@@ -188,10 +197,12 @@ function Harness({
   runtime,
   onMapClickStart,
   publicTransportStopsVisible = false,
+  shootingDangerZonesVisible = false,
 }: {
   runtime: MapRuntime;
   onMapClickStart?: () => boolean;
   publicTransportStopsVisible?: boolean;
+  shootingDangerZonesVisible?: boolean;
 }) {
   const mapRuntimeRef = useRef<MapRuntime | null>(runtime);
   const onInformationSelected = useCallback(() => undefined, []);
@@ -200,7 +211,7 @@ function Harness({
     mapRuntimeRef,
     initialVisibility: {
       trailClosures: true,
-      shootingDangerZones: false,
+      shootingDangerZones: shootingDangerZonesVisible,
       publicTransportStops: publicTransportStopsVisible,
     },
     language: 'fr',
@@ -212,11 +223,14 @@ function Harness({
   });
   informationHarness.selectPublicTransportStop =
     controller.selectPublicTransportStop;
+  informationHarness.selectMapInformationChoice =
+    controller.selectMapInformationChoice;
+  informationHarness.mapInformationChoices = controller.mapInformationChoices;
 
   return createElement(
     'div',
     null,
-    `route:${controller.switzerlandMobilityHikingPanel?.state ?? 'closed'};transport:${controller.publicTransportStopPopup?.state ?? 'closed'}`,
+    `route:${controller.switzerlandMobilityHikingPanel?.state ?? 'closed'};transport:${controller.publicTransportStopPopup?.state ?? 'closed'};choices:${controller.mapInformationChoices?.map((choice) => choice.kind).join(',') ?? 'closed'}`,
   );
 }
 
@@ -225,9 +239,13 @@ describe('useMapInformationLayers click lifecycle', () => {
   let root: Root | null = null;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     closureHarness.signals.length = 0;
+    routeHarness.candidates = [];
     selectionHarness.openPanel = null;
     informationHarness.selectPublicTransportStop = null;
+    informationHarness.selectMapInformationChoice = null;
+    informationHarness.mapInformationChoices = null;
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -248,6 +266,12 @@ describe('useMapInformationLayers click lifecycle', () => {
 
   it('keeps the identify request alive when the same click closes a public-route panel', async () => {
     const { runtime, mapEvents } = createRuntime();
+    vi.mocked(identifyTrailClosure).mockImplementationOnce(
+      (_context, signal) =>
+        new Promise<null>(() => {
+          closureHarness.signals.push(signal);
+        }),
+    );
 
     await act(async () => {
       root?.render(createElement(Harness, { runtime }));
@@ -298,6 +322,97 @@ describe('useMapInformationLayers click lifecycle', () => {
     expect(container.textContent).toContain('ready');
   });
 
+  it('opens one concrete stop directly when no other layer matches the click', async () => {
+    const hitFeature = {};
+    const { runtime, mapEvents } = createRuntime({ hitFeature });
+    const stop: PublicTransportStop = {
+      id: 'single-stop',
+      stationId: 'station-single',
+      name: 'Stop unique',
+      modes: ['bus'],
+      coordinate: [2_553_000, 1_171_000],
+    };
+    vi.mocked(publicTransportStopsCoverageContainsViewport).mockReturnValue(
+      true,
+    );
+    vi.mocked(getPublicTransportStopFromFeature).mockReturnValue(stop);
+    vi.mocked(getPublicTransportStopChoicesForVisibleStop).mockReturnValue([
+      stop,
+    ]);
+
+    await act(async () => {
+      root?.render(
+        createElement(Harness, {
+          runtime,
+          publicTransportStopsVisible: true,
+        }),
+      );
+    });
+
+    await act(async () => {
+      mapEvents.emit('singleclick', {
+        pixel: [400, 300],
+        coordinate: [2_553_000, 1_171_000],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('transport:stop');
+    expect(container.textContent).toContain('choices:closed');
+    expect(updatePublicTransportStopSelection).toHaveBeenCalledWith(
+      runtime.publicTransportStopsDisplay,
+      stop,
+    );
+  });
+
+  it('keeps a concrete stop usable when a remote safety identify fails', async () => {
+    const hitFeature = {};
+    const { runtime, mapEvents } = createRuntime({ hitFeature });
+    const stop: PublicTransportStop = {
+      id: 'fallback-stop',
+      stationId: 'station-fallback',
+      name: 'Stop fallback',
+      modes: ['bus'],
+      coordinate: [2_553_000, 1_171_000],
+    };
+    vi.mocked(publicTransportStopsCoverageContainsViewport).mockReturnValue(
+      true,
+    );
+    vi.mocked(getPublicTransportStopFromFeature).mockReturnValue(stop);
+    vi.mocked(getPublicTransportStopChoicesForVisibleStop).mockReturnValue([
+      stop,
+    ]);
+    vi.mocked(identifyTrailClosure).mockRejectedValueOnce(
+      new Error('GeoAdmin unavailable'),
+    );
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    await act(async () => {
+      root?.render(
+        createElement(Harness, {
+          runtime,
+          publicTransportStopsVisible: true,
+        }),
+      );
+    });
+
+    await act(async () => {
+      mapEvents.emit('singleclick', {
+        pixel: [400, 300],
+        coordinate: [2_553_000, 1_171_000],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(consoleError).toHaveBeenCalled();
+    expect(container.textContent).toContain('transport:stop');
+    expect(container.textContent).toContain('choices:closed');
+  });
+
   it('opens a stop chooser when one rendered symbol represents hidden neighbours', async () => {
     const hitFeature = {};
     const { runtime, mapEvents } = createRuntime({ hitFeature });
@@ -338,6 +453,8 @@ describe('useMapInformationLayers click lifecycle', () => {
         pixel: [400, 300],
         coordinate: [2_553_000, 1_171_000],
       });
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(getPublicTransportStopChoicesForVisibleStop).toHaveBeenCalledWith(
@@ -345,11 +462,130 @@ describe('useMapInformationLayers click lifecycle', () => {
       runtime.map,
       visibleStop,
     );
-    expect(container.textContent).toContain('transport:choices');
+    expect(container.textContent).toContain(
+      'choices:publicTransportStop,publicTransportStop',
+    );
     expect(updatePublicTransportStopSelection).not.toHaveBeenCalledWith(
       runtime.publicTransportStopsDisplay,
       visibleStop,
     );
+  });
+
+  it('dismisses a common chooser when zoom changes invalidate its click context', async () => {
+    const hitFeature = {};
+    const { runtime, mapEvents, viewEvents } = createRuntime({ hitFeature });
+    const firstStop: PublicTransportStop = {
+      id: 'zoom-a',
+      stationId: 'station-zoom-a',
+      name: 'Stop A',
+      modes: ['bus'],
+      coordinate: [2_553_000, 1_171_000],
+    };
+    const secondStop: PublicTransportStop = {
+      id: 'zoom-b',
+      stationId: 'station-zoom-b',
+      name: 'Stop B',
+      modes: ['tram'],
+      coordinate: [2_553_100, 1_171_000],
+    };
+    vi.mocked(publicTransportStopsCoverageContainsViewport).mockReturnValue(
+      true,
+    );
+    vi.mocked(getPublicTransportStopFromFeature).mockReturnValue(firstStop);
+    vi.mocked(getPublicTransportStopChoicesForVisibleStop).mockReturnValue([
+      firstStop,
+      secondStop,
+    ]);
+
+    await act(async () => {
+      root?.render(
+        createElement(Harness, {
+          runtime,
+          publicTransportStopsVisible: true,
+        }),
+      );
+    });
+    await act(async () => {
+      mapEvents.emit('singleclick', {
+        pixel: [400, 300],
+        coordinate: [2_553_000, 1_171_000],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain(
+      'choices:publicTransportStop,publicTransportStop',
+    );
+
+    await act(async () => {
+      viewEvents.emit('change:resolution');
+    });
+
+    expect(container.textContent).toContain('choices:closed');
+  });
+
+  it('combines safety, public transport, and SwitzerlandMobility matches in product order', async () => {
+    const hitFeature = {};
+    const { runtime, mapEvents } = createRuntime({ hitFeature });
+    const stop: PublicTransportStop = {
+      id: 'stop-a',
+      stationId: 'station-a',
+      name: 'Stop A',
+      modes: ['bus'],
+      coordinate: [2_553_000, 1_171_000],
+    };
+    vi.mocked(publicTransportStopsCoverageContainsViewport).mockReturnValue(
+      true,
+    );
+    vi.mocked(getPublicTransportStopFromFeature).mockReturnValue(stop);
+    vi.mocked(getPublicTransportStopChoicesForVisibleStop).mockReturnValue([
+      stop,
+    ]);
+    vi.mocked(identifyTrailClosure).mockResolvedValueOnce({
+      featureId: 'closure-1',
+      context: {},
+    } as never);
+    vi.mocked(identifyShootingDangerZone).mockResolvedValueOnce({
+      featureId: 'danger-1',
+      geometry: null,
+      context: {},
+    } as never);
+    routeHarness.candidates = [
+      {
+        featureId: 'route-1',
+        routeNumber: '1',
+        routeId: '1',
+        routeName: 'Route 1',
+        sectionName: null,
+        stageNumber: null,
+        hasStages: false,
+      },
+    ];
+
+    await act(async () => {
+      root?.render(
+        createElement(Harness, {
+          runtime,
+          publicTransportStopsVisible: true,
+          shootingDangerZonesVisible: true,
+        }),
+      );
+    });
+
+    await act(async () => {
+      mapEvents.emit('singleclick', {
+        pixel: [400, 300],
+        coordinate: [2_553_000, 1_171_000],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain(
+      'choices:trailClosure,shootingDangerZone,publicTransportStop,switzerlandMobilityHiking',
+    );
+    expect(container.textContent).toContain('transport:closed');
+    expect(container.textContent).toContain('route:closed');
   });
 
   it('resolves hidden neighbours before clearing a previously selected stop on a repeat click', async () => {
@@ -402,9 +638,18 @@ describe('useMapInformationLayers click lifecycle', () => {
         pixel: [400, 300],
         coordinate: [2_553_000, 1_171_000],
       });
+      await Promise.resolve();
+      await Promise.resolve();
     });
+    const firstStopChoice = informationHarness.mapInformationChoices?.find(
+      (choice) =>
+        choice.kind === 'publicTransportStop' && choice.stop.id === visibleStop.id,
+    );
+    expect(firstStopChoice).toBeDefined();
     await act(async () => {
-      informationHarness.selectPublicTransportStop?.(visibleStop);
+      if (firstStopChoice) {
+        informationHarness.selectMapInformationChoice?.(firstStopChoice);
+      }
     });
 
     clickSequence.length = 0;
@@ -416,12 +661,16 @@ describe('useMapInformationLayers click lifecycle', () => {
         pixel: [400, 300],
         coordinate: [2_553_000, 1_171_000],
       });
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(
       getPublicTransportStopChoicesForVisibleStop,
     ).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain('transport:choices');
+    expect(container.textContent).toContain(
+      'choices:publicTransportStop,publicTransportStop',
+    );
     expect(clickSequence.slice(0, 2)).toEqual(['choices', 'clear']);
   });
 

@@ -867,7 +867,8 @@ select {
   flex: 0 0 auto;
 }
 
-.public-transport-stop-choice-summary {
+.public-transport-stop-choice-summary,
+.map-information-choice-summary {
   position: absolute;
   z-index: 30;
   bottom: 1rem;
@@ -878,9 +879,9 @@ select {
   transform: translateX(-50%);
 }
 
-/* Stop ambiguity is a temporary map decision, like the SwitzerlandMobility
-   overlap chooser, rather than a stop-details popup. Keep it compact and
-   anchored to the lower map area before opening the detailed timetable panel. */
+/* Map ambiguity is a temporary decision rather than a detail popup. The same
+   compact lower-map shell serves legacy stop overlap choices and the common
+   cross-layer chooser before one concrete information workflow opens. */
 .public-transport-stop-choice-panel {
   width: 100%;
   overflow: hidden;
@@ -979,6 +980,42 @@ select {
 .public-transport-stop-choice-modes img {
   width: 1.35rem;
   height: 1.35rem;
+}
+
+/* A map click can legitimately match several information layers. Keep the
+   temporary chooser grouped by product meaning rather than by provider call. */
+.map-information-choice-group {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.map-information-choice-group + .map-information-choice-group {
+  margin-top: 0.8rem;
+}
+
+.map-information-choice-group h2 {
+  margin: 0;
+  color: #52606b;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+}
+
+.map-information-choice > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.map-information-choice strong {
+  overflow-wrap: anywhere;
+}
+
+.map-information-choice-subtitle {
+  color: #52606b;
+  font-size: 0.82rem;
+  font-weight: 500;
 }
 
 .public-transport-departures {
@@ -2261,6 +2298,7 @@ select {
   .app--map-ui-hidden .map-controls,
   .app--map-ui-hidden .map-information-popup,
   .app--map-ui-hidden .public-transport-stop-choice-summary,
+  .app--map-ui-hidden .map-information-choice-summary,
   .app--map-ui-hidden .route-summary,
   .app--map-ui-hidden .switzerland-mobility-hiking-summary {
     visibility: hidden;
@@ -2593,10 +2631,10 @@ select {
     right: 3.55rem;
   }
 
-  /* Stop-overlap choices share the same transient bottom decision pattern as
-     SwitzerlandMobility route choices; detailed timetable content still uses
-     the regular half-height information sheet after one stop is selected. */
-  .public-transport-stop-choice-summary {
+  /* Ambiguity choices use one transient full-width bottom sheet on phones;
+     detailed information still moves to its normal feature-specific surface. */
+  .public-transport-stop-choice-summary,
+  .map-information-choice-summary {
     z-index: 30;
     bottom: 0;
     left: 0;
