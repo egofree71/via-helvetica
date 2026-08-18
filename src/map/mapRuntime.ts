@@ -39,6 +39,10 @@ import {
   type ImportedRouteDisplay,
 } from './importedRoute';
 import {
+  createMapPositionMarker,
+  type MapPositionMarker,
+} from './mapPositionMarker';
+import {
   createRouteDisplay,
   type RouteDisplay,
 } from './route';
@@ -135,6 +139,8 @@ export interface MapRuntime {
   userLocationMarker: UserLocationMarker;
   /** Temporary marker used by official location search. */
   searchResultMarker: SearchResultMarker;
+  /** Temporary marker used by explicit desktop map-position inspection. */
+  mapPositionMarker: MapPositionMarker;
   /** Read-only imported GPX display. */
   importedRouteDisplay: ImportedRouteDisplay;
   /** Editable route display and interaction-facing features. */
@@ -191,6 +197,7 @@ export function createMapRuntime(
   const publicTransportStopsDisplay = createPublicTransportStopsDisplay();
   const userLocationMarker = createUserLocationMarker();
   const searchResultMarker = createSearchResultMarker();
+  const mapPositionMarker = createMapPositionMarker();
   const importedRouteDisplay = createImportedRouteDisplay();
   const routeDisplay = createRouteDisplay();
   const routeProfileMarker = createRouteProfileMarker();
@@ -296,6 +303,7 @@ export function createMapRuntime(
       importedRouteDisplay.layer,
       routeDisplay.layer,
       searchResultMarker.layer,
+      mapPositionMarker.layer,
       userLocationMarker.layer,
       routeProfileMarker.layer,
     ],
@@ -404,6 +412,7 @@ export function createMapRuntime(
     publicTransportStopsDisplay,
     userLocationMarker,
     searchResultMarker,
+    mapPositionMarker,
     importedRouteDisplay,
     routeDisplay,
     routeProfileMarker,

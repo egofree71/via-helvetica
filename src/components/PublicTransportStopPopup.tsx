@@ -5,13 +5,6 @@
  * links to the official SBB/CFF/FFS timetable.
  */
 import { useEffect, useMemo, useState } from 'react';
-import boatIconUrl from '../assets/public-transport-stops/boat.svg';
-import busIconUrl from '../assets/public-transport-stops/bus.svg';
-import cableCarIconUrl from '../assets/public-transport-stops/cable-car.svg';
-import chairliftIconUrl from '../assets/public-transport-stops/chairlift.svg';
-import funicularIconUrl from '../assets/public-transport-stops/funicular.svg';
-import trainIconUrl from '../assets/public-transport-stops/train.svg';
-import tramIconUrl from '../assets/public-transport-stops/tram.svg';
 import { useI18n } from '../i18n/I18nContext';
 import type { Language } from '../i18n/translations';
 import {
@@ -22,9 +15,26 @@ import type {
   PublicTransportMode,
   PublicTransportStop,
 } from '../transport/publicTransportStops';
+import { PUBLIC_TRANSPORT_MODE_ICON_URLS } from '../transport/publicTransportModePresentation';
 
-/** Selected passenger stop and close callback for the temporary panel. */
+/** Selected public-transport stop shown after one concrete map choice is resolved. */
+export interface PublicTransportStopPopupStatus {
+  /** Concrete stop whose timetable is displayed. */
+  state: 'stop';
+  /** Stop whose departures and official timetable links are displayed. */
+  stop: PublicTransportStop;
+}
+
+/** Detail state and dismissal callback for the temporary stop panel. */
 interface PublicTransportStopPopupProps {
+  /** Concrete selected-stop detail state. */
+  status: PublicTransportStopPopupStatus;
+  /** Dismisses the panel and its map selection halo. */
+  onClose: () => void;
+}
+
+/** Concrete selected-stop detail state. */
+interface PublicTransportStopDetailsProps {
   /** Stop feature already loaded and filtered by the vector overlay. */
   stop: PublicTransportStop;
   /** Dismisses the panel and its map selection halo. */
@@ -69,19 +79,6 @@ const MODE_LABEL_KEYS: Record<
   funicular: 'transportStops.mode.funicular',
 };
 
-/** SVG pictograms shared with the stop markers for immediate visual recognition. */
-const MODE_ICON_URLS: Record<PublicTransportMode, string> = {
-  train: trainIconUrl,
-  // Metro has its own translated label but shares the clear railway symbol.
-  metro: trainIconUrl,
-  tram: tramIconUrl,
-  bus: busIconUrl,
-  boat: boatIconUrl,
-  cableCar: cableCarIconUrl,
-  chairlift: chairliftIconUrl,
-  funicular: funicularIconUrl,
-};
-
 /** Manual SBB deep-link location parameters documented for timetable forms. */
 type SbbLocationParameter = 'von' | 'nach';
 
@@ -119,10 +116,10 @@ function createDepartureDateKey(
 }
 
 /** Renders a compact stop panel with departures and official timetable links. */
-export default function PublicTransportStopPopup({
+function PublicTransportStopDetails({
   stop,
   onClose,
-}: PublicTransportStopPopupProps) {
+}: PublicTransportStopDetailsProps) {
   const { language, locale, t } = useI18n();
   const [stationBoardStatus, setStationBoardStatus] =
     useState<StationBoardStatus>('loading');
@@ -255,7 +252,7 @@ export default function PublicTransportStopPopup({
               {displayedModes.map((mode, index) => (
                 <img
                   key={mode}
-                  src={MODE_ICON_URLS[mode]}
+                  src={PUBLIC_TRANSPORT_MODE_ICON_URLS[mode]}
                   alt={modeLabels[index]}
                   title={modeLabels[index]}
                 />
@@ -378,3 +375,12 @@ export default function PublicTransportStopPopup({
     </aside>
   );
 }
+
+/** Renders the timetable for one concrete stop selected from the map workflow. */
+export default function PublicTransportStopPopup({
+  status,
+  onClose,
+}: PublicTransportStopPopupProps) {
+  return <PublicTransportStopDetails stop={status.stop} onClose={onClose} />;
+}
+

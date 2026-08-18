@@ -15,11 +15,16 @@ export {
   type PublicTransportStopsLoadContext,
 } from './publicTransportStopsApi';
 export {
+  applyPublicTransportStopDeclutterVisibility,
   createPublicTransportStopsDisplay,
+  getPublicTransportStopChoicesForVisibleStop,
+  getPublicTransportStopDeclutterSeparationPixels,
   getPublicTransportStopFromFeature,
   PUBLIC_TRANSPORT_STOPS_MIN_ZOOM,
+  updatePublicTransportStopDeclutterPriority,
   updatePublicTransportStopSelection,
   updatePublicTransportStopsDisplay,
+  updatePublicTransportStopsViewRotation,
   type PublicTransportStopsDisplay,
 } from './publicTransportStopsDisplay';
 export {

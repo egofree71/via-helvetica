@@ -37,14 +37,6 @@ import {
 } from './useRouteProfileSynchronization';
 import { calculateResponsiveMapFitPadding } from './viewFit';
 
-/** Panel state shown while several public routes share the clicked path. */
-export interface SwitzerlandMobilityHikingChoicesStatus {
-  /** Discriminant for the overlap chooser. */
-  state: 'choices';
-  /** Distinct public routes available at the click position. */
-  candidates: SwitzerlandMobilityHikingRouteCandidate[];
-}
-
 /** Panel state shown while complete public geometry is being retrieved. */
 export interface SwitzerlandMobilityHikingLoadingStatus {
   /** Discriminant for geometry loading. */
@@ -79,7 +71,6 @@ export interface SwitzerlandMobilityHikingErrorStatus {
 
 /** Complete set of states rendered by the compact public-route panel. */
 export type SwitzerlandMobilityHikingPanelStatus =
-  | SwitzerlandMobilityHikingChoicesStatus
   | SwitzerlandMobilityHikingLoadingStatus
   | SwitzerlandMobilityHikingReadyStatus
   | SwitzerlandMobilityHikingErrorStatus;
@@ -100,12 +91,14 @@ export interface UseSwitzerlandMobilityHikingSelectionOptions {
 export interface SwitzerlandMobilityHikingSelectionController {
   /** Current compact panel state, or `null` when no route is selected. */
   panelStatus: SwitzerlandMobilityHikingPanelStatus | null;
-  /** Identifies routes at a click and starts selection or overlap choice. */
-  inspectAt: (
+  /** Identifies lightweight public-route candidates without changing selection UI. */
+  identifyCandidatesAt: (
     context: SwitzerlandMobilityHikingIdentifyContext,
     signal: AbortSignal,
-  ) => Promise<boolean>;
-  /** Selects one candidate from the overlap chooser. */
+  ) => Promise<SwitzerlandMobilityHikingRouteCandidate[]>;
+  /** Shows the existing public-route identify error state without retrying identification. */
+  showIdentifyError: () => void;
+  /** Selects one candidate supplied by the common map-information chooser. */
   selectCandidate: (
     candidate: SwitzerlandMobilityHikingRouteCandidate,
   ) => void;
@@ -179,15 +172,16 @@ export function calculateSwitzerlandMobilityHikingFitPadding(
  * Owns public-route identification, highlighting, metrics, profile linking, and stale-result guards.
  *
  * @param options - Runtime, language, and cross-workflow selection callback.
- * @returns Panel state plus inspection, choice, and close actions.
+ * @returns Panel state plus candidate identification, selection, and close actions.
  */
 export function useSwitzerlandMobilityHikingSelection(
   options: UseSwitzerlandMobilityHikingSelectionOptions,
 ): SwitzerlandMobilityHikingSelectionController {
   const selectionSessionRef = useRef(0);
   const routeRequestRef = useRef<AbortController | null>(null);
-  // The ready route is retained while an overlap chooser is open so choosing
-  // the same route again does not redownload geometry and elevations.
+  // The last ready route is retained while its panel remains active so a
+  // transient identify failure can restore validated information without a
+  // redundant geometry and elevation request.
   const readySelectionRef =
     useRef<SwitzerlandMobilityHikingReadyStatus | null>(null);
   const [panelStatus, setPanelStatus] =
@@ -239,7 +233,7 @@ export function useSwitzerlandMobilityHikingSelection(
    * Loads, highlights, frames, and measures one candidate. Geometry appears
    * before elevation lookup completes so the selection remains immediately useful.
    *
-   * @param candidate - Identified public route chosen directly or in the overlap panel.
+   * @param candidate - Identified public route chosen directly or in the common map-information chooser.
    */
   const selectCandidate = useCallback(
     (candidate: SwitzerlandMobilityHikingRouteCandidate) => {
@@ -426,73 +420,39 @@ export function useSwitzerlandMobilityHikingSelection(
   );
 
   /**
-   * Identifies routes at one click and preserves explicit choice for overlaps.
+   * Identifies public-route candidates without taking ownership of the panel.
+   * The shared map-information coordinator uses this to combine route matches
+   * with safety and public-transport candidates from the same click.
    *
    * @param context - Click coordinate and current map rendering context.
-   * @param signal - Abort signal owned by the prioritized information pipeline.
-   * @returns `true` when a route panel or error state consumed the click.
+   * @param signal - Abort signal owned by the map-information click pipeline.
+   * @returns Distinct lightweight public-route candidates at the click position.
    */
-  const inspectAt = useCallback(
-    async (
+  const identifyCandidatesAt = useCallback(
+    (
       context: SwitzerlandMobilityHikingIdentifyContext,
       signal: AbortSignal,
-    ): Promise<boolean> => {
-      try {
-        const candidates = await identifySwitzerlandMobilityHikingRoutes(
-          context,
-          signal,
-        );
-
-        if (candidates.length === 0 || signal.aborted) {
-          return false;
-        }
-
-        options.onInformationSelected();
-
-        if (candidates.length === 1) {
-          selectCandidate(candidates[0]);
-        } else {
-          clearProfileHover();
-          selectionSessionRef.current += 1;
-          routeRequestRef.current?.abort();
-          routeRequestRef.current = null;
-          // Keep the current highlight visible while the user chooses another
-          // route sharing the clicked path. The full selection is replaced only
-          // after a different candidate has been loaded successfully.
-          setPanelStatus({ state: 'choices', candidates });
-        }
-
-        return true;
-      } catch (error: unknown) {
-        if (isAbortedRequest(error, signal)) {
-          return false;
-        }
-
-        console.error(
-          'Unable to identify SwitzerlandMobility hiking routes.',
-          error,
-        );
-        options.onInformationSelected();
-        const readySelection = readySelectionRef.current;
-
-        if (readySelection) {
-          // A transient identify failure must not discard a complete route that
-          // is already selected and usable on the map.
-          setPanelStatus(readySelection);
-        } else {
-          clearProfileHover();
-          setPanelStatus({ state: 'error', candidate: null });
-        }
-        return true;
-      }
-    },
-    [
-      clearProfileHover,
-      options.mapRuntimeRef,
-      options.onInformationSelected,
-      selectCandidate,
-    ],
+    ) => identifySwitzerlandMobilityHikingRoutes(context, signal),
+    [],
   );
+
+  /**
+   * Presents a public-route identify failure without starting another provider
+   * request. A previously validated route remains usable on transient failures.
+   */
+  const showIdentifyError = useCallback(() => {
+    options.onInformationSelected();
+    const readySelection = readySelectionRef.current;
+
+    if (readySelection) {
+      setPanelStatus(readySelection);
+      return;
+    }
+
+    clearProfileHover();
+    setPanelStatus({ state: 'error', candidate: null });
+  }, [clearProfileHover, options.onInformationSelected]);
+
 
   useEffect(
     () => () => {
@@ -504,7 +464,8 @@ export function useSwitzerlandMobilityHikingSelection(
 
   return {
     panelStatus,
-    inspectAt,
+    identifyCandidatesAt,
+    showIdentifyError,
     selectCandidate,
     mapHoverDistanceMeters,
     handleProfileHoverDistanceChange,

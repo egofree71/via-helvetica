@@ -1,26 +1,24 @@
 /**
  * Business context: presents the public identity and Via Helvetica-calculated
  * planning figures for one selected SwitzerlandMobility hiking route. The compact
- * bottom panel also resolves paths shared by several named routes and exposes the
- * calculated elevation profile without reproducing private editorial content.
+ * bottom panel exposes the calculated elevation profile without reproducing
+ * private editorial content.
  */
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
-import type { TranslationKey } from '../i18n/translations';
 import type {
   SwitzerlandMobilityHikingPanelStatus,
 } from '../map/useSwitzerlandMobilityHikingSelection';
-import type { SwitzerlandMobilityHikingRouteCandidate } from '../switzerlandMobility/hikingRoutes';
+import {
+  getSwitzerlandMobilityHikingRouteName,
+  getSwitzerlandMobilityHikingRouteSubtitle,
+} from '../switzerlandMobility/hikingRoutePresentation';
 import RouteElevationProfile from './RouteElevationProfile';
 
 /** Props required by the compact public-route information panel. */
 interface SwitzerlandMobilityHikingPanelProps {
-  /** Current chooser, loading, ready, or error state. */
+  /** Current loading, ready, or error state. */
   status: SwitzerlandMobilityHikingPanelStatus;
-  /** Selects one route when several candidates share the clicked path. */
-  onSelectCandidate: (
-    candidate: SwitzerlandMobilityHikingRouteCandidate,
-  ) => void;
   /** Receives profile distance while the pointer explores the chart. */
   onProfileHoverDistanceChange: (distanceMeters: number | null) => void;
   /** Cumulative distance selected by hovering the public route on the map. */
@@ -31,51 +29,6 @@ interface SwitzerlandMobilityHikingPanelProps {
 
 /** Duration is rounded to five minutes because it remains a planning estimate. */
 const DURATION_ROUNDING_MINUTES = 5;
-
-/** Translation helper subset used by route heading construction. */
-type Translate = (
-  key: TranslationKey,
-  parameters?: Record<string, string | number>,
-) => string;
-
-/** Returns the best public route name, then a localized numeric fallback. */
-function routeName(
-  candidate: SwitzerlandMobilityHikingRouteCandidate,
-  t: Translate,
-): string {
-  if (candidate.routeName) {
-    return candidate.routeName;
-  }
-
-  if (candidate.routeNumber) {
-    return t('switzerlandMobilityHiking.routeNumber', {
-      number: candidate.routeNumber,
-    });
-  }
-
-  return t('switzerlandMobilityHiking.unnamedRoute');
-}
-
-/** Builds the subtitle shown below a public route name. */
-function routeSubtitle(
-  candidate: SwitzerlandMobilityHikingRouteCandidate,
-  t: Translate,
-): string | null {
-  const stageLabel = candidate.stageNumber
-    ? t('switzerlandMobilityHiking.stage', {
-        number: candidate.stageNumber,
-      })
-    : null;
-
-  if (candidate.stageNumber && candidate.sectionName) {
-    return t('switzerlandMobilityHiking.stageSection', {
-      number: candidate.stageNumber,
-      section: candidate.sectionName,
-    });
-  }
-
-  return stageLabel ?? candidate.sectionName;
-}
 
 /** Formats short geometry in metres and hiking routes in localized kilometres. */
 function formatDistance(
@@ -124,10 +77,9 @@ function formatDuration(
   return `≈ ${integerFormat.format(hours)} ${hourUnit} ${String(minutes).padStart(2, '0')}`;
 }
 
-/** Compact bottom panel for public route identity, overlap choice, and metrics. */
+/** Compact bottom panel for selected public-route identity and metrics. */
 export default function SwitzerlandMobilityHikingPanel({
   status,
-  onSelectCandidate,
   onProfileHoverDistanceChange,
   routeHoverDistanceMeters,
   onClose,
@@ -144,11 +96,7 @@ export default function SwitzerlandMobilityHikingPanel({
     [locale],
   );
   const candidate =
-    status.state === 'choices'
-      ? null
-      : status.state === 'ready'
-        ? status.route
-        : status.candidate;
+    status.state === 'ready' ? status.route : status.candidate;
   const profileRouteKey =
     status.state === 'ready'
       ? String(status.route.featureId)
@@ -165,7 +113,9 @@ export default function SwitzerlandMobilityHikingPanel({
     : status.state === 'ready' && status.elevationStatus === 'loading'
       ? t('profile.loading')
       : t('profile.unavailable');
-  const candidateSubtitle = candidate ? routeSubtitle(candidate, t) : null;
+  const candidateSubtitle = candidate
+    ? getSwitzerlandMobilityHikingRouteSubtitle(candidate, t)
+    : null;
 
   // A new stage must never inherit an expanded chart or marker position from
   // the previously selected public route, even if both use the same panel.
@@ -188,9 +138,7 @@ export default function SwitzerlandMobilityHikingPanel({
         'switzerland-mobility-hiking-summary',
         status.state === 'ready'
           ? 'switzerland-mobility-hiking-summary--selected'
-          : status.state === 'choices'
-            ? 'switzerland-mobility-hiking-summary--choices'
-            : '',
+          : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -207,25 +155,16 @@ export default function SwitzerlandMobilityHikingPanel({
         )}
 
       <section
-        className={[
-          'switzerland-mobility-hiking-panel',
-          status.state === 'choices'
-            ? 'switzerland-mobility-hiking-panel--choices'
-            : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
+        className="switzerland-mobility-hiking-panel"
         aria-label={t('switzerlandMobilityHiking.panelAria')}
         aria-live="polite"
       >
         <header className="switzerland-mobility-hiking-panel-header">
           <div className="switzerland-mobility-hiking-panel-heading">
             <strong>
-              {status.state === 'choices'
-                ? t('switzerlandMobilityHiking.multipleTitle')
-                : candidate
-                  ? routeName(candidate, t)
-                  : t('switzerlandMobilityHiking.unnamedRoute')}
+              {candidate
+                ? getSwitzerlandMobilityHikingRouteName(candidate, t)
+                : t('switzerlandMobilityHiking.unnamedRoute')}
             </strong>
             {candidateSubtitle && <span>{candidateSubtitle}</span>}
           </div>
@@ -242,28 +181,6 @@ export default function SwitzerlandMobilityHikingPanel({
             </button>
           </div>
         </header>
-
-        {status.state === 'choices' && (
-          <div className="switzerland-mobility-hiking-route-choices">
-            <p>{t('switzerlandMobilityHiking.multipleHint')}</p>
-            <div>
-              {status.candidates.map((routeCandidate) => {
-                const subtitle = routeSubtitle(routeCandidate, t);
-
-                return (
-                  <button
-                    type="button"
-                    key={String(routeCandidate.featureId)}
-                    onClick={() => onSelectCandidate(routeCandidate)}
-                  >
-                    <strong>{routeName(routeCandidate, t)}</strong>
-                    {subtitle && <span>{subtitle}</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {status.state === 'loading' && (
           <p className="switzerland-mobility-hiking-panel-status">

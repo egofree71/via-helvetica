@@ -12,6 +12,8 @@ import ReleaseNotesDialog from './components/ReleaseNotesDialog';
 import MapLayersSelector from './components/MapLayersSelector';
 import LanguageSelector from './components/LanguageSelector';
 import LocationSearch from './components/LocationSearch';
+import MapInformationChoicePanel from './components/MapInformationChoicePanel';
+import MapPositionPanel from './components/MapPositionPanel';
 import RouteImportControl from './components/RouteImportControl';
 import RouteControls from './components/RouteControls';
 import RouteExportDialog from './components/RouteExportDialog';
@@ -58,6 +60,8 @@ import {
   useMapInformationLayers,
 } from './map/useMapInformationLayers';
 import { useMapRuntime } from './map/useMapRuntime';
+import { ensureMapInformationCoordinateVisible } from './map/mapInformationViewport';
+import { useMapPositionInspection } from './map/useMapPositionInspection';
 import {
   resolveInitialMapLayerOpacities,
   useMapLayerOpacities,
@@ -513,10 +517,12 @@ export default function App() {
     trailClosurePopup,
     shootingDangerZonePopup,
     publicTransportStopPopup,
+    mapInformationChoices,
+    selectMapInformationChoice,
     switzerlandMobilityHikingPanel,
-    selectSwitzerlandMobilityHikingCandidate,
     switzerlandMobilityHikingMapHoverDistanceMeters,
     handleSwitzerlandMobilityHikingProfileHoverDistanceChange,
+    clearInformationContext,
     closeMapInformationPopup,
     dismissSwitzerlandMobilityHikingPanel,
   } = useMapInformationLayers({
@@ -530,6 +536,79 @@ export default function App() {
     onSwitzerlandMobilityHikingRouteAccepted:
       handleSwitzerlandMobilityHikingRouteAccepted,
   });
+
+  const handleMapPositionOpen = useCallback(() => {
+    // Right-click inspection is informational: clear competing transient details
+    // without destroying the current SwitzerlandMobility itinerary. Its panel is
+    // hidden temporarily below while the position panel owns the lower map area.
+    clearInformationContext();
+    clearSelectedSearchResult();
+  }, [clearInformationContext, clearSelectedSearchResult]);
+
+  const {
+    inspection: mapPositionInspection,
+    closeInspection: closeMapPositionInspection,
+  } = useMapPositionInspection({
+    mapRuntimeRef,
+    onOpen: handleMapPositionOpen,
+  });
+
+  const mapPositionInspectionCoordinate =
+    mapPositionInspection?.coordinate ?? null;
+
+  /**
+   * Keeps the inspected point visible when the lower-map panel would otherwise
+   * cover the exact marker. The zoom stays unchanged and only the smallest pan
+   * required by the shared point-information placement policy is applied.
+   */
+  useEffect(() => {
+    const runtime = mapRuntimeRef.current;
+    const panelElement = appRef.current?.querySelector<HTMLElement>(
+      '.map-position-summary',
+    );
+
+    if (!runtime || !mapPositionInspectionCoordinate || !panelElement) {
+      return;
+    }
+
+    let animationFrameId: number | null = null;
+    const keepInspectedPointVisible = () => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+
+      animationFrameId = window.requestAnimationFrame(() => {
+        animationFrameId = null;
+        ensureMapInformationCoordinateVisible(
+          runtime.map,
+          mapPositionInspectionCoordinate,
+          panelElement,
+          'keep-visible',
+        );
+      });
+    };
+
+    keepInspectedPointVisible();
+
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(keepInspectedPointVisible);
+    resizeObserver?.observe(panelElement);
+
+    return () => {
+      resizeObserver?.disconnect();
+
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [mapPositionInspectionCoordinate, mapRuntimeRef]);
+
+  const closeTransientMapInformation = useCallback(() => {
+    closeMapInformationPopup();
+    closeMapPositionInspection();
+  }, [closeMapInformationPopup, closeMapPositionInspection]);
 
   useEffect(() => {
     if (isRouteCreationActive) {
@@ -568,8 +647,9 @@ export default function App() {
   /** Opens project information after dismissing any map-feature popup behind it. */
   const openAboutDialog = useCallback(() => {
     closeMapInformationPopup();
+    closeMapPositionInspection();
     setIsAboutDialogOpen(true);
-  }, [closeMapInformationPopup]);
+  }, [closeMapInformationPopup, closeMapPositionInspection]);
 
   /** Acknowledges the current release before dismissing its one-time dialog. */
   const closeReleaseNotesDialog = useCallback(() => {
@@ -599,6 +679,7 @@ export default function App() {
       return;
     }
 
+    closeMapPositionInspection();
     updateSearchResultMarker(marker, coordinate);
 
     const isCoordinateResult =
@@ -757,6 +838,7 @@ export default function App() {
         isRouteCreationActive ? 'app--route-creation' : '',
         isRouteOperationPending ? 'app--route-busy' : '',
         isMobileMapUiHidden ? 'app--map-ui-hidden' : '',
+        mapPositionInspection ? 'app--map-position-inspection-open' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -794,7 +876,7 @@ export default function App() {
         key={`${language}:${locationSearchResetVersion}`}
         isMobileOverlayOpen={isMobileSearchOpen}
         onMobileOverlayClose={() => setIsMobileSearchOpen(false)}
-        onSearchFocus={closeMapInformationPopup}
+        onSearchFocus={closeTransientMapInformation}
         onSelect={selectSearchResult}
         onClear={clearSearchResultMarkerOnly}
       />
@@ -835,7 +917,7 @@ export default function App() {
           aria-label={t('search.label')}
           title={t('search.label')}
           onClick={() => {
-            closeMapInformationPopup();
+            closeTransientMapInformation();
             setIsMobileSearchOpen(true);
           }}
         >
@@ -871,7 +953,7 @@ export default function App() {
         )}
 
         <RouteImportControl
-          onOpen={closeMapInformationPopup}
+          onOpen={closeTransientMapInformation}
           onSelectFile={importRouteFile}
         />
 
@@ -895,7 +977,7 @@ export default function App() {
           onPublicTransportStopsChange={setArePublicTransportStopsVisible}
           layerOpacities={layerOpacities}
           onLayerOpacityChange={setLayerOpacity}
-          onOpen={closeMapInformationPopup}
+          onOpen={closeTransientMapInformation}
           onOpenAbout={openAboutDialog}
         />
 
@@ -1025,15 +1107,30 @@ export default function App() {
 
       {publicTransportStopPopup && (
         <PublicTransportStopPopup
-          stop={publicTransportStopPopup}
+          status={publicTransportStopPopup}
           onClose={closeMapInformationPopup}
         />
       )}
 
-      {switzerlandMobilityHikingPanel && (
+      {mapInformationChoices && (
+        <MapInformationChoicePanel
+          choices={mapInformationChoices}
+          onSelectChoice={selectMapInformationChoice}
+          onClose={closeMapInformationPopup}
+        />
+      )}
+
+      {mapPositionInspection && (
+        <MapPositionPanel
+          inspection={mapPositionInspection}
+          onClose={closeMapPositionInspection}
+        />
+      )}
+
+      {switzerlandMobilityHikingPanel &&
+        !mapInformationChoices && (
         <SwitzerlandMobilityHikingPanel
           status={switzerlandMobilityHikingPanel}
-          onSelectCandidate={selectSwitzerlandMobilityHikingCandidate}
           onProfileHoverDistanceChange={
             handleSwitzerlandMobilityHikingProfileHoverDistanceChange
           }
@@ -1045,7 +1142,8 @@ export default function App() {
       )}
 
       {activeRouteSegments.length > 0 &&
-        !switzerlandMobilityHikingPanel && (
+        !switzerlandMobilityHikingPanel &&
+        !mapInformationChoices && (
           <RouteStatistics
             distanceMeters={routeDistanceMeters}
             elevationStatus={routeElevationStatus}

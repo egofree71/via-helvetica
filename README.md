@@ -36,7 +36,7 @@ Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 
 | Area | Highlights |
 |---|---|
-| Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, persistent visibility and opacity controls for information layers, place and WGS 84/LV95 coordinate search, geolocation, scale, and fullscreen mode |
+| Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, persistent visibility and opacity controls for information layers, place and WGS 84/LV95 coordinate search, desktop right-click coordinate/elevation inspection, geolocation, scale, and fullscreen mode |
 | Route planning | Editable ordered waypoints, start and finish markers, sparse direction arrows, optional swissTLM3D snapping in a dedicated routing Worker, undo, redo, reversal, loop closure, route deletion, and straight fallback segments when no routable path is found |
 | Route information | Distance, ascent, descent, Swiss hiking-time estimate, and a collapsible elevation profile with pointer synchronisation between the chart and the map |
 | Import and export | Read-only GPX loading with route statistics and elevation profile, optional lossless conversion of one continuous GPX trace into editable waypoints without rerouting the initial geometry, named GPX export for editable, imported, and selected SwitzerlandMobility routes, plus an optional swisstopo hand-off that temporarily exposes the current GPX, using a QR code on desktop and an explicit direct app link on small touch devices |
@@ -186,7 +186,12 @@ Machine-specific infrastructure and credentials remain outside version control.
   synchronized with the map. Once its complete geometry is available, it replaces
   any editable route or imported GPX as the single current itinerary. The shared
   export action in the map controls downloads that selected stage as GPX. When
-  several named routes share the clicked path, choose one before framing.
+  several information objects share the same click—for example a transport stop
+  on a SwitzerlandMobility route—choose the one to inspect from the common map
+  chooser before its detailed workflow opens.
+- On desktop, right-click any map position to place a temporary point and inspect
+  its WGS 84 coordinates, Swiss LV95 coordinates, and terrain elevation. WGS 84
+  and LV95 values can be copied directly from the compact lower-map panel.
 - Use the information button to open the localized About dialog with the
   project summary, support contact, source code, license, professional profile,
   release history, and official data credits. Returning visitors are introduced

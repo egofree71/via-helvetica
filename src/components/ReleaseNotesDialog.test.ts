@@ -99,16 +99,16 @@ describe('ReleaseNotesDialog', () => {
     expect(
       container.querySelectorAll('.release-notes-list > li'),
     ).toHaveLength(2);
-    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.6.0');
+    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.7.0');
     expect(container.textContent).toContain(
-      'Expérience mobile repensée :',
+      'Transports publics et informations de carte plus lisibles :',
     );
     expect(container.textContent).toContain(
-      'Via Helvetica reste néanmoins pensé avant tout pour préparer des itinéraires sur un grand écran',
+      'Lorsqu’un même clic correspond à plusieurs informations, Via Helvetica les regroupe dans un choix commun.',
     );
-    expect(container.textContent).toContain('Export toujours disponible :');
+    expect(container.textContent).toContain('Coordonnées et altitude au clic droit :');
     expect(container.textContent).toContain(
-      'reste désormais visible tant qu’un itinéraire est affiché',
+      'affiche ses coordonnées WGS 84 et LV95 ainsi que l’altitude du terrain',
     );
     expect(document.activeElement).toBe(
       container.querySelector('#release-notes-dialog-title'),
