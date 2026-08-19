@@ -8,6 +8,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 const SCRIPT_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(SCRIPT_DIRECTORY, '..');
@@ -22,10 +23,27 @@ const DEFAULT_OUTPUT = path.join(
 const SOURCE_DATASET_ID = 'ch.bav.haltestellen-oev';
 
 /** Current compact artifact schema understood by the browser-side loader. */
-const OUTPUT_FORMAT_VERSION = 1;
+const OUTPUT_FORMAT_VERSION = 2;
 
 /** Candidate delimiters used by the official CSV exporter. */
 const CSV_DELIMITERS = [';', ',', '\t'];
+
+/** Returns a stable dictionary index while preserving the provider text verbatim. */
+function internString(value, indexes, values) {
+  const normalized = value.trim();
+  const existing = indexes.get(normalized);
+  if (existing !== undefined) return existing;
+
+  const index = values.length;
+  indexes.set(normalized, index);
+  values.push(normalized);
+  return index;
+}
+
+/** Formats generated artifact sizes for human-readable preparation diagnostics. */
+function formatBytes(bytes) {
+  return `${bytes.toLocaleString('en-US')} bytes`;
+}
 
 function normalizeText(value) {
   return value
@@ -431,20 +449,45 @@ async function main() {
   const unique = new Map();
   for (const record of selected.records) unique.set(record[0], record);
 
+  const meansOfTransport = [''];
+  const meansOfTransportIndexes = new Map([['', 0]]);
+  const stopTypes = [''];
+  const stopTypeIndexes = new Map([['', 0]]);
+  const records = [...unique.values()].map(
+    ([id, name, rawMeansOfTransport, rawStopType, east, north]) => [
+      id,
+      name,
+      internString(rawMeansOfTransport, meansOfTransportIndexes, meansOfTransport),
+      internString(rawStopType, stopTypeIndexes, stopTypes),
+      east,
+      north,
+    ],
+  );
   const payload = {
     version: OUTPUT_FORMAT_VERSION,
     source: SOURCE_DATASET_ID,
     generatedAt: new Date().toISOString(),
-    records: [...unique.values()],
+    meansOfTransport,
+    stopTypes,
+    records,
   };
+  const serialized = JSON.stringify(payload);
 
   await mkdir(path.dirname(output), { recursive: true });
-  await writeFile(output, `${JSON.stringify(payload)}\n`, 'utf8');
+  await writeFile(output, `${serialized}\n`, 'utf8');
 
-  const bytes = Buffer.byteLength(JSON.stringify(payload));
+  const bytes = Buffer.byteLength(serialized);
+  const gzipBytes = gzipSync(serialized).byteLength;
+  const brotliBytes = brotliCompressSync(serialized).byteLength;
   console.log(`Selected ${path.relative(PROJECT_ROOT, selected.filePath)}`);
   console.log(`Prepared ${payload.records.length.toLocaleString('en-US')} records.`);
-  console.log(`Wrote ${path.relative(PROJECT_ROOT, output)} (${bytes.toLocaleString('en-US')} bytes).`);
+  console.log(
+    `Interned ${meansOfTransport.length.toLocaleString('en-US')} transport descriptions and ${stopTypes.length.toLocaleString('en-US')} stop types.`,
+  );
+  console.log(`Wrote ${path.relative(PROJECT_ROOT, output)} (${formatBytes(bytes)}).`);
+  console.log(
+    `Estimated transfer sizes: gzip ${formatBytes(gzipBytes)}, Brotli ${formatBytes(brotliBytes)}.`,
+  );
 }
 
 main().catch((error) => {

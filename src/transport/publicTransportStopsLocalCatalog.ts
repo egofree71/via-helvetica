@@ -14,7 +14,7 @@ import {
 } from './publicTransportStopModel';
 
 /** Current generated-catalog schema version. */
-const LOCAL_CATALOG_VERSION = 1;
+const LOCAL_CATALOG_VERSION = 2;
 
 /**
  * Spatial grid size in metres.
@@ -27,8 +27,8 @@ const LOCAL_CATALOG_GRID_SIZE_METERS = 10_000;
 type LocalCatalogRecord = [
   id: string,
   name: string,
-  meansOfTransport: string,
-  stopType: string,
+  meansOfTransportIndex: number,
+  stopTypeIndex: number,
   east: number,
   north: number,
 ];
@@ -41,7 +41,11 @@ interface LocalCatalogPayload {
   source: string;
   /** ISO generation timestamp for diagnostics only. */
   generatedAt?: string;
-  /** Compact raw stop records normalized after loading. */
+  /** Deduplicated raw transport descriptions referenced by record index. */
+  meansOfTransport: unknown[];
+  /** Deduplicated raw stop-type descriptions referenced by record index. */
+  stopTypes: unknown[];
+  /** Compact raw stop records normalized after dictionary expansion. */
   records: unknown[];
 }
 
@@ -62,17 +66,27 @@ function gridKey(eastCell: number, northCell: number): string {
   return `${eastCell}:${northCell}`;
 }
 
-function parseLocalCatalogRecord(value: unknown): PublicTransportStop | null {
+function parseLocalCatalogRecord(
+  value: unknown,
+  meansOfTransport: string[],
+  stopTypes: string[],
+): PublicTransportStop | null {
   if (!Array.isArray(value) || value.length < 6) {
     return null;
   }
 
-  const [id, name, meansOfTransport, stopType, east, north] = value;
+  const [id, name, meansOfTransportIndex, stopTypeIndex, east, north] = value;
   if (
     typeof id !== 'string' ||
     typeof name !== 'string' ||
-    typeof meansOfTransport !== 'string' ||
-    typeof stopType !== 'string' ||
+    typeof meansOfTransportIndex !== 'number' ||
+    !Number.isInteger(meansOfTransportIndex) ||
+    meansOfTransportIndex < 0 ||
+    meansOfTransportIndex >= meansOfTransport.length ||
+    typeof stopTypeIndex !== 'number' ||
+    !Number.isInteger(stopTypeIndex) ||
+    stopTypeIndex < 0 ||
+    stopTypeIndex >= stopTypes.length ||
     typeof east !== 'number' ||
     !Number.isFinite(east) ||
     typeof north !== 'number' ||
@@ -84,16 +98,27 @@ function parseLocalCatalogRecord(value: unknown): PublicTransportStop | null {
   return normalizePublicTransportStop({
     id,
     name,
-    meansOfTransport,
-    stopType,
+    meansOfTransport: meansOfTransport[meansOfTransportIndex],
+    stopType: stopTypes[stopTypeIndex],
     coordinate: [east, north],
   });
 }
 
+/** Validates one generated string dictionary before record indexes are trusted. */
+function parseStringDictionary(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+    ? value
+    : null;
+}
+
 function buildLocalCatalogIndex(payload: LocalCatalogPayload): LocalCatalogIndex {
+  const meansOfTransport = parseStringDictionary(payload.meansOfTransport);
+  const stopTypes = parseStringDictionary(payload.stopTypes);
   if (
     payload.version !== LOCAL_CATALOG_VERSION ||
     payload.source !== PUBLIC_TRANSPORT_STOPS_LAYER_ID ||
+    !meansOfTransport ||
+    !stopTypes ||
     !Array.isArray(payload.records)
   ) {
     throw new Error('Unsupported local public-transport stop catalog.');
@@ -102,7 +127,11 @@ function buildLocalCatalogIndex(payload: LocalCatalogPayload): LocalCatalogIndex
   const cells = new Map<string, PublicTransportStop[]>();
   const seenStopIds = new Set<string>();
   for (const rawRecord of payload.records) {
-    const stop = parseLocalCatalogRecord(rawRecord);
+    const stop = parseLocalCatalogRecord(
+      rawRecord,
+      meansOfTransport,
+      stopTypes,
+    );
     if (!stop || seenStopIds.has(stop.id)) continue;
     seenStopIds.add(stop.id);
 

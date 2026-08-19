@@ -10,14 +10,16 @@ import {
 } from './publicTransportStopsLocalCatalog';
 
 const catalog = {
-  version: 1,
+  version: 2,
   source: 'ch.bav.haltestellen-oev',
   generatedAt: '2026-08-19T00:00:00.000Z',
+  meansOfTransport: ['', 'Train, Tram, Bus', 'Métro', '-', 'Bus'],
+  stopTypes: ['', 'Haltestelle', 'Bedienpunkt'],
   records: [
-    ['8501008', 'Lausanne, gare', 'Train, Tram, Bus', 'Haltestelle', 2_538_200, 1_152_300],
-    ['8501120', 'Lausanne, Ouchy-Olympique', 'Métro', 'Haltestelle', 2_538_100, 1_150_400],
-    ['9999999', 'Technical point', '-', 'Bedienpunkt', 2_538_150, 1_152_350],
-    ['8570000', 'Outside', 'Bus', 'Haltestelle', 2_600_000, 1_200_000],
+    ['8501008', 'Lausanne, gare', 1, 1, 2_538_200, 1_152_300],
+    ['8501120', 'Lausanne, Ouchy-Olympique', 2, 1, 2_538_100, 1_150_400],
+    ['9999999', 'Technical point', 3, 2, 2_538_150, 1_152_350],
+    ['8570000', 'Outside', 4, 1, 2_600_000, 1_200_000],
   ],
 };
 
@@ -83,8 +85,8 @@ describe('publicTransportStopsLocalCatalog', () => {
     const boundaryCatalog = {
       ...catalog,
       records: [
-        ['8500001', 'Boundary west', 'Bus', 'Haltestelle', 2_540_000, 1_150_000],
-        ['8500002', 'Boundary east', 'Bus', 'Haltestelle', 2_550_000, 1_150_000],
+        ['8500001', 'Boundary west', 4, 1, 2_540_000, 1_150_000],
+        ['8500002', 'Boundary east', 4, 1, 2_550_000, 1_150_000],
       ],
     };
     vi.mocked(fetch).mockResolvedValueOnce(
@@ -120,9 +122,26 @@ describe('publicTransportStopsLocalCatalog', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 
+  it('rejects malformed generated dictionaries', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ ...catalog, meansOfTransport: ['Bus', 42] }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(
+      loadPublicTransportStopsFromLocalCatalog(
+        '/local-data/public-transport-stops.json',
+        [2_537_000, 1_149_000, 2_540_000, 1_154_000],
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('Unsupported local public-transport stop catalog.');
+  });
+
   it('rejects incompatible generated artifacts', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ ...catalog, version: 2 }), { status: 200 }),
+      new Response(JSON.stringify({ ...catalog, version: 3 }), { status: 200 }),
     );
 
     await expect(

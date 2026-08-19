@@ -885,11 +885,18 @@ The stop workflow separates:
 An opt-in development experiment can replace GeoAdmin viewport loading with a
 locally generated static catalog by setting
 `VITE_PUBLIC_TRANSPORT_STOPS_LOCAL_URL`. The catalog is prepared offline from
-the manually downloaded FOT `ch.bav.haltestellen-oev` CSV asset, loaded lazily
-on first stop-layer use, normalized through the same passenger-stop rules, and
-indexed in a lightweight LV95 grid. Viewport calls query only intersecting grid
-cells, so the national catalog never becomes tens of thousands of OpenLayers
-features. The shared download deliberately survives superseded viewport calls;
+the manually downloaded FOT `ch.bav.haltestellen-oev` CSV asset and loaded
+lazily on first stop-layer use. Its versioned JSON schema stores stop records as
+tuples and interns repeated provider transport descriptions and stop types into
+top-level dictionaries. The browser expands those dictionary indexes before
+calling the existing passenger-stop normalizer; keeping classification in one
+runtime module avoids duplicating multilingual transport and retirement rules in
+the offline generator merely to save bytes. Normalized stops are indexed in a
+lightweight LV95 grid. Viewport calls query only intersecting grid cells, so the
+national catalog never becomes tens of thousands of OpenLayers features. The
+generator reports raw, gzip, and Brotli sizes so distribution choices can be
+measured before R2 publication. The shared download deliberately survives
+superseded viewport calls;
 those calls are still discarded before and after the load, while completing one
 static local file avoids restarting the same transfer during pans. Leaving the
 environment variable unset preserves the production GeoAdmin identify provider.
