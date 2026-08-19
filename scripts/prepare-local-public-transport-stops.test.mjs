@@ -6,11 +6,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  assertCanonicalSourceFile,
   createPublicTransportReleasePath,
   createSourceReleaseId,
+  decodeOfficialCsvUtf8,
   parsePointGeometry,
   resolveColumns,
   validateCandidatePlausibility,
+  validateRecordCountAgainstPrevious,
 } from './prepare-local-public-transport-stops.mjs';
 
 const REAL_POINT_EXPLOITATION_HEADERS = [
@@ -107,5 +110,33 @@ describe('public-transport stop catalog preparation', () => {
       true,
     );
     expect(errors.some((error) => error.includes('LV95'))).toBe(true);
+  });
+});
+
+// Additional production safeguards from the final pipeline audit.
+describe('public-transport release publication safeguards', () => {
+  it('rejects non-UTF-8 source bytes and replacement characters', () => {
+    expect(() =>
+      decodeOfficialCsvUtf8(
+        Buffer.from([0x47, 0xe8, 0x6e, 0xe8, 0x76, 0x65]),
+      ),
+    ).toThrow(/UTF-8/);
+    expect(() =>
+      decodeOfficialCsvUtf8(Buffer.from('Gen\uFFFDve', 'utf8')),
+    ).toThrow(/replacement/);
+  });
+
+  it('requires the canonical official table name', () => {
+    expect(() => assertCanonicalSourceFile('/tmp/PointExploitation.csv')).not.toThrow();
+    expect(() =>
+      assertCanonicalSourceFile('/tmp/PointExploitation_2027.csv'),
+    ).toThrow(/Do not rename/);
+  });
+
+  it('rejects implausible annual record-count drift', () => {
+    expect(() => validateRecordCountAgainstPrevious(29_400, 28_962)).not.toThrow();
+    expect(() =>
+      validateRecordCountAgainstPrevious(24_000, 28_962),
+    ).toThrow(/above the 5% safety threshold/);
   });
 });

@@ -36,6 +36,12 @@ const SOURCE_RELEASE_HASH_LENGTH = 16;
 /** Publication manifest schema kept separate from the browser catalog schema. */
 const RELEASE_MANIFEST_VERSION = 1;
 
+/** Canonical official table name; it is part of the immutable provenance contract. */
+const SOURCE_TABLE_NAME = 'PointExploitation.csv';
+
+/** Maximum accepted annual record-count drift relative to the previous release. */
+const MAX_RECORD_COUNT_CHANGE_RATIO = 0.05;
+
 /**
  * Minimum plausible operating-point count for the national FOT publication.
  * A much smaller compatible table usually means the exporter schema changed or
@@ -103,6 +109,58 @@ export function createPublicTransportReleasePath(sourceRelease) {
   return `public-transport-stops-${sourceRelease}/format-v${OUTPUT_FORMAT_VERSION}/${OUTPUT_SCOPE}`;
 }
 
+/** Decodes the official source strictly so encoding drift cannot corrupt stop names silently. */
+export function decodeOfficialCsvUtf8(sourceBytes, label = SOURCE_TABLE_NAME) {
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(sourceBytes);
+  } catch {
+    throw new Error(`${label} is not valid UTF-8.`);
+  }
+  if (text.includes('\uFFFD')) {
+    throw new Error(
+      `${label} contains Unicode replacement characters; check the official export before publishing.`,
+    );
+  }
+  return text;
+}
+
+/** Protects the immutable path contract from basename-dependent artifact changes. */
+export function assertCanonicalSourceFile(filePath) {
+  const basename = path.basename(filePath);
+  if (basename !== SOURCE_TABLE_NAME) {
+    throw new Error(
+      `Expected ${SOURCE_TABLE_NAME}, got ${basename}. Do not rename the official table.`,
+    );
+  }
+}
+
+/** Fails when an annual source changes implausibly relative to the previous release. */
+export function validateRecordCountAgainstPrevious(currentCount, previousCount) {
+  if (!Number.isInteger(previousCount) || previousCount <= 0) {
+    throw new Error('Previous release has an invalid recordCount.');
+  }
+  const ratio = Math.abs(currentCount - previousCount) / previousCount;
+  if (ratio > MAX_RECORD_COUNT_CHANGE_RATIO) {
+    const percent = (ratio * 100).toFixed(1);
+    throw new Error(
+      `Record count changed by ${percent}% (${previousCount.toLocaleString('en-US')} -> ${currentCount.toLocaleString('en-US')}), above the ${(MAX_RECORD_COUNT_CHANGE_RATIO * 100).toFixed(0)}% safety threshold.`,
+    );
+  }
+}
+
+async function readPreviousReleaseRecordCount(releaseDirectory) {
+  const manifest = JSON.parse(
+    await readFile(path.join(releaseDirectory, 'release.json'), 'utf8'),
+  );
+  if (!Number.isInteger(manifest?.recordCount) || manifest.recordCount <= 0) {
+    throw new Error(
+      `Previous release manifest under ${releaseDirectory} has an invalid recordCount.`,
+    );
+  }
+  return manifest.recordCount;
+}
+
 function normalizeText(value) {
   return value
     .normalize('NFD')
@@ -121,6 +179,7 @@ function parseArguments(argv) {
   let input = null;
   let output = DEFAULT_OUTPUT;
   let releaseRoot = null;
+  let previousRelease = null;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -138,6 +197,13 @@ function parseArguments(argv) {
       }
       releaseRoot = path.resolve(releaseRootArgument);
       index += 1;
+    } else if (argument === '--previous-release') {
+      const previousReleaseArgument = args[index + 1];
+      if (!previousReleaseArgument) {
+        throw new Error('Missing value after --previous-release.');
+      }
+      previousRelease = path.resolve(previousReleaseArgument);
+      index += 1;
     } else if (!argument.startsWith('--') && input === null) {
       input = argument;
     } else {
@@ -147,14 +213,14 @@ function parseArguments(argv) {
 
   if (!input) {
     throw new Error(
-      'Usage: npm run prepare:public-transport-stops-local -- <extracted CSV file or directory> [--output <file> | --release-root <directory>]',
+      'Usage: npm run prepare:public-transport-stops-local -- <extracted CSV file or directory> [--output <file> | --release-root <directory>] [--previous-release <release-directory>]',
     );
   }
   if (releaseRoot && output !== DEFAULT_OUTPUT) {
     throw new Error('--output and --release-root cannot be used together.');
   }
 
-  return { input: path.resolve(input), output, releaseRoot };
+  return { input: path.resolve(input), output, releaseRoot, previousRelease };
 }
 
 async function collectCsvFiles(inputPath) {
@@ -549,17 +615,26 @@ export function validateCandidatePlausibility(candidate) {
 }
 
 async function main() {
-  const { input, output: configuredOutput, releaseRoot } = parseArguments(process.argv);
+  const { input, output: configuredOutput, releaseRoot, previousRelease } =
+    parseArguments(process.argv);
   const csvFiles = await collectCsvFiles(input);
   if (csvFiles.length === 0) {
     throw new Error(`No CSV files found under ${input}.`);
   }
+  const sourceFiles = csvFiles.filter(
+    (csvFile) => path.basename(csvFile) === SOURCE_TABLE_NAME,
+  );
+  if (sourceFiles.length !== 1) {
+    throw new Error(
+      `Expected exactly one ${SOURCE_TABLE_NAME} under ${input}, found ${sourceFiles.length}. Do not rename the official table.`,
+    );
+  }
 
   const inspectedCandidates = [];
-  for (const csvFile of csvFiles) {
+  for (const csvFile of sourceFiles) {
     const sourceBytes = await readFile(csvFile);
     inspectedCandidates.push({
-      ...parseCandidateCsv(csvFile, sourceBytes.toString('utf8')),
+      ...parseCandidateCsv(csvFile, decodeOfficialCsvUtf8(sourceBytes, csvFile)),
       sourceSha256: sha256(sourceBytes),
       sourceByteLength: sourceBytes.byteLength,
     });
@@ -580,9 +655,8 @@ async function main() {
     );
   }
 
-  // The download can contain several model tables. Prefer the largest candidate
-  // only after validating national-scale invariants; schema drift must fail
-  // loudly instead of silently publishing whichever table happens to be largest.
+  // The canonical PointExploitation table is selected by name first; plausibility
+  // checks then protect against a provider-side schema or content change.
   const plausibleCandidates = candidates
     .map((candidate) => ({
       candidate,
@@ -607,6 +681,7 @@ async function main() {
   }
 
   const selected = plausibleCandidates[0].candidate;
+  assertCanonicalSourceFile(selected.filePath);
   const unique = new Map();
   for (const record of selected.records) unique.set(record[0], record);
 
@@ -624,6 +699,15 @@ async function main() {
       north,
     ],
   );
+  if (previousRelease) {
+    const previousRecordCount =
+      await readPreviousReleaseRecordCount(previousRelease);
+    validateRecordCountAgainstPrevious(records.length, previousRecordCount);
+    console.log(
+      `Previous release record count: ${previousRecordCount.toLocaleString('en-US')} (${records.length.toLocaleString('en-US')} now).`,
+    );
+  }
+
   const sourceRelease = createSourceReleaseId(selected.sourceSha256);
   const releasePath = createPublicTransportReleasePath(sourceRelease);
   const releaseDirectory = releaseRoot
@@ -636,7 +720,7 @@ async function main() {
     version: OUTPUT_FORMAT_VERSION,
     source: SOURCE_DATASET_ID,
     sourceRelease,
-    sourceFile: path.basename(selected.filePath),
+    sourceFile: SOURCE_TABLE_NAME,
     sourceSha256: selected.sourceSha256,
     sourceByteLength: selected.sourceByteLength,
     recordCount: records.length,
@@ -679,10 +763,10 @@ async function main() {
         object: 'stops.json',
         source: SOURCE_DATASET_ID,
         sourceRelease,
-        sourceFile: path.basename(selected.filePath),
+        sourceFile: SOURCE_TABLE_NAME,
         sourceSha256: selected.sourceSha256,
         sourceByteLength: selected.sourceByteLength,
-            recordCount: records.length,
+        recordCount: records.length,
         catalogSha256,
         catalogByteLength: serializedBytes.byteLength,
         brotliByteLength: compressedBytes.byteLength,

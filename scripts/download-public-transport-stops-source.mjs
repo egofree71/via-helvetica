@@ -274,26 +274,34 @@ function runCommand(command, args) {
 }
 
 async function extractZip(archivePath, destination) {
-  await rm(destination, { recursive: true, force: true });
-  await mkdir(destination, { recursive: true });
+  const stagingDirectory = `${destination}.tmp`;
+  await rm(stagingDirectory, { recursive: true, force: true });
+  await mkdir(stagingDirectory, { recursive: true });
 
   try {
-    await runCommand('tar', ['-xf', archivePath, '-C', destination]);
-    return;
-  } catch (tarError) {
-    if (process.platform !== 'win32') throw tarError;
+    try {
+      await runCommand('tar', ['-xf', archivePath, '-C', stagingDirectory]);
+    } catch (tarError) {
+      if (process.platform !== 'win32') throw tarError;
 
-    // Modern Windows ships bsdtar, but Expand-Archive is a safe fallback on
-    // machines where tar is missing from PATH. Keeping extraction outside Node
-    // avoids adding a runtime dependency solely for this maintenance command.
-    const escapedArchive = archivePath.replaceAll("'", "''");
-    const escapedDestination = destination.replaceAll("'", "''");
-    await runCommand('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      `Expand-Archive -LiteralPath '${escapedArchive}' -DestinationPath '${escapedDestination}' -Force`,
-    ]);
+      // Modern Windows ships bsdtar, but Expand-Archive is a safe fallback on
+      // machines where tar is missing from PATH. Extraction is staged first so
+      // an interruption cannot leave the previously complete source half replaced.
+      const escapedArchive = archivePath.replaceAll("'", "''");
+      const escapedDestination = stagingDirectory.replaceAll("'", "''");
+      await runCommand('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `Expand-Archive -LiteralPath '${escapedArchive}' -DestinationPath '${escapedDestination}' -Force`,
+      ]);
+    }
+
+    await rm(destination, { recursive: true, force: true });
+    await rename(stagingDirectory, destination);
+  } catch (error) {
+    await rm(stagingDirectory, { recursive: true, force: true });
+    throw error;
   }
 }
 

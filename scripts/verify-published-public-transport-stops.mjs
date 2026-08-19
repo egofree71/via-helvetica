@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -53,10 +54,17 @@ function parseArguments(argv) {
   return options;
 }
 
-function assertCors(response, origin, label) {
+export function assertCors(response, origin, label) {
   const allowed = response.headers.get('access-control-allow-origin');
-  if (allowed !== '*' && allowed !== origin) {
+  if (allowed === '*') return;
+  if (allowed !== origin) {
     throw new Error(`${label} does not expose a compatible CORS header.`);
+  }
+  const vary = (response.headers.get('vary') ?? '')
+    .split(',')
+    .map((value) => value.trim().toLowerCase());
+  if (!vary.includes('origin')) {
+    throw new Error(`${label} varies CORS by origin without Vary: Origin.`);
   }
 }
 
@@ -187,7 +195,10 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+const invokedScript = process.argv[1] ? path.resolve(process.argv[1]) : null;
+if (invokedScript === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

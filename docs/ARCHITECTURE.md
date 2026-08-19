@@ -295,7 +295,7 @@ flowchart TB
 | Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts`, `src/map/useRouteProfileSynchronization.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and exclusive map/profile synchronisation for the active itinerary or selected public route |
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
 | Offline routing data | `routing-data.config.example.json`, `scripts/generate-routing-geometry-cells.py`, `scripts/generate-precomputed-binary-routing-graph.mjs`, `scripts/verify-routing-dataset.mjs`, `scripts/upload-routing-dataset-r2.ps1` | External source/work/release paths, national import, binary compilation, verification, and immutable R2 publication |
-| Public-transport stop data | `public-transport-data.config.example.json`, `scripts/prepare-local-public-transport-stops.mjs`, `scripts/upload-public-transport-stops-r2.ps1`, `scripts/verify-published-public-transport-stops.mjs` | Validated FOT import, compact static catalog preparation, source-fingerprint provenance, Brotli publication, and public R2 verification |
+| Public-transport stop data | `public-transport-data.config.example.json`, `scripts/download-public-transport-stops-source.mjs`, `scripts/prepare-local-public-transport-stops.mjs`, `scripts/verify-public-transport-stops-release.mjs`, `scripts/upload-public-transport-stops-r2.ps1`, `scripts/verify-published-public-transport-stops.mjs` | STAC source discovery, validated FOT import, compact static catalog preparation, source-fingerprint provenance, Brotli publication, and local/public verification |
 | swisstopo hand-off | `src/share/`, `src/components/RouteExportDialog.tsx`, `workers/swisstopo-gpx-share/` | Builds the documented `/u/` URL, renders a desktop QR or an explicit mobile app link, uploads GPX only on explicit request, and expires temporary R2 objects |
 | Search | `src/search/locationSearch.ts`, `src/search/coordinateSearch.ts`, `src/components/LocationSearch.tsx` | Local WGS 84/LV95 parsing, provider contract, session cache, result UI, keyboard navigation, and request cancellation |
 | Localization | `src/i18n/`, `scripts/generate-localized-pages.mjs` | Typed dictionaries, language persistence, locale paths, runtime document metadata, and generated localized HTML entries |
@@ -910,7 +910,7 @@ calls are still discarded before and after the load.
 
 Published stop catalogs use content-derived immutable release identities. The
 offline preparation step records the source CSV basename, complete SHA-256,
-source byte length, generation timestamp, and final record count, and release
+source byte length and final record count, and release
 paths include a short source fingerprint plus the schema version. A pre-compressed
 Brotli object is served as JSON with HTTP `Content-Encoding: br`; corrected or
 new source data must use a new release path rather than overwrite an existing

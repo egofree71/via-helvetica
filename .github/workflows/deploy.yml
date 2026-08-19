@@ -41,11 +41,16 @@ jobs:
       - name: Run regression tests
         run: npm test
 
+      - name: Check published public-transport stop catalog
+        if: vars.VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL != ''
+        run: curl -fsS --compressed -o /dev/null "${{ vars.VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL }}"
+
       - name: Build application
         run: npm run build
         env:
           VITE_ROUTING_DATA_BASE_URL: ${{ vars.VITE_ROUTING_DATA_BASE_URL }}
           VITE_SWISSTOPO_SHARE_SERVICE_URL: ${{ vars.VITE_SWISSTOPO_SHARE_SERVICE_URL }}
+          VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL: ${{ vars.VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL }}
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6

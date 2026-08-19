@@ -28,8 +28,9 @@ The downloader:
 2. discovers the French CSV ZIP in LV95 instead of hard-coding its current
    object URL;
 3. downloads the untouched ZIP to the requested work directory;
-4. replaces the previous `extracted/` directory so stale CSV files cannot be
-   mixed with a new delivery;
+4. extracts into a staging directory and replaces the previous `extracted/` only
+   after extraction succeeds, so an interrupted extraction cannot leave a partial
+   source;
 5. extracts the archive and requires exactly one `PointExploitation.csv`;
 6. prints the selected asset URL and the path of that table for auditability.
 
@@ -100,6 +101,8 @@ Current safeguards include:
 
 - exact matching of known semantic source columns;
 - a national-scale minimum record count;
+- strict UTF-8 decoding and rejection of replacement characters;
+- the canonical `PointExploitation.csv` source basename;
 - seven-digit DiDok service numbers;
 - a broad LV95 coordinate plausibility envelope;
 - a minimum share of rows carrying transport metadata;
@@ -148,8 +151,10 @@ SHA-256, decoded and compressed sizes, schema identity, and record count.
 Never overwrite a published release path. A source change changes the source
 hash and therefore the dataset path. A schema change changes `format-vN`. The
 release payload deliberately excludes a generation timestamp, so regenerating
-the same source and format produces the same catalog bytes and remains compatible
-with immutable publication.
+the same source and format produces the same decoded catalog bytes and remains
+compatible with immutable publication. `catalogSha256` is the reproducibility
+contract; Brotli bytes may differ across future Node/libbrotli versions without
+changing the decoded catalog.
 
 Verify the generated release before publication:
 
@@ -188,9 +193,12 @@ Then configure:
 - `publication.publicRootUrl`: public custom-domain root for static data;
 - `publication.publicOrigin`: deployed Via Helvetica origin allowed by CORS.
 
-The public bucket/domain must permit browser `GET` requests from the configured
-application origin. A production custom domain is preferred over an `r2.dev`
-development endpoint so normal Cloudflare caching controls are available.
+The public bucket/domain must permit browser `GET` requests. Because this is
+public open data served with a one-year immutable cache, configure R2 CORS with
+`Access-Control-Allow-Origin: *`. This avoids origin-dependent cached responses;
+the public verifier rejects origin-specific CORS unless `Vary: Origin` is present.
+A production custom domain is preferred over an `r2.dev` development endpoint so
+normal Cloudflare caching controls are available.
 
 ## 7. Publication metadata contract
 
@@ -248,6 +256,14 @@ npm run verify:published-public-transport-stops -- `
   --origin "https://viahelvetica.example.org"
 ```
 
+For quick manual diagnostics, remember that the catalog is stored pre-compressed:
+
+```powershell
+curl --compressed "<catalog-url>"
+curl -sSI "<catalog-url>"
+curl -sS "<release-url>"
+```
+
 Verification checks:
 
 - public release identity against the local manifest;
@@ -268,8 +284,15 @@ VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL=https://data.example.org/public-transpor
 ```
 
 The application loads the catalog only when the public-transport layer is first
-used. The GeoAdmin identify implementation remains available as the fallback
-while the static provider is still being rolled out and validated.
+used. If the variable is unset, the application uses the GeoAdmin identify
+provider. If the variable is set but the catalog cannot be loaded, there is no
+automatic runtime fallback; deployment therefore validates the configured URL
+before building.
+
+Before changing production, perform a browser smoke test against the published R2
+URL: point `.env.local` to it, run `npm run dev`, confirm stops around Lausanne and
+Zurich, inspect at least one accented stop name, click a stop and confirm departures,
+and check the browser console for CORS errors.
 
 ## 11. Updating the dataset
 
@@ -278,15 +301,36 @@ For a new official source publication:
 1. run `npm run download:public-transport-stops-source -- <work-directory>`;
 2. inspect the discovered official STAC asset URL and extracted
    `PointExploitation.csv`;
-3. generate a new release from that untouched extracted table;
+3. generate the new release and compare its final count with the previous release:
+
+   ```powershell
+   npm run prepare:public-transport-stops-release -- `
+     "<work-directory>" `
+     --release-root "<release-root>" `
+     --previous-release "<previous-release-directory>"
+   ```
+
+   The generator fails when the count changes by more than 5%; investigate such a
+   change instead of weakening the threshold blindly.
 4. inspect the resolved columns, accepted row count, source SHA-256, and sizes;
 5. run `npm test` and `npm run build` when application code changed;
 6. publish under the newly derived immutable path;
 7. verify the public release;
-8. update `VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL` to the new immutable URL;
-9. retain the previous release until the application deployment using the new
-   URL has been validated.
+8. perform the browser smoke test described above against the new immutable URL;
+9. update the GitHub repository variable `VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL`;
+10. manually run the Pages `workflow_dispatch` deployment because changing a
+    repository variable does not trigger a deployment by itself;
+11. validate the production layer, then retain the previous release for rollback.
 
 Do not introduce GTFS or timetable joins into this pipeline merely to remove rare
 stops without current departures. The static catalog represents official stop
 metadata; dynamic departure availability remains a separate concern.
+
+
+## 12. Rollback
+
+Rollback never modifies or deletes R2 data. Restore
+`VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL` to the previous immutable catalog URL,
+run the GitHub Pages workflow manually with `workflow_dispatch`, and verify the
+public-transport layer in production. Old immutable releases remain available so
+rollback is only an application redeployment.

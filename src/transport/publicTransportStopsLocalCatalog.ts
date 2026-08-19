@@ -50,7 +50,6 @@ interface LocalCatalogPayload {
   sourceSha256: string;
   /** Byte length of the downloaded source CSV used for provenance diagnostics. */
   sourceByteLength: number;
-  /** ISO generation timestamp for diagnostics. */
   /** Declared compact-record count, validated before indexes are trusted. */
   recordCount: number;
   /** Deduplicated raw transport descriptions referenced by record index. */
