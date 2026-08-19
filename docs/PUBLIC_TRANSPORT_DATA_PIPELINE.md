@@ -37,12 +37,11 @@ This writes:
 
 ```text
 public/local-data/public-transport-stops.json
-public/local-data/public-transport-stops.json.br
 ```
 
-Both files are ignored by Git. The JSON file is convenient for Vite development;
-the Brotli file is the exact transport representation intended for immutable
-publication.
+The file is ignored by Git and stays directly readable by Vite. Local development
+does not create or depend on a Brotli sibling; compression belongs only to the
+immutable publication release.
 
 Enable the static provider in `.env.local`:
 
@@ -73,7 +72,6 @@ The browser artifact additionally contains:
 - content-derived `sourceRelease`;
 - source CSV basename;
 - complete source SHA-256 and source byte length;
-- generation timestamp;
 - declared final record count;
 - compact dictionaries and tuple records.
 
@@ -98,18 +96,21 @@ C:/Data/ViaHelveticaPublicTransport/
   public-transport-stops-sha256-0123456789abcdef/
     format-v3/
       ch/
-        stops.json
         stops.json.br
         release.json
 ```
 
-`stops.json` is the decoded browser payload used for local verification.
-`stops.json.br` is a Brotli quality-11 representation of those same bytes.
-`release.json` records source provenance, catalog SHA-256, decoded
-and compressed sizes, schema identity, and record count.
+`stops.json.br` is the Brotli quality-11 transport representation that will be
+served publicly as `stops.json` with HTTP `Content-Encoding: br`. The decoded
+JSON is reconstructed only in memory during verification and is not duplicated
+in the release directory. `release.json` records source provenance, catalog
+SHA-256, decoded and compressed sizes, schema identity, and record count.
 
 Never overwrite a published release path. A source change changes the source
-hash and therefore the dataset path. A schema change changes `format-vN`.
+hash and therefore the dataset path. A schema change changes `format-vN`. The
+release payload deliberately excludes a generation timestamp, so regenerating
+the same source and format produces the same catalog bytes and remains compatible
+with immutable publication.
 
 Verify the generated release before publication:
 
@@ -118,9 +119,10 @@ npm run verify:public-transport-stops-release -- `
   --source "C:\Data\ViaHelveticaPublicTransport\public-transport-stops-sha256-0123456789abcdef\format-v3\ch"
 ```
 
-The verifier checks the manifest, decoded catalog hash and byte length, Brotli
-byte length, Brotli round trip, provenance, and record count. The R2 upload
-script runs this verification again automatically before its first write.
+The verifier checks the manifest, Brotli byte length, decoded catalog hash and
+byte length, provenance, and record count by decompressing `stops.json.br` in
+memory. The R2 upload script runs this verification again automatically before
+its first write.
 
 ## 6. R2 prerequisites
 

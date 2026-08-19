@@ -17,7 +17,6 @@ const catalog = {
   sourceSha256:
     '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
   sourceByteLength: 25_000_000,
-  generatedAt: '2026-08-19T00:00:00.000Z',
   recordCount: 4,
   meansOfTransport: ['', 'Train, Tram, Bus', 'Métro', '-', 'Bus'],
   stopTypes: ['', 'Haltestelle', 'Bedienpunkt'],

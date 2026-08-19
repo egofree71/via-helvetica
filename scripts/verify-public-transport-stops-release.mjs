@@ -1,8 +1,8 @@
 /**
  * Business context: verifies one locally prepared public-transport stop release
- * before any immutable R2 upload. It proves that decoded JSON, Brotli bytes,
- * provenance metadata, record counts, byte lengths, and SHA-256 inventory agree
- * so publication never exposes a manifest for locally inconsistent artifacts.
+ * before any immutable R2 upload. The release intentionally stores only Brotli
+ * transport bytes plus provenance; verification decodes those bytes in memory and
+ * proves the resulting JSON, record counts, lengths, and SHA-256 inventory agree.
  */
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -38,8 +38,6 @@ function assertManifestShape(manifest) {
     !/^[0-9a-f]{64}$/.test(manifest.sourceSha256) ||
     !Number.isInteger(manifest.sourceByteLength) ||
     manifest.sourceByteLength <= 0 ||
-    typeof manifest.generatedAt !== 'string' ||
-    !Number.isFinite(Date.parse(manifest.generatedAt)) ||
     !Number.isInteger(manifest.recordCount) ||
     manifest.recordCount < 0 ||
     !/^[0-9a-f]{64}$/.test(manifest.catalogSha256) ||
@@ -63,23 +61,20 @@ async function main() {
   const manifest = JSON.parse(await readFile(path.join(source, 'release.json'), 'utf8'));
   assertManifestShape(manifest);
 
-  const rawBytes = await readFile(path.join(source, manifest.object));
   const compressedBytes = await readFile(path.join(source, `${manifest.object}.br`));
-  if (rawBytes.byteLength !== manifest.catalogByteLength) {
-    throw new Error('Decoded catalog byte length differs from release.json.');
-  }
   if (compressedBytes.byteLength !== manifest.brotliByteLength) {
     throw new Error('Brotli catalog byte length differs from release.json.');
   }
-  if (sha256(rawBytes) !== manifest.catalogSha256) {
+
+  const decodedBytes = brotliDecompressSync(compressedBytes);
+  if (decodedBytes.byteLength !== manifest.catalogByteLength) {
+    throw new Error('Decoded catalog byte length differs from release.json.');
+  }
+  if (sha256(decodedBytes) !== manifest.catalogSha256) {
     throw new Error('Decoded catalog SHA-256 differs from release.json.');
   }
-  const decodedBrotli = brotliDecompressSync(compressedBytes);
-  if (!decodedBrotli.equals(rawBytes)) {
-    throw new Error('Brotli catalog does not decode to the prepared JSON bytes.');
-  }
 
-  const catalog = JSON.parse(rawBytes.toString('utf8'));
+  const catalog = JSON.parse(decodedBytes.toString('utf8'));
   if (
     catalog.version !== 3 ||
     catalog.source !== manifest.source ||
@@ -87,7 +82,6 @@ async function main() {
     catalog.sourceFile !== manifest.sourceFile ||
     catalog.sourceSha256 !== manifest.sourceSha256 ||
     catalog.sourceByteLength !== manifest.sourceByteLength ||
-    catalog.generatedAt !== manifest.generatedAt ||
     catalog.recordCount !== manifest.recordCount ||
     !Array.isArray(catalog.records) ||
     catalog.records.length !== manifest.recordCount

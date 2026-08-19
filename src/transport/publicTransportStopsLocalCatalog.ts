@@ -51,7 +51,6 @@ interface LocalCatalogPayload {
   /** Byte length of the downloaded source CSV used for provenance diagnostics. */
   sourceByteLength: number;
   /** ISO generation timestamp for diagnostics. */
-  generatedAt: string;
   /** Declared compact-record count, validated before indexes are trusted. */
   recordCount: number;
   /** Deduplicated raw transport descriptions referenced by record index. */
@@ -135,8 +134,6 @@ function hasValidCatalogProvenance(payload: LocalCatalogPayload): boolean {
     payload.sourceRelease === `sha256-${payload.sourceSha256.slice(0, 16)}` &&
     Number.isInteger(payload.sourceByteLength) &&
     payload.sourceByteLength > 0 &&
-    typeof payload.generatedAt === 'string' &&
-    Number.isFinite(Date.parse(payload.generatedAt)) &&
     Number.isInteger(payload.recordCount) &&
     payload.recordCount >= 0 &&
     Array.isArray(payload.records) &&

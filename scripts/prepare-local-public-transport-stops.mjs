@@ -1,12 +1,12 @@
 /**
  * Business context: prepares the browser-readable public-transport stop catalog
  * from the manually downloaded and extracted FOT GeoAdmin CSV asset. The same
- * validated conversion supports local development and immutable R2 releases;
- * release mode additionally writes Brotli transport bytes plus a provenance
- * manifest without moving provider-specific classification into the generator.
+ * validated conversion supports local development and immutable R2 releases.
+ * Local mode writes readable JSON for Vite; release mode writes only the Brotli
+ * transport representation plus provenance, avoiding a redundant decoded copy.
  */
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -624,11 +624,13 @@ async function main() {
       north,
     ],
   );
-  const generatedAt = new Date().toISOString();
   const sourceRelease = createSourceReleaseId(selected.sourceSha256);
   const releasePath = createPublicTransportReleasePath(sourceRelease);
-  const output = releaseRoot
-    ? path.join(releaseRoot, ...releasePath.split('/'), 'stops.json')
+  const releaseDirectory = releaseRoot
+    ? path.join(releaseRoot, ...releasePath.split('/'))
+    : null;
+  const output = releaseDirectory
+    ? path.join(releaseDirectory, 'stops.json.br')
     : configuredOutput;
   const payload = {
     version: OUTPUT_FORMAT_VERSION,
@@ -637,7 +639,6 @@ async function main() {
     sourceFile: path.basename(selected.filePath),
     sourceSha256: selected.sourceSha256,
     sourceByteLength: selected.sourceByteLength,
-    generatedAt,
     recordCount: records.length,
     meansOfTransport,
     stopTypes,
@@ -654,8 +655,19 @@ async function main() {
   });
 
   await mkdir(path.dirname(output), { recursive: true });
-  await writeFile(output, serializedBytes);
-  await writeFile(`${output}.br`, compressedBytes);
+  if (releaseDirectory) {
+    // R2 only needs the pre-compressed transport representation. Remove a raw
+    // catalog left by an older local preparation so the release directory itself
+    // mirrors the exact object inventory intended for immutable publication.
+    await rm(path.join(releaseDirectory, 'stops.json'), { force: true });
+    await writeFile(output, compressedBytes);
+  } else {
+    // Vite development intentionally keeps the decoded JSON directly readable.
+    // A stale Brotli sibling from an older generator must not imply that local
+    // development depends on special Content-Encoding metadata.
+    await rm(`${output}.br`, { force: true });
+    await writeFile(output, serializedBytes);
+  }
 
   const catalogSha256 = sha256(serializedBytes);
   const releaseManifest = releaseRoot
@@ -670,8 +682,7 @@ async function main() {
         sourceFile: path.basename(selected.filePath),
         sourceSha256: selected.sourceSha256,
         sourceByteLength: selected.sourceByteLength,
-        generatedAt,
-        recordCount: records.length,
+            recordCount: records.length,
         catalogSha256,
         catalogByteLength: serializedBytes.byteLength,
         brotliByteLength: compressedBytes.byteLength,
@@ -679,7 +690,7 @@ async function main() {
     : null;
   if (releaseManifest) {
     await writeFile(
-      path.join(path.dirname(output), 'release.json'),
+      path.join(releaseDirectory, 'release.json'),
       `${JSON.stringify(releaseManifest, null, 2)}
 `,
       'utf8',
@@ -702,14 +713,17 @@ async function main() {
     `Interned ${meansOfTransport.length.toLocaleString('en-US')} transport descriptions and ${stopTypes.length.toLocaleString('en-US')} stop types.`,
   );
   console.log(`Source release ${sourceRelease} (${selected.sourceSha256}).`);
-  console.log(`Wrote ${path.relative(PROJECT_ROOT, output)} (${formatBytes(bytes)}).`);
-  console.log(
-    `Wrote ${path.relative(PROJECT_ROOT, `${output}.br`)} (${formatBytes(brotliBytes)}, Brotli quality 11).`,
-  );
-  console.log(`Estimated gzip transfer size: ${formatBytes(gzipBytes)}.`);
   if (releaseManifest) {
     console.log(
-      `Prepared immutable release ${releasePath} with release.json and catalog SHA-256 ${catalogSha256}.`,
+      `Wrote ${path.relative(PROJECT_ROOT, output)} (${formatBytes(brotliBytes)}, Brotli quality 11; ${formatBytes(bytes)} decoded).`,
+    );
+    console.log(
+      `Prepared immutable release ${releasePath} with stops.json.br, release.json, and decoded catalog SHA-256 ${catalogSha256}.`,
+    );
+  } else {
+    console.log(`Wrote ${path.relative(PROJECT_ROOT, output)} (${formatBytes(bytes)}).`);
+    console.log(
+      `Estimated transfer sizes: gzip ${formatBytes(gzipBytes)}, Brotli ${formatBytes(brotliBytes)}.`,
     );
   }
 }
