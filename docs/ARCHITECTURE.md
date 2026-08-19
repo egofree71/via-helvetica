@@ -295,6 +295,7 @@ flowchart TB
 | Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts`, `src/map/useRouteProfileSynchronization.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and exclusive map/profile synchronisation for the active itinerary or selected public route |
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
 | Offline routing data | `routing-data.config.example.json`, `scripts/generate-routing-geometry-cells.py`, `scripts/generate-precomputed-binary-routing-graph.mjs`, `scripts/verify-routing-dataset.mjs`, `scripts/upload-routing-dataset-r2.ps1` | External source/work/release paths, national import, binary compilation, verification, and immutable R2 publication |
+| Public-transport stop data | `public-transport-data.config.example.json`, `scripts/download-public-transport-stops-source.mjs`, `scripts/prepare-local-public-transport-stops.mjs`, `scripts/verify-public-transport-stops-release.mjs`, `scripts/upload-public-transport-stops-r2.ps1`, `scripts/verify-published-public-transport-stops.mjs` | STAC source discovery, validated FOT import, compact static catalog preparation, source-fingerprint provenance, Brotli publication, and local/public verification |
 | swisstopo hand-off | `src/share/`, `src/components/RouteExportDialog.tsx`, `workers/swisstopo-gpx-share/` | Builds the documented `/u/` URL, renders a desktop QR or an explicit mobile app link, uploads GPX only on explicit request, and expires temporary R2 objects |
 | Search | `src/search/locationSearch.ts`, `src/search/coordinateSearch.ts`, `src/components/LocationSearch.tsx` | Local WGS 84/LV95 parsing, provider contract, session cache, result UI, keyboard navigation, and request cancellation |
 | Localization | `src/i18n/`, `scripts/generate-localized-pages.mjs` | Typed dictionaries, language persistence, locale paths, runtime document metadata, and generated localized HTML entries |
@@ -882,10 +883,52 @@ The stop workflow separates:
 - selected-stop presentation;
 - on-demand timetable loading.
 
-Official stop coordinates never change. Distinct stops within the close-stop
-threshold can be fanned out temporarily when their icons overlap. Newly loaded
-features start visually hidden until the first rendered-frame decluttering pass,
-which avoids flashing the complete dense-city buffer. Decluttering then runs
+Both position providers use the same canonical stop identity: the FOT DiDok
+service number stored as seven digits (two-digit UIC country code plus five
+digits). The downloaded `PointExploitation.Numero` field and the GeoAdmin
+feature id for `ch.bav.haltestellen-oev` expose that same value. Via Helvetica
+keeps it unchanged as both `id` and `stationId`; only the timetable adapter may
+retry a zero-padded nine-character representation required by some API examples.
+
+An optional static catalog can replace GeoAdmin viewport loading by setting
+`VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL`. The same browser contract accepts a
+root-relative development artifact or an immutable object-storage URL; leaving
+the setting empty selects GeoAdmin instead. A configured catalog URL is
+authoritative for that build: a catalog loading failure does not switch to
+GeoAdmin automatically at runtime. The catalog is loaded lazily on first
+stop-layer use, validated against its source fingerprint and record count,
+normalized once, and indexed in a lightweight LV95 grid. Viewport calls query
+only intersecting cells, so the national catalog never becomes tens of thousands
+of OpenLayers features.
+
+The compact schema stores stop records as tuples and interns repeated provider
+transport descriptions and stop types into top-level dictionaries. The browser
+expands those dictionary indexes before calling the shared passenger-stop
+normalizer; transport classification and retirement rules therefore remain in
+one runtime module. The national index classifies each dictionary entry once
+rather than repeating Unicode and regex work for every raw record. The shared
+catalog download deliberately survives superseded viewport calls, while those
+calls are still discarded before and after the load.
+
+Published stop catalogs use content-derived immutable release identities. The
+offline preparation step records the source CSV basename, complete SHA-256,
+source byte length and final record count, and release
+paths include a short source fingerprint plus the schema version. A pre-compressed
+Brotli object is served as JSON with HTTP `Content-Encoding: br`; corrected or
+new source data must use a new release path rather than overwrite an existing
+one. Source acquisition, preparation safeguards, release layout, R2 upload, and
+public verification belong in `docs/PUBLIC_TRANSPORT_DATA_PIPELINE.md` rather
+than this application-wide architecture document.
+
+Stop coordinates are treated as static within one published catalog release.
+New official source data is published under a new immutable release path when
+stops are added, removed, or moved. Distinct stops within the close-stop threshold
+can be fanned out temporarily when their icons overlap. The anchored
+fan-out grouping uses a 60 m LV95 candidate grid, preserving deterministic
+identifier ordering while avoiding an all-pairs scan during proactive viewport
+refreshes. Newly loaded features start visually hidden until the first
+rendered-frame decluttering pass, which avoids flashing the complete dense-city
+buffer. Decluttering then runs
 after fan-out in CSS-pixel space, hides only the style of lower-priority features,
 and leaves every stop loaded in the vector source. Members of the same
 fan-out group do not suppress each other while that fan-out is active; once real
@@ -896,8 +939,19 @@ Buffered viewport refreshes reconcile features by official stop id instead of
 clearing and rebuilding the whole source. Stops shared with the previous buffer
 therefore keep their rendered visibility while newly entering stops wait for the
 next decluttering pass, avoiding a whole-layer blink when panning into new data.
-The vector layer is explicitly invalidated after decluttering only when at least
-one stop actually changes rendered visibility.
+The stop vector layer rebuilds its OpenLayers feature batches during interactions
+and view animations. For the static local catalog, centre changes are also checked
+at most once per animation frame. The current 1.5x data envelope is refreshed
+before its remaining off-screen reserve falls below 10 percent of the viewport
+width or height, so entering and leaving features are reconciled while they are
+still outside the visible map. This proactive policy is deliberately local-only:
+GeoAdmin keeps the `moveend` debounce and ordinary containment rule because a
+single refresh can recursively fan out into many remote `identify` calls. The
+vector layer is explicitly invalidated after decluttering only when at least one
+stop actually changes rendered visibility. Reconciliation follows the same rule:
+silent updates of reused features invalidate the layer and decluttering snapshot
+only when symbol metadata or fan-out layout really changes; identical buffered
+refreshes preserve the previous rendered state without rebuilding the replay group.
 
 A rendered stop hit may contribute hidden declutter neighbours to the common
 map-information chooser, but an invisible stop alone is never a click target. If

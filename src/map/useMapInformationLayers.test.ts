@@ -114,6 +114,7 @@ vi.mock('../transport/publicTransportStops', () => ({
   createPublicTransportStopsViewportCoverage: vi.fn(),
   getPublicTransportStopChoicesForVisibleStop: vi.fn(),
   getPublicTransportStopFromFeature: vi.fn().mockReturnValue(null),
+  isLocalPublicTransportStopsCatalogEnabled: vi.fn().mockReturnValue(false),
   loadPublicTransportStops: vi.fn().mockResolvedValue([]),
   publicTransportStopsCoverageContainsViewport: vi.fn().mockReturnValue(false),
   updatePublicTransportStopsDisplay: vi.fn(),

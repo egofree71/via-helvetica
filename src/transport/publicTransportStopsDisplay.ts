@@ -159,6 +159,21 @@ function mapCoordinateDistance(
   return Math.hypot(first[0] - second[0], first[1] - second[1]);
 }
 
+/** Stable ASCII ordering for official identifiers without Intl collation overhead. */
+function compareStopIds(first: string, second: string): number {
+  return first < second ? -1 : first > second ? 1 : 0;
+}
+
+/** Returns the fixed 60 m fan-out grid coordinate for one LV95 ordinate. */
+function overlapGridCoordinate(value: number): number {
+  return Math.floor(value / STOP_OVERLAP_DISTANCE_METERS);
+}
+
+/** Returns one fan-out candidate grid key in LV95 cell coordinates. */
+function overlapGridKey(eastCell: number, northCell: number): string {
+  return `${eastCell}:${northCell}`;
+}
+
 /**
  * Assigns a deterministic fan layout to distinct stops whose symbols would
  * otherwise overlap. Nearby facilities remain independently selectable and
@@ -168,22 +183,75 @@ function createStopOverlapLayouts(
   stops: PublicTransportStop[],
 ): Map<string, StopOverlapLayout> {
   const layouts = new Map<string, StopOverlapLayout>();
-  const remaining = new Set(stops.map((stop) => stop.id));
   const orderedStops = [...stops].sort((first, second) =>
-    first.id.localeCompare(second.id),
+    compareStopIds(first.id, second.id),
   );
+  const stopsByCell = new Map<string, PublicTransportStop[]>();
+
+  // The grouping rule is anchored, not transitive: each lowest-id remaining
+  // stop claims only neighbours within 60 m of itself. A 60 m grid preserves
+  // that exact rule while restricting each anchor to its nine adjacent cells.
+  for (const stop of orderedStops) {
+    const key = overlapGridKey(
+      overlapGridCoordinate(stop.coordinate[0]),
+      overlapGridCoordinate(stop.coordinate[1]),
+    );
+    const bucket = stopsByCell.get(key);
+
+    if (bucket) {
+      bucket.push(stop);
+    } else {
+      stopsByCell.set(key, [stop]);
+    }
+  }
+
+  const remaining = new Set(orderedStops.map((stop) => stop.id));
+  const overlapDistanceSquared =
+    STOP_OVERLAP_DISTANCE_METERS * STOP_OVERLAP_DISTANCE_METERS;
 
   for (const anchor of orderedStops) {
     if (!remaining.has(anchor.id)) {
       continue;
     }
 
-    const closeStops = orderedStops.filter(
-      (candidate) =>
-        remaining.has(candidate.id) &&
-        mapCoordinateDistance(anchor.coordinate, candidate.coordinate) <=
-          STOP_OVERLAP_DISTANCE_METERS,
-    );
+    const anchorEastCell = overlapGridCoordinate(anchor.coordinate[0]);
+    const anchorNorthCell = overlapGridCoordinate(anchor.coordinate[1]);
+    const closeStops: PublicTransportStop[] = [];
+
+    for (let eastOffset = -1; eastOffset <= 1; eastOffset += 1) {
+      for (let northOffset = -1; northOffset <= 1; northOffset += 1) {
+        const bucket = stopsByCell.get(
+          overlapGridKey(
+            anchorEastCell + eastOffset,
+            anchorNorthCell + northOffset,
+          ),
+        );
+
+        if (!bucket) {
+          continue;
+        }
+
+        for (const candidate of bucket) {
+          if (!remaining.has(candidate.id)) {
+            continue;
+          }
+
+          const deltaEast = anchor.coordinate[0] - candidate.coordinate[0];
+          const deltaNorth = anchor.coordinate[1] - candidate.coordinate[1];
+
+          if (
+            deltaEast * deltaEast + deltaNorth * deltaNorth <=
+            overlapDistanceSquared
+          ) {
+            closeStops.push(candidate);
+          }
+        }
+      }
+    }
+
+    // Cell traversal order is spatial rather than lexical. Restore identifier
+    // order so fan-out angles stay deterministic and match the previous algorithm.
+    closeStops.sort((first, second) => compareStopIds(first.id, second.id));
 
     for (const stop of closeStops) {
       remaining.delete(stop.id);
@@ -239,6 +307,44 @@ function getStopOverlapLayout(
     Array.isArray(layout.targetOffsetPixels)
     ? (layout as StopOverlapLayout)
     : null;
+}
+
+/** Tests whether two fan-out layouts produce exactly the same presentation. */
+function areStopOverlapLayoutsEqual(
+  first: StopOverlapLayout | null,
+  second: StopOverlapLayout | null,
+): boolean {
+  if (first === second) {
+    return true;
+  }
+
+  if (!first || !second) {
+    return false;
+  }
+
+  return (
+    first.groupId === second.groupId &&
+    first.center[0] === second.center[0] &&
+    first.center[1] === second.center[1] &&
+    first.radiusMapUnits === second.radiusMapUnits &&
+    first.targetOffsetPixels[0] === second.targetOffsetPixels[0] &&
+    first.targetOffsetPixels[1] === second.targetOffsetPixels[1]
+  );
+}
+
+/** Tests stop fields that can alter the rendered symbol or chooser presentation. */
+function hasStopPresentationChanged(
+  previous: PublicTransportStop | null,
+  next: PublicTransportStop,
+): boolean {
+  if (!previous || previous.name !== next.name) {
+    return true;
+  }
+
+  return (
+    previous.modes.length !== next.modes.length ||
+    previous.modes.some((mode, index) => mode !== next.modes[index])
+  );
 }
 
 /** Returns whether a close-stop group is still being visually fanned out. */
@@ -489,7 +595,7 @@ export function applyPublicTransportStopDeclutterVisibility(
       return firstSelected ? -1 : 1;
     }
 
-    return first.stopId.localeCompare(second.stopId);
+    return compareStopIds(first.stopId, second.stopId);
   });
 
   const acceptedByCell = new Map<string, DeclutterCandidate[]>();
@@ -623,7 +729,7 @@ export function getPublicTransportStopChoicesForVisibleStop(
     }
   }
 
-  hiddenNeighbours.sort((first, second) => first.id.localeCompare(second.id));
+  hiddenNeighbours.sort((first, second) => compareStopIds(first.id, second.id));
   return [visibleStop, ...hiddenNeighbours];
 }
 
@@ -722,6 +828,13 @@ export function createPublicTransportStopsDisplay(): PublicTransportStopsDisplay
     source,
     minZoom: PUBLIC_TRANSPORT_STOPS_MIN_ZOOM,
     zIndex: 15,
+    // Static/local catalogs make the next stop features available before the
+    // basemap finishes moving. Rebuild the vector batch during drag and kinetic
+    // animations so OpenLayers does not reveal symbols progressively from the
+    // edge of the replay extent. The layer only contains the buffered viewport,
+    // not the national catalog, which keeps this extra work geographically bounded.
+    updateWhileInteracting: true,
+    updateWhileAnimating: true,
     style: (feature, resolution) => {
       const stop = getPublicTransportStopFromFeature(feature);
 
@@ -776,6 +889,7 @@ export function updatePublicTransportStopsDisplay(
 
   const nextStopIds = new Set(stops.map((stop) => stop.id));
   let sourceStructureChanged = false;
+  let presentationChanged = false;
 
   // Buffered viewports overlap substantially. Keep shared feature instances so
   // their already-rendered visibility survives a coverage refresh instead of
@@ -791,6 +905,11 @@ export function updatePublicTransportStopsDisplay(
 
   for (const stop of stops) {
     let feature = existingFeaturesById.get(stop.id);
+    const reusesExistingFeature = Boolean(feature);
+    const previousStop = feature
+      ? getPublicTransportStopFromFeature(feature)
+      : null;
+    const previousOverlapLayout = feature ? getStopOverlapLayout(feature) : null;
 
     if (!feature) {
       feature = new Feature<Point>({
@@ -814,27 +933,35 @@ export function updatePublicTransportStopsDisplay(
       }
     }
 
-    feature.set(STOP_PROPERTY_NAME, stop, true);
+    const overlapLayout = overlapLayouts.get(stop.id) ?? null;
 
-    const overlapLayout = overlapLayouts.get(stop.id);
-
-    if (overlapLayout) {
-      feature.set(STOP_OVERLAP_LAYOUT_PROPERTY_NAME, overlapLayout, true);
-    } else {
-      feature.set(STOP_OVERLAP_LAYOUT_PROPERTY_NAME, undefined, true);
+    if (reusesExistingFeature) {
+      presentationChanged =
+        hasStopPresentationChanged(previousStop, stop) ||
+        !areStopOverlapLayoutsEqual(previousOverlapLayout, overlapLayout) ||
+        presentationChanged;
     }
+
+    feature.set(STOP_PROPERTY_NAME, stop, true);
+    feature.set(
+      STOP_OVERLAP_LAYOUT_PROPERTY_NAME,
+      overlapLayout ?? undefined,
+      true,
+    );
   }
 
   if (newFeatures.length > 0) {
     display.source.addFeatures(newFeatures);
   }
 
-  display.declutterSnapshot = null;
+  if (sourceStructureChanged || presentationChanged) {
+    display.declutterSnapshot = null;
+  }
 
-  // Reused features are updated silently. If the viewport contains exactly the
-  // same stop ids, explicitly refresh once so changed modes/fan-out metadata are
-  // reflected even though the vector-source structure itself did not change.
-  if (!sourceStructureChanged) {
+  // Reused presentation metadata is written silently to preserve source
+  // revision. Invalidate OpenLayers only when those values actually changed;
+  // structural source changes already schedule their own render.
+  if (!sourceStructureChanged && presentationChanged) {
     display.layer.changed();
   }
 

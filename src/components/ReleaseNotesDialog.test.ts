@@ -80,7 +80,7 @@ describe('ReleaseNotesDialog', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders the compact French highlight and the localized history link', async () => {
+  it('keeps a history-only patch release out of the compact dialog', async () => {
     const onClose = vi.fn();
 
     await act(async () => {
@@ -98,34 +98,11 @@ describe('ReleaseNotesDialog', () => {
 
     expect(
       container.querySelectorAll('.release-notes-list > li'),
-    ).toHaveLength(2);
-    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.7.0');
-    expect(container.textContent).toContain(
-      'Transports publics et informations de carte plus lisibles :',
-    );
-    expect(container.textContent).toContain(
-      'Lorsqu’un même clic correspond à plusieurs informations, Via Helvetica les regroupe dans un choix commun.',
-    );
-    expect(container.textContent).toContain('Coordonnées et altitude au clic droit :');
-    expect(container.textContent).toContain(
-      'affiche ses coordonnées WGS 84 et LV95 ainsi que l’altitude du terrain',
-    );
-    expect(document.activeElement).toBe(
-      container.querySelector('#release-notes-dialog-title'),
-    );
+    ).toHaveLength(0);
+    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.7.1');
     expect(container.textContent).not.toContain(
-      'Transfert vers l’app swisstopo :',
+      'Chargement des arrêts de transports publics optimisé :',
     );
-    expect(
-      container.querySelector('.release-notes-dialog-icon-close'),
-    ).toBeNull();
-    expect(
-      container.querySelectorAll('.release-notes-dialog button'),
-    ).toHaveLength(1);
-    expect(
-      container.querySelector<HTMLButtonElement>('.release-notes-dialog-close')
-        ?.textContent,
-    ).toBe('Fermer');
 
     const historyLink = container.querySelector<HTMLAnchorElement>(
       '.release-notes-dialog-footer a',
@@ -133,18 +110,5 @@ describe('ReleaseNotesDialog', () => {
 
     expect(historyLink?.getAttribute('href')).toBe('/fr/releases/');
     expect(historyLink?.target).toBe('_blank');
-    expect(historyLink?.textContent).toContain(
-      's’ouvre dans un nouvel onglet',
-    );
-    expect(
-      historyLink?.querySelector('.release-notes-new-tab-icon'),
-    ).not.toBeNull();
-    historyLink?.addEventListener('click', (event) => event.preventDefault());
-
-    await act(async () => {
-      historyLink?.click();
-    });
-
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

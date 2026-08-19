@@ -1,0 +1,336 @@
+# Public-transport stop data pipeline
+
+## 1. Purpose
+
+The public-transport stop pipeline converts the official FOT/GeoAdmin national
+`ch.bav.haltestellen-oev` download into one small immutable catalog consumed by
+Via Helvetica. It handles only comparatively static stop positions and metadata.
+Timetable departures remain dynamic and are never embedded in this artifact.
+
+The source download, extracted work files, generated releases, R2 credentials,
+and local publication configuration stay outside the repository.
+
+## 2. Source data
+
+Use the complete official GeoAdmin download for `ch.bav.haltestellen-oev` in
+LV95 (`EPSG:2056`). The current pipeline expects the French CSV export because
+its `PointExploitation.csv` schema is covered by the importer tests.
+
+Download and extract the current official source through GeoAdmin STAC v1:
+
+```powershell
+npm run download:public-transport-stops-source -- "C:\Temp\haltestellen-oev"
+```
+
+The downloader:
+
+1. reads the official STAC collection for `ch.bav.haltestellen-oev`;
+2. discovers the French CSV ZIP in LV95 instead of hard-coding its current
+   object URL;
+3. downloads the untouched ZIP to the requested work directory;
+4. extracts into a staging directory and replaces the previous `extracted/` only
+   after extraction succeeds, so an interrupted extraction cannot leave a partial
+   source;
+5. extracts the archive and requires exactly one `PointExploitation.csv`;
+6. prints the selected asset URL and the path of that table for auditability.
+
+The work directory stays outside the repository. Re-running the command replaces
+the downloaded archive and extracted files, but never modifies a generated or
+published immutable release.
+
+If STAC discovery is temporarily unavailable, use the official FOT/BAV dataset
+landing page as the manual fallback:
+
+```text
+https://www.bav.admin.ch/de/haltestellen-des-oeffentlichen-verkehrs-geoiv-id-982
+```
+
+Open `Datendownload` from that page and select the **French CSV export in
+LV95 (`EPSG:2056`)**. Its filename follows this pattern:
+
+```text
+haltestellen-oev_2056_fr.csv.zip
+```
+
+The `_fr` suffix is important: do not select the German `_de` CSV or the
+FileGDB, GeoPackage, or INTERLIS variants. Do not copy a physical ZIP object URL
+into this documentation or automation: GeoAdmin may change object names or paths
+between publications while the official dataset page and STAC collection remain
+the stable discovery points.
+
+Extract the downloaded ZIP into a clean work directory before generation.
+
+The generator records a SHA-256 of the exact selected CSV bytes, so release
+identity does not depend on the mutable download URL or a manually entered date.
+Do not edit the official CSV before generation. If the source schema changes,
+adapt and review the importer instead of weakening its plausibility checks.
+
+## 3. Local development artifact
+
+Generate the root-relative development artifact:
+
+```powershell
+npm run prepare:public-transport-stops-local -- "C:\Temp\haltestellen-oev"
+```
+
+This writes:
+
+```text
+public/local-data/public-transport-stops.json
+```
+
+The file is ignored by Git and stays directly readable by Vite. Local development
+does not create or depend on a Brotli sibling; compression belongs only to the
+immutable publication release.
+
+Enable the static provider in `.env.local`:
+
+```text
+VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL=/local-data/public-transport-stops.json
+```
+
+Leaving the variable unset keeps the GeoAdmin identify provider.
+
+## 4. Generator safeguards
+
+Before writing any artifact, the generator must identify a plausible national
+`PointExploitation` table. It fails instead of guessing when the source no longer
+matches the expected contract.
+
+Current safeguards include:
+
+- exact matching of known semantic source columns;
+- a national-scale minimum record count;
+- strict UTF-8 decoding and rejection of replacement characters;
+- the canonical `PointExploitation.csv` source basename;
+- seven-digit DiDok service numbers;
+- a broad LV95 coordinate plausibility envelope;
+- a minimum share of rows carrying transport metadata;
+- explicit logging of the concrete columns selected from the source.
+
+The browser artifact additionally contains:
+
+- source dataset id;
+- content-derived `sourceRelease`;
+- source CSV basename;
+- complete source SHA-256 and source byte length;
+- declared final record count;
+- compact dictionaries and tuple records.
+
+The browser validates this provenance and checks that `recordCount` equals the
+serialized record-array length before building its in-memory index.
+
+## 5. Immutable release layout
+
+Prepare a release outside the repository:
+
+```powershell
+npm run prepare:public-transport-stops-release -- `
+  "C:\Temp\haltestellen-oev" `
+  --release-root "C:\Data\ViaHelveticaPublicTransport"
+```
+
+The generator derives the release path from the source SHA-256. A typical layout
+is:
+
+```text
+C:/Data/ViaHelveticaPublicTransport/
+  public-transport-stops-sha256-0123456789abcdef/
+    format-v3/
+      ch/
+        stops.json.br
+        release.json
+```
+
+`stops.json.br` is the Brotli quality-11 transport representation that will be
+served publicly as `stops.json` with HTTP `Content-Encoding: br`. The decoded
+JSON is reconstructed only in memory during verification and is not duplicated
+in the release directory. `release.json` records source provenance, catalog
+SHA-256, decoded and compressed sizes, schema identity, and record count.
+
+Never overwrite a published release path. A source change changes the source
+hash and therefore the dataset path. A schema change changes `format-vN`. The
+release payload deliberately excludes a generation timestamp, so regenerating
+the same source and format produces the same decoded catalog bytes and remains
+compatible with immutable publication. `catalogSha256` is the reproducibility
+contract; Brotli bytes may differ across future Node/libbrotli versions without
+changing the decoded catalog.
+
+Verify the generated release before publication:
+
+```powershell
+npm run verify:public-transport-stops-release -- `
+  --source "C:\Data\ViaHelveticaPublicTransport\public-transport-stops-sha256-0123456789abcdef\format-v3\ch"
+```
+
+The verifier checks the manifest, Brotli byte length, decoded catalog hash and
+byte length, provenance, and record count by decompressing `stops.json.br` in
+memory. The R2 upload script runs this verification again automatically before
+its first write.
+
+## 6. R2 prerequisites
+
+Publication uses an existing rclone S3-compatible remote. Keep all R2 access
+credentials in rclone's machine-local configuration.
+
+Copy:
+
+```text
+public-transport-data.config.example.json
+```
+
+to the Git-ignored:
+
+```text
+public-transport-data.config.local.json
+```
+
+Then configure:
+
+- `releaseRoot`: the exact generated `.../format-v3/ch` directory;
+- `publication.remote`: local rclone remote name;
+- `publication.bucket`: target R2 bucket;
+- `publication.publicRootUrl`: public custom-domain root for static data;
+- `publication.publicOrigin`: deployed Via Helvetica origin allowed by CORS.
+
+The public bucket/domain must permit browser `GET` requests from the origins
+that use the catalog. The current Via Helvetica bucket allows
+`https://viahelvetica.ch` and `http://localhost:5173`. The public verifier accepts
+an exact matching origin (or `*`) and requires `Vary: Origin` when the response is
+origin-specific. A production custom domain is preferred over an `r2.dev`
+development endpoint so normal Cloudflare caching controls are available.
+
+## 7. Publication metadata contract
+
+R2 stores the compressed bytes under the browser-facing key `stops.json` with:
+
+```text
+Content-Type: application/json; charset=utf-8
+Content-Encoding: br
+Cache-Control: public, max-age=31536000, immutable
+```
+
+The browser therefore fetches a normal JSON URL and receives decoded JSON bytes
+through standard HTTP content decoding. It does not know about `.br` and does
+not run a JavaScript decompressor.
+
+`release.json` uses the same one-year immutable cache without content encoding.
+The publication script uploads `stops.json` first and `release.json` last so published
+provenance never claims a complete release before the catalog exists. Application
+rollout is controlled separately by `VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL`.
+
+## 8. Publish
+
+Preview the upload:
+
+```powershell
+.\scripts\upload-public-transport-stops-r2.ps1 -DryRun
+```
+
+Publish:
+
+```powershell
+.\scripts\upload-public-transport-stops-r2.ps1
+```
+
+The script:
+
+1. verifies the complete local release, including the Brotli round trip;
+2. reads the validated release identity and derives the immutable remote path;
+3. uploads the Brotli catalog as `stops.json` with HTTP Brotli metadata;
+4. uploads `release.json` last;
+5. verifies the release through the configured public URL.
+
+A real upload uses `rclone --immutable`; an existing release path must therefore
+be treated as read-only rather than corrected in place.
+
+## 9. Public verification
+
+The upload script runs public verification automatically. It can also be run
+explicitly:
+
+```powershell
+npm run verify:published-public-transport-stops -- `
+  --base-url "https://data.example.org/public-transport-stops-sha256-0123456789abcdef/format-v3/ch" `
+  --source "C:\Data\ViaHelveticaPublicTransport\public-transport-stops-sha256-0123456789abcdef\format-v3\ch" `
+  --origin "https://viahelvetica.example.org"
+```
+
+For quick manual diagnostics, remember that the catalog is stored pre-compressed:
+
+```powershell
+curl --compressed "<catalog-url>"
+curl -sSI "<catalog-url>"
+curl -sS "<release-url>"
+```
+
+Verification checks:
+
+- public release identity against the local manifest;
+- CORS for the application origin;
+- `application/json` metadata;
+- one-year immutable cache metadata;
+- `Content-Encoding: br` for `stops.json`;
+- decoded byte length and SHA-256 against the local release;
+- catalog provenance and record count after JSON parsing.
+
+## 10. Application configuration
+
+After a release passes public verification, configure the application with its
+immutable object URL:
+
+```text
+VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL=https://data.example.org/public-transport-stops-sha256-0123456789abcdef/format-v3/ch/stops.json
+```
+
+The application loads the catalog only when the public-transport layer is first
+used. If the variable is unset, the application uses the GeoAdmin identify
+provider. If the variable is set but the catalog cannot be loaded, there is no
+automatic runtime fallback; deployment therefore validates the configured URL
+before building.
+
+Before changing production, perform a browser smoke test against the published R2
+URL: point `.env.local` to it, run `npm run dev`, confirm stops around Lausanne and
+Zurich, inspect at least one accented stop name, click a stop and confirm departures,
+and check the browser console for CORS errors.
+
+## 11. Updating the dataset
+
+For a new official source publication:
+
+1. run `npm run download:public-transport-stops-source -- <work-directory>`;
+2. inspect the discovered official STAC asset URL and extracted
+   `PointExploitation.csv`;
+3. generate the new release and compare its final count with the previous release:
+
+   ```powershell
+   npm run prepare:public-transport-stops-release -- `
+     "<work-directory>" `
+     --release-root "<release-root>" `
+     --previous-release "<previous-release-directory>"
+   ```
+
+   The generator fails when the count changes by more than 5%; investigate such a
+   change instead of weakening the threshold blindly.
+4. inspect the resolved columns, accepted row count, source SHA-256, and sizes;
+5. run `npm test` and `npm run build` when application code changed;
+6. publish under the newly derived immutable path;
+7. verify the public release;
+8. perform the browser smoke test described above against the new immutable URL;
+9. update the GitHub repository variable `VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL`;
+10. manually run the Pages `workflow_dispatch` deployment because changing a
+    repository variable does not trigger a deployment by itself;
+11. validate the production layer, then retain the previous release for rollback.
+
+Do not introduce GTFS or timetable joins into this pipeline merely to remove rare
+stops without current departures. The static catalog represents official stop
+metadata; dynamic departure availability remains a separate concern.
+
+
+## 12. Rollback
+
+Rollback never modifies or deletes R2 data. Restore
+`VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL` to the previous immutable catalog URL,
+run the GitHub Pages workflow manually with `workflow_dispatch`, and verify the
+public-transport layer in production. Old immutable releases remain available so
+rollback is only an application redeployment.

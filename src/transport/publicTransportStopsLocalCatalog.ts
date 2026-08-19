@@ -1,0 +1,290 @@
+/**
+ * Business context: provides an opt-in static public-transport stop catalog for
+ * local development or immutable object-storage releases. The complete FOT
+ * dataset is fetched only once, provenance-validated, normalized into passenger
+ * stops, indexed in LV95 grid cells, and filtered by viewport extent so
+ * OpenLayers still receives only geographically useful stops. GeoAdmin is used
+ * instead when no static catalog URL is configured; catalog load failures do not
+ * switch providers automatically at runtime.
+ */
+import type { Extent } from 'ol/extent.js';
+import {
+  classifyPublicTransportMeansOfTransport,
+  isPublicTransportStopTypeOutOfService,
+  normalizePublicTransportStopWithPrecomputedMetadata,
+  PUBLIC_TRANSPORT_STOPS_LAYER_ID,
+  type PublicTransportMode,
+  type PublicTransportStop,
+} from './publicTransportStopModel';
+
+/** Current generated-catalog schema version. */
+const LOCAL_CATALOG_VERSION = 3;
+
+/**
+ * Spatial grid size in metres.
+ * Ten-kilometre cells keep the national index small while limiting each viewport
+ * lookup to nearby buckets instead of scanning roughly 25,000 passenger stops.
+ */
+const LOCAL_CATALOG_GRID_SIZE_METERS = 10_000;
+
+/** Compact record emitted by the local offline preparation script. */
+type LocalCatalogRecord = [
+  id: string,
+  name: string,
+  meansOfTransportIndex: number,
+  stopTypeIndex: number,
+  east: number,
+  north: number,
+];
+
+/** Serialized static catalog contract loaded lazily by the browser. */
+interface LocalCatalogPayload {
+  /** Schema version guarding incompatible static artifacts. */
+  version: number;
+  /** Source dataset identifier kept for provenance validation. */
+  source: string;
+  /** Content-derived source release id used by immutable publication paths. */
+  sourceRelease: string;
+  /** Basename of the selected official CSV table. */
+  sourceFile: string;
+  /** Full SHA-256 digest of the downloaded official CSV bytes. */
+  sourceSha256: string;
+  /** Byte length of the downloaded source CSV used for provenance diagnostics. */
+  sourceByteLength: number;
+  /** Declared compact-record count, validated before indexes are trusted. */
+  recordCount: number;
+  /** Deduplicated raw transport descriptions referenced by record index. */
+  meansOfTransport: unknown[];
+  /** Deduplicated raw stop-type descriptions referenced by record index. */
+  stopTypes: unknown[];
+  /** Compact raw stop records normalized after dictionary expansion. */
+  records: unknown[];
+}
+
+/** In-memory grid built once from one validated static catalog. */
+interface LocalCatalogIndex {
+  /** Passenger stops bucketed by 10 km LV95 cells. */
+  cells: Map<string, PublicTransportStop[]>;
+}
+
+let cachedCatalogUrl: string | null = null;
+let cachedCatalogPromise: Promise<LocalCatalogIndex> | null = null;
+
+function gridCoordinate(value: number): number {
+  return Math.floor(value / LOCAL_CATALOG_GRID_SIZE_METERS);
+}
+
+function gridKey(eastCell: number, northCell: number): string {
+  return `${eastCell}:${northCell}`;
+}
+
+function parseLocalCatalogRecord(
+  value: unknown,
+  modesByMeansOfTransportIndex: PublicTransportMode[][],
+  outOfServiceByStopTypeIndex: boolean[],
+): PublicTransportStop | null {
+  if (!Array.isArray(value) || value.length < 6) {
+    return null;
+  }
+
+  const [id, name, meansOfTransportIndex, stopTypeIndex, east, north] = value;
+  if (
+    typeof id !== 'string' ||
+    typeof name !== 'string' ||
+    typeof meansOfTransportIndex !== 'number' ||
+    !Number.isInteger(meansOfTransportIndex) ||
+    meansOfTransportIndex < 0 ||
+    meansOfTransportIndex >= modesByMeansOfTransportIndex.length ||
+    typeof stopTypeIndex !== 'number' ||
+    !Number.isInteger(stopTypeIndex) ||
+    stopTypeIndex < 0 ||
+    stopTypeIndex >= outOfServiceByStopTypeIndex.length ||
+    typeof east !== 'number' ||
+    !Number.isFinite(east) ||
+    typeof north !== 'number' ||
+    !Number.isFinite(north)
+  ) {
+    return null;
+  }
+
+  return normalizePublicTransportStopWithPrecomputedMetadata(
+    {
+      id,
+      name,
+      coordinate: [east, north],
+    },
+    modesByMeansOfTransportIndex[meansOfTransportIndex],
+    outOfServiceByStopTypeIndex[stopTypeIndex],
+  );
+}
+
+/** Validates one generated string dictionary before record indexes are trusted. */
+function parseStringDictionary(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+    ? value
+    : null;
+}
+
+function hasValidCatalogProvenance(payload: LocalCatalogPayload): boolean {
+  return (
+    /^sha256-[0-9a-f]{16}$/.test(payload.sourceRelease) &&
+    typeof payload.sourceFile === 'string' &&
+    payload.sourceFile.trim().length > 0 &&
+    /^[0-9a-f]{64}$/.test(payload.sourceSha256) &&
+    payload.sourceRelease === `sha256-${payload.sourceSha256.slice(0, 16)}` &&
+    Number.isInteger(payload.sourceByteLength) &&
+    payload.sourceByteLength > 0 &&
+    Number.isInteger(payload.recordCount) &&
+    payload.recordCount >= 0 &&
+    Array.isArray(payload.records) &&
+    payload.recordCount === payload.records.length
+  );
+}
+
+function buildLocalCatalogIndex(payload: LocalCatalogPayload): LocalCatalogIndex {
+  const meansOfTransport = parseStringDictionary(payload.meansOfTransport);
+  const stopTypes = parseStringDictionary(payload.stopTypes);
+  if (
+    payload.version !== LOCAL_CATALOG_VERSION ||
+    payload.source !== PUBLIC_TRANSPORT_STOPS_LAYER_ID ||
+    !hasValidCatalogProvenance(payload) ||
+    !meansOfTransport ||
+    !stopTypes
+  ) {
+    throw new Error('Unsupported local public-transport stop catalog.');
+  }
+
+  // Generated formats intern provider descriptions. Classify each dictionary entry
+  // once so building the national index does not repeat Unicode normalization
+  // and multilingual regex matching for every one of the ~29,000 raw records.
+  const modesByMeansOfTransportIndex = meansOfTransport.map(
+    classifyPublicTransportMeansOfTransport,
+  );
+  const outOfServiceByStopTypeIndex = stopTypes.map(
+    isPublicTransportStopTypeOutOfService,
+  );
+
+  const cells = new Map<string, PublicTransportStop[]>();
+  const seenStopIds = new Set<string>();
+  for (const rawRecord of payload.records) {
+    const stop = parseLocalCatalogRecord(
+      rawRecord,
+      modesByMeansOfTransportIndex,
+      outOfServiceByStopTypeIndex,
+    );
+    if (!stop || seenStopIds.has(stop.id)) continue;
+    seenStopIds.add(stop.id);
+
+    const key = gridKey(
+      gridCoordinate(stop.coordinate[0]),
+      gridCoordinate(stop.coordinate[1]),
+    );
+    const bucket = cells.get(key);
+    if (bucket) {
+      bucket.push(stop);
+    } else {
+      cells.set(key, [stop]);
+    }
+  }
+
+  return { cells };
+}
+
+async function loadLocalCatalogIndex(url: string): Promise<LocalCatalogIndex> {
+  if (cachedCatalogPromise && cachedCatalogUrl === url) {
+    return cachedCatalogPromise;
+  }
+
+  const loadPromise = fetch(url).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(
+        `Local public-transport stop catalog failed with ${response.status}.`,
+      );
+    }
+
+    return buildLocalCatalogIndex(
+      (await response.json()) as LocalCatalogPayload,
+    );
+  });
+  const retryablePromise = loadPromise.catch((error) => {
+    // A failed first static-catalog load must be retryable after the generated
+    // file is corrected or replaced without requiring a page reload. Do not
+    // clear a newer cache if a different URL was configured in the meantime.
+    if (cachedCatalogUrl === url) {
+      cachedCatalogPromise = null;
+      cachedCatalogUrl = null;
+    }
+    throw error;
+  });
+
+  cachedCatalogUrl = url;
+  cachedCatalogPromise = retryablePromise;
+  return retryablePromise;
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw new DOMException('The operation was aborted.', 'AbortError');
+  }
+}
+
+/**
+ * Loads passenger stops from one generated static catalog.
+ *
+ * The national file is intentionally not tied to a viewport AbortSignal: once
+ * the stop layer needs the catalog, finishing the single lazy download is more
+ * useful than repeatedly restarting it during pans. Superseded viewport calls
+ * are still discarded before and after the shared load.
+ *
+ * @param url - URL of the generated local or immutable published catalog.
+ * @param extent - Buffered LV95 viewport extent to query.
+ * @param signal - Abort signal used to discard superseded viewport results.
+ * @returns Passenger stops contained by the requested extent.
+ * @throws {Error} When the local artifact cannot be loaded or is incompatible.
+ */
+export async function loadPublicTransportStopsFromLocalCatalog(
+  url: string,
+  extent: Extent,
+  signal: AbortSignal,
+): Promise<PublicTransportStop[]> {
+  throwIfAborted(signal);
+  const index = await loadLocalCatalogIndex(url);
+  throwIfAborted(signal);
+
+  const minEastCell = gridCoordinate(extent[0]);
+  const minNorthCell = gridCoordinate(extent[1]);
+  const maxEastCell = gridCoordinate(extent[2]);
+  const maxNorthCell = gridCoordinate(extent[3]);
+  const stops: PublicTransportStop[] = [];
+
+  for (let eastCell = minEastCell; eastCell <= maxEastCell; eastCell += 1) {
+    for (
+      let northCell = minNorthCell;
+      northCell <= maxNorthCell;
+      northCell += 1
+    ) {
+      const bucket = index.cells.get(gridKey(eastCell, northCell));
+      if (!bucket) continue;
+
+      for (const stop of bucket) {
+        const [east, north] = stop.coordinate;
+        if (
+          east >= extent[0] &&
+          east <= extent[2] &&
+          north >= extent[1] &&
+          north <= extent[3]
+        ) {
+          stops.push(stop);
+        }
+      }
+    }
+  }
+
+  return stops;
+}
+
+/** Resets module-level state for deterministic unit tests. */
+export function resetLocalPublicTransportStopsCatalogForTests(): void {
+  cachedCatalogUrl = null;
+  cachedCatalogPromise = null;
+}

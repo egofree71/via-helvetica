@@ -9,6 +9,7 @@ dist/
 .env.*
 !.env.example
 /routing-data.config.local.json
+/public-transport-data.config.local.json
 
 # Logs
 *.log
@@ -44,3 +45,6 @@ Thumbs.db
 
 # Local Cloudflare Worker deployment configuration
 /workers/swisstopo-gpx-share/wrangler.toml
+
+# Generated local public-transport dataset used only for provider experiments.
+public/local-data/

@@ -1,9 +1,9 @@
 {
-  "currentVersion": "1.7.0",
+  "currentVersion": "1.7.1",
   "locales": {
     "fr": {
       "dialog": {
-        "title": "Nouveautés de Via Helvetica 1.7.0",
+        "title": "Nouveautés de Via Helvetica 1.7.1",
         "historyLink": "Voir l’historique complet",
         "historyLinkNewTabLabel": "s’ouvre dans un nouvel onglet"
       },
@@ -18,6 +18,23 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.7.1",
+          "summary": "Cette version optimise le chargement des arrêts de transports publics sans modifier leur utilisation sur la carte.",
+          "items": [
+            {
+              "id": "publicTransportStaticCatalog",
+              "title": "Chargement des arrêts de transports publics optimisé :",
+              "description": "Via Helvetica charge désormais les positions des arrêts depuis un catalogue national compact préparé à partir des données officielles de l’OFT, ce qui évite de multiplier les requêtes réseau lors des déplacements sur la carte.",
+              "details": [
+                "Le catalogue n’est téléchargé que lorsque la couche des arrêts est activée à un niveau de zoom où les arrêts peuvent être affichés, puis il est réutilisé localement pendant la session.",
+                "Les prochains départs restent récupérés à la demande lorsqu’un arrêt est sélectionné.",
+                "Le catalogue est publié sous une URL immuable et peut être mis à jour séparément lorsque l’OFT publie une nouvelle édition des données."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.7.0",
           "summary": "Cette version améliore la lisibilité des transports publics et unifie l’accès aux informations présentes sous un même clic, tout en ajoutant l’inspection des coordonnées et de l’altitude sur ordinateur.",
@@ -223,7 +240,7 @@
     },
     "de": {
       "dialog": {
-        "title": "Neu in Via Helvetica 1.7.0",
+        "title": "Neu in Via Helvetica 1.7.1",
         "historyLink": "Vollständigen Versionsverlauf anzeigen",
         "historyLinkNewTabLabel": "öffnet in einem neuen Tab"
       },
@@ -238,6 +255,23 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.7.1",
+          "summary": "Diese Version optimiert das Laden der Haltestellen des öffentlichen Verkehrs, ohne ihre Bedienung auf der Karte zu ändern.",
+          "items": [
+            {
+              "id": "publicTransportStaticCatalog",
+              "title": "Optimiertes Laden der Haltestellen des öffentlichen Verkehrs:",
+              "description": "Via Helvetica lädt die Positionen der Haltestellen nun aus einem kompakten landesweiten Katalog, der aus den offiziellen Daten des BAV erstellt wird. Dadurch werden wiederholte Netzwerkanfragen beim Verschieben der Karte vermieden.",
+              "details": [
+                "Der Katalog wird erst heruntergeladen, wenn die Haltestellenebene bei einer Zoomstufe aktiviert ist, auf der Haltestellen angezeigt werden können, und danach während der Sitzung lokal wiederverwendet.",
+                "Die nächsten Abfahrten werden weiterhin bei Bedarf geladen, wenn eine Haltestelle ausgewählt wird.",
+                "Der Katalog wird unter einer unveränderlichen URL veröffentlicht und kann separat aktualisiert werden, wenn das BAV eine neue Datenausgabe veröffentlicht."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.7.0",
           "summary": "Diese Version verbessert die Übersichtlichkeit der Haltestellen und bündelt Informationen, die unter demselben Kartenklick liegen. Auf dem Desktop lassen sich ausserdem Koordinaten und Geländehöhe per Rechtsklick abfragen.",
@@ -443,7 +477,7 @@
     },
     "it": {
       "dialog": {
-        "title": "Novità di Via Helvetica 1.7.0",
+        "title": "Novità di Via Helvetica 1.7.1",
         "historyLink": "Vedi la cronologia completa",
         "historyLinkNewTabLabel": "si apre in una nuova scheda"
       },
@@ -458,6 +492,23 @@
         "versionLabel": "Versione"
       },
       "releases": [
+        {
+          "version": "1.7.1",
+          "summary": "Questa versione ottimizza il caricamento delle fermate dei trasporti pubblici senza modificarne l’uso sulla carta.",
+          "items": [
+            {
+              "id": "publicTransportStaticCatalog",
+              "title": "Caricamento ottimizzato delle fermate dei trasporti pubblici:",
+              "description": "Via Helvetica carica ora le posizioni delle fermate da un catalogo nazionale compatto preparato a partire dai dati ufficiali dell’UFT, evitando così di moltiplicare le richieste di rete durante gli spostamenti sulla carta.",
+              "details": [
+                "Il catalogo viene scaricato solo quando il livello delle fermate è attivo a un livello di zoom in cui le fermate possono essere visualizzate, quindi viene riutilizzato localmente durante la sessione.",
+                "Le prossime partenze continuano a essere recuperate su richiesta quando viene selezionata una fermata.",
+                "Il catalogo è pubblicato con un URL immutabile e può essere aggiornato separatamente quando l’UFT pubblica una nuova edizione dei dati."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.7.0",
           "summary": "Questa versione migliora la leggibilità delle fermate del trasporto pubblico e riunisce le informazioni presenti sotto lo stesso clic, aggiungendo inoltre su desktop l’ispezione di coordinate e altitudine.",
@@ -663,7 +714,7 @@
     },
     "en": {
       "dialog": {
-        "title": "What’s new in Via Helvetica 1.7.0",
+        "title": "What’s new in Via Helvetica 1.7.1",
         "historyLink": "View full release history",
         "historyLinkNewTabLabel": "opens in a new tab"
       },
@@ -678,6 +729,23 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.7.1",
+          "summary": "This release optimizes how public-transport stops are loaded without changing how they are used on the map.",
+          "items": [
+            {
+              "id": "publicTransportStaticCatalog",
+              "title": "Optimized public-transport stop loading:",
+              "description": "Via Helvetica now loads stop positions from a compact national catalog prepared from official FOT data, avoiding repeated network requests while the map is moved.",
+              "details": [
+                "The catalog is downloaded only when the stop layer is active at a zoom level where stops can be displayed, then reused locally for the rest of the session.",
+                "Upcoming departures are still fetched on demand when a stop is selected.",
+                "The catalog is published at an immutable URL and can be updated separately when FOT publishes a new edition of the data."
+              ],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.7.0",
           "summary": "This release improves public-transport map readability and brings information found under the same map click into one chooser, while adding desktop coordinate and elevation inspection.",

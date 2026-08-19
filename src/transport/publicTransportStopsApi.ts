@@ -1,8 +1,8 @@
 /**
- * Business context: loads official BAV public-transport stop features around
- * the current map viewport. Dense Swiss city centres can reach the GeoAdmin result
- * cap, so requests are recursively subdivided while keeping the operation
- * bounded and abortable for responsive map navigation.
+ * Business context: loads official BAV public-transport stops around the current
+ * map viewport. A configured static catalog is authoritative for that build;
+ * GeoAdmin identify is used only when no static catalog URL is configured. Both
+ * providers expose the same normalized contract to map consumers.
  */
 import type { Extent } from 'ol/extent.js';
 import type { Language } from '../i18n/translations';
@@ -12,10 +12,34 @@ import {
   PUBLIC_TRANSPORT_STOPS_LAYER_ID,
   type PublicTransportStop,
 } from './publicTransportStopModel';
+import { loadPublicTransportStopsFromLocalCatalog } from './publicTransportStopsLocalCatalog';
 
 /** GeoAdmin identify endpoint used for viewport feature loading. */
 const IDENTIFY_ENDPOINT =
   'https://api3.geo.admin.ch/rest/services/ech/MapServer/identify';
+
+/**
+ * Returns the optional static catalog URL.
+ * The generic setting supports local files and immutable object storage. The
+ * legacy local-only setting remains accepted for existing `.env.local` files;
+ * new configuration should use `VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL`.
+ */
+function getLocalPublicTransportStopsUrl(): string {
+  const catalogUrl = (
+    import.meta.env.VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL ?? ''
+  ).trim();
+  if (catalogUrl) return catalogUrl;
+  return (import.meta.env.VITE_PUBLIC_TRANSPORT_STOPS_LOCAL_URL ?? '').trim();
+}
+
+/**
+ * Reports whether viewport stop loading currently uses the static catalog.
+ * The map runtime uses this capability flag to refresh cheap in-memory coverage
+ * proactively during pans without applying the same request rate to GeoAdmin.
+ */
+export function isLocalPublicTransportStopsCatalogEnabled(): boolean {
+  return getLocalPublicTransportStopsUrl().length > 0;
+}
 
 /** Maximum number of features returned by one GeoAdmin identify request. */
 const IDENTIFY_RESULT_LIMIT = 200;
@@ -179,12 +203,21 @@ async function fetchStopsForExtent(
  * @param context - Request envelope, real viewport scale, and interface language.
  * @param signal - Abort signal for superseded pans, zooms, or layer hiding.
  * @returns Passenger stops deduplicated strictly by official feature identifier.
- * @throws {Error} When the official GeoAdmin service fails.
+ * @throws {Error} When the configured stop provider cannot load valid data.
  */
 export async function loadPublicTransportStops(
   context: PublicTransportStopsLoadContext,
   signal: AbortSignal,
 ): Promise<PublicTransportStop[]> {
+  const localCatalogUrl = getLocalPublicTransportStopsUrl();
+  if (localCatalogUrl) {
+    return loadPublicTransportStopsFromLocalCatalog(
+      localCatalogUrl,
+      context.requestExtent,
+      signal,
+    );
+  }
+
   const rawResults = await fetchStopsForExtent(
     context.requestExtent,
     context,

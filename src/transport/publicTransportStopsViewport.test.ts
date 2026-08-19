@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createPublicTransportStopsViewportCoverage,
   publicTransportStopsCoverageContainsViewport,
+  publicTransportStopsCoverageKeepsPrefetchMargin,
 } from './publicTransportStopsViewport';
 
 describe('public-transport stop viewport coverage', () => {
@@ -52,6 +53,55 @@ describe('public-transport stop viewport coverage', () => {
         [800, 400],
       ),
     ).toBe(false);
+  });
+
+  it('refreshes a local catalog before the visible viewport reaches the buffer edge', () => {
+    const coverage = createPublicTransportStopsViewportCoverage(
+      [100, 200, 500, 400],
+      21,
+      [800, 400],
+    );
+    const pannedViewport: [number, number, number, number] = [
+      180,
+      200,
+      580,
+      400,
+    ];
+
+    // The visible map still fits, but its right-side preload reserve is gone.
+    expect(
+      publicTransportStopsCoverageContainsViewport(
+        coverage,
+        pannedViewport,
+        21,
+        [800, 400],
+      ),
+    ).toBe(true);
+    expect(
+      publicTransportStopsCoverageKeepsPrefetchMargin(
+        coverage,
+        pannedViewport,
+        21,
+        [800, 400],
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps the local preload reserve for smaller pans', () => {
+    const coverage = createPublicTransportStopsViewportCoverage(
+      [100, 200, 500, 400],
+      21,
+      [800, 400],
+    );
+
+    expect(
+      publicTransportStopsCoverageKeepsPrefetchMargin(
+        coverage,
+        [150, 200, 550, 400],
+        21,
+        [800, 400],
+      ),
+    ).toBe(true);
   });
 
   it('invalidates reuse when zoom or canvas size changes', () => {

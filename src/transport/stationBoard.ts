@@ -49,42 +49,59 @@ const STATIONBOARD_ENDPOINT =
 
 /** One validated cache entry for an official stop identifier. */
 interface StationBoardCacheEntry {
+  /** Absolute cache-expiry timestamp in Unix milliseconds. */
   expiresAt: number;
+  /** Validated popup result reused until expiry. */
   result: StationBoardResult;
 }
 
 /** Minimal station object used to distinguish an empty board from an invalid ID. */
 interface RawStation {
+  /** Provider station identifier, validated before use. */
   id?: unknown;
+  /** Provider station name, used only to recognize a valid station envelope. */
   name?: unknown;
 }
 
 /** Minimal prognosis fields used for real-time time and platform data. */
 interface RawPrognosis {
+  /** Real-time departure value when the provider exposes one. */
   departure?: unknown;
+  /** Predicted platform value when available. */
   platform?: unknown;
 }
 
 /** Minimal stop fields nested inside one stationboard journey. */
 interface RawJourneyStop {
+  /** Planned departure in the provider's ISO-like representation. */
   departure?: unknown;
+  /** Planned Unix departure timestamp used as a documented fallback. */
   departureTimestamp?: unknown;
+  /** Planned platform when available. */
   platform?: unknown;
+  /** Loosely typed real-time prognosis envelope. */
   prognosis?: unknown;
 }
 
 /** Minimal journey fields returned by transport.opendata.ch. */
 interface RawJourney {
+  /** Nested stop timing and platform data. */
   stop?: unknown;
+  /** Provider journey name used as a line-label fallback. */
   name?: unknown;
+  /** Transport category such as IC, bus, or tram. */
   category?: unknown;
+  /** Passenger-facing or provider journey number. */
   number?: unknown;
+  /** Published destination. */
   to?: unknown;
 }
 
 /** Minimal stationboard response envelope. */
 interface RawStationBoardResponse {
+  /** Station envelope confirming that the requested identifier resolved. */
   station?: unknown;
+  /** Loosely typed list of timetable journeys. */
   stationboard?: unknown;
 }
 
@@ -272,8 +289,10 @@ function hasMatchedStation(value: unknown): boolean {
 
 /**
  * Generates the raw and zero-padded ID forms accepted by different datasets.
- * BAV features commonly expose seven digits, while the API documentation also
- * uses nine-character identifiers prefixed with two zeros.
+ * FOT/GeoAdmin stop features expose the seven-digit DiDok service number. The
+ * timetable API documentation also accepts nine-character forms prefixed with
+ * two zeros, so outbound lookup may retry that representation without changing
+ * the application's canonical stop identifier.
  */
 function createStationIdCandidates(stationId: string): string[] {
   const normalized = stationId.trim();

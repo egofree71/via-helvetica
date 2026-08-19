@@ -1,14 +1,27 @@
 /**
- * Business context: converts loosely typed GeoAdmin public-transport records
- * into the small passenger-stop model used by the map and timetable popup.
- * The official layer also contains operating points and retired facilities, so
- * this module owns the multilingual filtering rules that keep only useful
- * passenger access points for hiking-route planning.
+ * Business context: converts official public-transport records from GeoAdmin or
+ * the static FOT catalog into the small passenger-stop model used by the map and
+ * timetable popup. The source also contains operating points and retired
+ * facilities, so this module owns the multilingual filtering rules that keep only
+ * useful passenger access points for hiking-route planning.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 
 /** Technical GeoAdmin identifier for official public-transport stops. */
 export const PUBLIC_TRANSPORT_STOPS_LAYER_ID = 'ch.bav.haltestellen-oev';
+
+/**
+ * Official DiDok service-number format used by the FOT stop model.
+ * The seven digits are the two-digit UIC country code followed by five digits;
+ * GeoAdmin feature ids for this layer and the downloaded `Numero` field use the
+ * same value. Timetable providers may additionally accept a zero-padded form.
+ */
+const DIDOK_SERVICE_NUMBER_PATTERN = /^\d{7}$/;
+
+/** Tests whether one identifier satisfies the FOT DiDok service-number contract. */
+export function isDidokServiceNumber(value: string): boolean {
+  return DIDOK_SERVICE_NUMBER_PATTERN.test(value);
+}
 
 /**
  * Passenger transport categories accepted by the map overlay.
@@ -31,11 +44,27 @@ export const ACCEPTED_PUBLIC_TRANSPORT_MODES = [
 export type PublicTransportMode =
   (typeof ACCEPTED_PUBLIC_TRANSPORT_MODES)[number];
 
+/** Raw stop fields shared by remote identify and static-catalog providers. */
+export interface PublicTransportStopInput {
+  /** Seven-digit DiDok service number shared by GeoAdmin and the static catalog. */
+  id: string;
+  /** DiDok timetable identifier; defaults to the same official service number. */
+  stationId?: string;
+  /** Official stop name. */
+  name: string;
+  /** Provider description of served passenger transport modes. */
+  meansOfTransport?: string | null;
+  /** Provider stop type used to reject explicitly retired facilities. */
+  stopType?: string | null;
+  /** Official LV95 point coordinate. */
+  coordinate: Coordinate;
+}
+
 /** Passenger stop displayed on the map and in the compact information popup. */
 export interface PublicTransportStop {
-  /** Stable official feature identifier used by OpenLayers and React. */
+  /** Seven-digit DiDok service number used by OpenLayers and React. */
   id: string;
-  /** Official BAV identifier used by the timetable API. */
+  /** Same DiDok service number passed to the timetable API. */
   stationId: string;
   /** Official stop name in the selected GeoAdmin language when available. */
   name: string;
@@ -232,8 +261,17 @@ function detectTransportModesFromNameQualifier(
   return qualifier ? detectTransportModes(qualifier) : [];
 }
 
-/** Tests localized type values that explicitly describe an unavailable stop. */
-function isOutOfServiceType(value: string | null): boolean {
+/**
+ * Tests one provider stop-type value for an explicit unavailable-state marker.
+ * Dictionary-backed catalogs can memoize this result once per distinct value
+ * instead of repeating Unicode normalization for every stop record.
+ *
+ * @param value - Localized provider stop-type description.
+ * @returns `true` only when the source explicitly marks the stop unavailable.
+ */
+export function isPublicTransportStopTypeOutOfService(
+  value: string | null | undefined,
+): boolean {
   if (!value) {
     return false;
   }
@@ -241,6 +279,21 @@ function isOutOfServiceType(value: string | null): boolean {
   return /hors service|ausser betrieb|außer betrieb|out of service|fuori servizio|disused/.test(
     normalizeText(value),
   );
+}
+
+/**
+ * Classifies one provider transport description into normalized passenger modes.
+ * Static catalogs intern these descriptions, so callers may compute the result
+ * once per dictionary entry and reuse it for all referenced records.
+ *
+ * @param value - Raw localized means-of-transport description.
+ * @returns Stable, deduplicated passenger transport modes derived from metadata.
+ */
+export function classifyPublicTransportMeansOfTransport(
+  value: string | null | undefined,
+): PublicTransportMode[] {
+  const usableValue = value && value.trim() !== '-' ? value : '';
+  return normalizeModes(detectTransportModes(usableValue));
 }
 
 /** Returns the stable display priority of one normalized transport mode. */
@@ -270,6 +323,82 @@ export function getPrimaryPublicTransportMode(
   modes: PublicTransportMode[],
 ): PublicTransportMode {
   return MODE_PRIORITY.find((mode) => modes.includes(mode)) ?? modes[0];
+}
+
+/**
+ * Normalizes one stop after provider metadata classification has already run.
+ *
+ * Dictionary-backed sources use this entry point to reuse transport and stop-type
+ * classification across thousands of records while keeping name fallback and all
+ * passenger filtering rules centralized in this module.
+ *
+ * @param input - Validated official identifier, name, and LV95 point.
+ * @param metadataModes - Modes already classified from provider metadata.
+ * @param outOfService - Whether provider metadata explicitly retires this stop.
+ * @returns A passenger stop or `null` when the record is retired, technical,
+ * unsupported, or otherwise irrelevant to hiking-route planning.
+ */
+export function normalizePublicTransportStopWithPrecomputedMetadata(
+  input: PublicTransportStopInput,
+  metadataModes: PublicTransportMode[],
+  outOfService: boolean,
+): PublicTransportStop | null {
+  const { id, stationId = id, name, coordinate } = input;
+
+  if (
+    !name ||
+    outOfService ||
+    !isDidokServiceNumber(id) ||
+    !isDidokServiceNumber(stationId)
+  ) {
+    return null;
+  }
+
+  // Very close zoom levels and complete source downloads can expose technical
+  // operating points named only `01`, `02`, and similar platform identifiers.
+  // Passenger stop names always contain at least one letter.
+  if (!/\p{L}/u.test(name)) {
+    return null;
+  }
+
+  const fallbackModes =
+    metadataModes.length > 0
+      ? metadataModes
+      : normalizeModes(detectTransportModesFromNameQualifier(name));
+
+  // The FOT source intentionally includes pure operating points. A record is
+  // passenger-relevant only when metadata, or the explicit cableway qualifier
+  // fallback above, resolves to one of the accepted transport categories.
+  if (fallbackModes.length === 0) {
+    return null;
+  }
+
+  return {
+    id,
+    stationId,
+    name,
+    // Local catalog dictionary entries are shared across many records. Copy the
+    // tiny mode array so one stop cannot mutate another stop's presentation data.
+    modes: [...fallbackModes],
+    coordinate,
+  };
+}
+
+/**
+ * Normalizes source-independent FOT stop fields into the passenger-stop model.
+ *
+ * @param input - Validated official identifier, name, metadata, and LV95 point.
+ * @returns A passenger stop or `null` when the record is retired, technical,
+ * unsupported, or otherwise irrelevant to hiking-route planning.
+ */
+export function normalizePublicTransportStop(
+  input: PublicTransportStopInput,
+): PublicTransportStop | null {
+  return normalizePublicTransportStopWithPrecomputedMetadata(
+    input,
+    classifyPublicTransportMeansOfTransport(input.meansOfTransport),
+    isPublicTransportStopTypeOutOfService(input.stopType),
+  );
 }
 
 /**
@@ -334,43 +463,15 @@ export function parsePublicTransportStop(
     'haltestellentyp',
   ]);
 
-  // Explicitly retired stops remain hidden even when their name contains a
-  // transport word. Empty or unknown transport fields are handled below by a
-  // narrowly scoped final-parenthesis fallback for useful cableway records.
-  if (!name || isOutOfServiceType(stopType)) {
+  if (!name) {
     return null;
   }
 
-  // Very close zoom levels can expose technical operating points named only
-  // `01`, `02`, and similar platform identifiers. Passenger stop names always
-  // contain at least one letter, so rejecting numeric-only labels removes
-  // those duplicates without hiding legitimate named stations.
-  if (!/\p{L}/u.test(name)) {
-    return null;
-  }
-
-  const usableMeansOfTransport =
-    meansOfTransport && meansOfTransport.trim() !== '-'
-      ? meansOfTransport
-      : '';
-  const metadataModes = detectTransportModes(usableMeansOfTransport);
-  const modes =
-    metadataModes.length > 0
-      ? metadataModes
-      : detectTransportModesFromNameQualifier(name);
-
-  // The BAV layer intentionally includes pure operating points. A feature is
-  // passenger-relevant only when its metadata, or the explicit name qualifier
-  // fallback above, resolves to one of the accepted transport categories.
-  if (modes.length === 0) {
-    return null;
-  }
-
-  return {
+  return normalizePublicTransportStop({
     id: String(featureId),
-    stationId: String(featureId),
     name,
-    modes: normalizeModes(modes),
+    meansOfTransport,
+    stopType,
     coordinate,
-  };
+  });
 }
