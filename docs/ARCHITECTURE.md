@@ -891,22 +891,27 @@ tuples and interns repeated provider transport descriptions and stop types into
 top-level dictionaries. The browser expands those dictionary indexes before
 calling the existing passenger-stop normalizer; keeping classification in one
 runtime module avoids duplicating multilingual transport and retirement rules in
-the offline generator merely to save bytes. Normalized stops are indexed in a
-lightweight LV95 grid. Viewport calls query only intersecting grid cells, so the
-national catalog never becomes tens of thousands of OpenLayers features. The
-generator reports raw, gzip, and Brotli sizes so distribution choices can be
-measured before R2 publication. The shared download deliberately survives
-superseded viewport calls;
-those calls are still discarded before and after the load, while completing one
-static local file avoids restarting the same transfer during pans. Leaving the
-environment variable unset preserves the production GeoAdmin identify provider.
+the offline generator merely to save bytes. When the browser builds the
+national index, transport-mode and retirement classification is computed once
+per interned dictionary value rather than repeated for every raw record.
+Normalized stops are indexed in a lightweight LV95 grid. Viewport calls query
+only intersecting grid cells, so the national catalog never becomes tens of
+thousands of OpenLayers features. The generator reports raw, gzip, and Brotli
+sizes so distribution choices can be measured before R2 publication. The shared
+download deliberately survives superseded viewport calls; those calls are still
+discarded before and after the load, while completing one static local file
+avoids restarting the same transfer during pans. Leaving the environment
+variable unset preserves the production GeoAdmin identify provider.
 This experiment exists to validate data quality, memory use, and interaction
 latency before any R2 publication architecture is adopted.
 
 Official stop coordinates never change. Distinct stops within the close-stop
-threshold can be fanned out temporarily when their icons overlap. Newly loaded
-features start visually hidden until the first rendered-frame decluttering pass,
-which avoids flashing the complete dense-city buffer. Decluttering then runs
+threshold can be fanned out temporarily when their icons overlap. The anchored
+fan-out grouping uses a 60 m LV95 candidate grid, preserving deterministic
+identifier ordering while avoiding an all-pairs scan during proactive viewport
+refreshes. Newly loaded features start visually hidden until the first
+rendered-frame decluttering pass, which avoids flashing the complete dense-city
+buffer. Decluttering then runs
 after fan-out in CSS-pixel space, hides only the style of lower-priority features,
 and leaves every stop loaded in the vector source. Members of the same
 fan-out group do not suppress each other while that fan-out is active; once real
@@ -926,7 +931,10 @@ still outside the visible map. This proactive policy is deliberately local-only:
 GeoAdmin keeps the `moveend` debounce and ordinary containment rule because a
 single refresh can recursively fan out into many remote `identify` calls. The
 vector layer is explicitly invalidated after decluttering only when at least one
-stop actually changes rendered visibility.
+stop actually changes rendered visibility. Reconciliation follows the same rule:
+silent updates of reused features invalidate the layer and decluttering snapshot
+only when symbol metadata or fan-out layout really changes; identical buffered
+refreshes preserve the previous rendered state without rebuilding the replay group.
 
 A rendered stop hit may contribute hidden declutter neighbours to the common
 map-information chooser, but an invisible stop alone is never a click target. If

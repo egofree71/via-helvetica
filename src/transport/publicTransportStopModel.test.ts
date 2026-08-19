@@ -5,8 +5,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  classifyPublicTransportMeansOfTransport,
   getPrimaryPublicTransportMode,
+  isPublicTransportStopTypeOutOfService,
   normalizePublicTransportStop,
+  normalizePublicTransportStopWithPrecomputedMetadata,
   parsePublicTransportStop,
   PUBLIC_TRANSPORT_STOPS_LAYER_ID,
 } from './publicTransportStopModel';
@@ -44,6 +47,24 @@ describe('publicTransportStopModel', () => {
       modes: ['train', 'tram', 'bus'],
       coordinate: [2_538_200, 1_152_300],
     });
+  });
+
+  it('keeps precomputed dictionary classification equivalent to normal normalization', () => {
+    const input = {
+      id: '8501008',
+      name: 'Lausanne, gare',
+      meansOfTransport: 'Train, Tram, Bus',
+      stopType: 'Haltestelle',
+      coordinate: [2_538_200, 1_152_300] as [number, number],
+    };
+
+    expect(
+      normalizePublicTransportStopWithPrecomputedMetadata(
+        input,
+        classifyPublicTransportMeansOfTransport(input.meansOfTransport),
+        isPublicTransportStopTypeOutOfService(input.stopType),
+      ),
+    ).toEqual(normalizePublicTransportStop(input));
   });
 
   it('normalizes and prioritizes multimodal passenger stops', () => {

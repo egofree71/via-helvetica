@@ -34,6 +34,92 @@ function createStop(
   };
 }
 
+/** Fan-out distance in metres mirrored from the production presentation rule. */
+const TEST_STOP_OVERLAP_DISTANCE_METERS = 60;
+
+/** Base fan-out radius in CSS pixels mirrored for algorithm-equivalence testing. */
+const TEST_STOP_OVERLAP_DISPLAY_RADIUS_PIXELS = 17;
+
+/** Minimal fan-out shape read from the private OpenLayers presentation property. */
+interface TestStopOverlapLayout {
+  groupId: string;
+  center: [number, number];
+  radiusMapUnits: number;
+  targetOffsetPixels: [number, number];
+}
+
+/**
+ * Reference implementation of the previous anchored O(n²) fan-out grouping.
+ * Keeping it test-only lets the optimized grid implementation prove identical
+ * layouts without retaining the expensive production algorithm.
+ */
+function createNaiveOverlapLayouts(
+  stops: PublicTransportStop[],
+): Map<string, TestStopOverlapLayout> {
+  const layouts = new Map<string, TestStopOverlapLayout>();
+  const remaining = new Set(stops.map((stop) => stop.id));
+  const orderedStops = [...stops].sort((first, second) =>
+    first.id < second.id ? -1 : first.id > second.id ? 1 : 0,
+  );
+
+  for (const anchor of orderedStops) {
+    if (!remaining.has(anchor.id)) {
+      continue;
+    }
+
+    const closeStops = orderedStops.filter((candidate) => {
+      if (!remaining.has(candidate.id)) {
+        return false;
+      }
+
+      return (
+        Math.hypot(
+          anchor.coordinate[0] - candidate.coordinate[0],
+          anchor.coordinate[1] - candidate.coordinate[1],
+        ) <= TEST_STOP_OVERLAP_DISTANCE_METERS
+      );
+    });
+
+    for (const stop of closeStops) {
+      remaining.delete(stop.id);
+    }
+
+    if (closeStops.length < 2) {
+      continue;
+    }
+
+    const center: [number, number] = [
+      closeStops.reduce((sum, stop) => sum + stop.coordinate[0], 0) /
+        closeStops.length,
+      closeStops.reduce((sum, stop) => sum + stop.coordinate[1], 0) /
+        closeStops.length,
+    ];
+    const radiusMapUnits = Math.max(
+      ...closeStops.map((stop) =>
+        Math.hypot(
+          stop.coordinate[0] - center[0],
+          stop.coordinate[1] - center[1],
+        ),
+      ),
+    );
+
+    closeStops.forEach((stop, index) => {
+      const angle = (2 * Math.PI * index) / closeStops.length;
+      layouts.set(stop.id, {
+        groupId: anchor.id,
+        center,
+        radiusMapUnits,
+        targetOffsetPixels: [
+          Math.cos(angle) * TEST_STOP_OVERLAP_DISPLAY_RADIUS_PIXELS,
+          Math.sin(angle) * TEST_STOP_OVERLAP_DISPLAY_RADIUS_PIXELS,
+        ],
+      });
+    });
+  }
+
+  return layouts;
+}
+
 /** Minimal rotated-map surface needed by the screen-space decluttering code. */
 function createMapHarness(
   initialResolution: number,
@@ -131,6 +217,84 @@ describe('publicTransportStopsDisplay decluttering', () => {
 
     applyPublicTransportStopDeclutterVisibility(display, map);
     expect(renderedStopIds(display, 10)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('keeps grid-based fan-out identical to the previous anchored grouping', () => {
+    const display = createPublicTransportStopsDisplay();
+    const stops = Array.from({ length: 200 }, (_, index) => {
+      const cluster = Math.floor(index / 4);
+      const member = index % 4;
+      return createStop(String(8_500_000 + index), [
+        2_550_000 + (cluster % 10) * 500 + member * 20,
+        1_170_000 + Math.floor(cluster / 10) * 500,
+      ]);
+    });
+    const expectedLayouts = createNaiveOverlapLayouts(stops);
+
+    updatePublicTransportStopsDisplay(display, [...stops].reverse());
+
+    for (const stop of stops) {
+      const feature = display.source.getFeatureById(stop.id);
+      const actualLayout = feature?.get(
+        'publicTransportStopOverlapLayout',
+      ) as TestStopOverlapLayout | undefined;
+
+      expect(actualLayout ?? null).toEqual(expectedLayouts.get(stop.id) ?? null);
+    }
+  });
+
+  it('does not invalidate an unchanged reconciled viewport', () => {
+    const display = createPublicTransportStopsDisplay();
+    const { map } = createMapHarness(10);
+    const stops = [
+      createStop('a', [2_550_000, 1_170_000]),
+      createStop('b', [2_550_020, 1_170_000]),
+    ];
+
+    updatePublicTransportStopsDisplay(display, stops);
+    applyPublicTransportStopDeclutterVisibility(display, map);
+    const previousSnapshot = display.declutterSnapshot;
+    const changedSpy = vi.spyOn(display.layer, 'changed');
+    changedSpy.mockClear();
+
+    // Recreated provider objects with identical presentation must not rebuild
+    // the vector replay group or force another full decluttering pass.
+    updatePublicTransportStopsDisplay(
+      display,
+      stops.map((stop) => ({
+        ...stop,
+        modes: [...stop.modes],
+        coordinate: [stop.coordinate[0], stop.coordinate[1]],
+      })),
+    );
+
+    expect(changedSpy).not.toHaveBeenCalled();
+    expect(display.declutterSnapshot).toBe(previousSnapshot);
+  });
+
+  it('invalidates reused features when rendered stop metadata changes', () => {
+    const display = createPublicTransportStopsDisplay();
+    const { map } = createMapHarness(10);
+    const stop = createStop('a', [2_550_000, 1_170_000]);
+
+    updatePublicTransportStopsDisplay(display, [stop]);
+    applyPublicTransportStopDeclutterVisibility(display, map);
+    const changedSpy = vi.spyOn(display.layer, 'changed');
+    changedSpy.mockClear();
+
+    updatePublicTransportStopsDisplay(display, [
+      {
+        ...stop,
+        name: 'Renamed stop',
+        modes: ['tram'],
+      },
+    ]);
+
+    expect(changedSpy).toHaveBeenCalledTimes(1);
+    expect(display.declutterSnapshot).toBeNull();
+    expect(
+      getPublicTransportStopFromFeature(display.source.getFeatureById(stop.id)!),
+    ).toMatchObject({ name: 'Renamed stop', modes: ['tram'] });
   });
 
   it('does not invalidate the layer when a declutter pass keeps the same visibility', () => {

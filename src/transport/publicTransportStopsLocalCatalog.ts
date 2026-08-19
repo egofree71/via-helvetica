@@ -8,8 +8,11 @@
  */
 import type { Extent } from 'ol/extent.js';
 import {
-  normalizePublicTransportStop,
+  classifyPublicTransportMeansOfTransport,
+  isPublicTransportStopTypeOutOfService,
+  normalizePublicTransportStopWithPrecomputedMetadata,
   PUBLIC_TRANSPORT_STOPS_LAYER_ID,
+  type PublicTransportMode,
   type PublicTransportStop,
 } from './publicTransportStopModel';
 
@@ -68,8 +71,8 @@ function gridKey(eastCell: number, northCell: number): string {
 
 function parseLocalCatalogRecord(
   value: unknown,
-  meansOfTransport: string[],
-  stopTypes: string[],
+  modesByMeansOfTransportIndex: PublicTransportMode[][],
+  outOfServiceByStopTypeIndex: boolean[],
 ): PublicTransportStop | null {
   if (!Array.isArray(value) || value.length < 6) {
     return null;
@@ -82,11 +85,11 @@ function parseLocalCatalogRecord(
     typeof meansOfTransportIndex !== 'number' ||
     !Number.isInteger(meansOfTransportIndex) ||
     meansOfTransportIndex < 0 ||
-    meansOfTransportIndex >= meansOfTransport.length ||
+    meansOfTransportIndex >= modesByMeansOfTransportIndex.length ||
     typeof stopTypeIndex !== 'number' ||
     !Number.isInteger(stopTypeIndex) ||
     stopTypeIndex < 0 ||
-    stopTypeIndex >= stopTypes.length ||
+    stopTypeIndex >= outOfServiceByStopTypeIndex.length ||
     typeof east !== 'number' ||
     !Number.isFinite(east) ||
     typeof north !== 'number' ||
@@ -95,13 +98,15 @@ function parseLocalCatalogRecord(
     return null;
   }
 
-  return normalizePublicTransportStop({
-    id,
-    name,
-    meansOfTransport: meansOfTransport[meansOfTransportIndex],
-    stopType: stopTypes[stopTypeIndex],
-    coordinate: [east, north],
-  });
+  return normalizePublicTransportStopWithPrecomputedMetadata(
+    {
+      id,
+      name,
+      coordinate: [east, north],
+    },
+    modesByMeansOfTransportIndex[meansOfTransportIndex],
+    outOfServiceByStopTypeIndex[stopTypeIndex],
+  );
 }
 
 /** Validates one generated string dictionary before record indexes are trusted. */
@@ -124,13 +129,23 @@ function buildLocalCatalogIndex(payload: LocalCatalogPayload): LocalCatalogIndex
     throw new Error('Unsupported local public-transport stop catalog.');
   }
 
+  // Format v2 interns provider descriptions. Classify each dictionary entry
+  // once so building the national index does not repeat Unicode normalization
+  // and multilingual regex matching for every one of the ~29,000 raw records.
+  const modesByMeansOfTransportIndex = meansOfTransport.map(
+    classifyPublicTransportMeansOfTransport,
+  );
+  const outOfServiceByStopTypeIndex = stopTypes.map(
+    isPublicTransportStopTypeOutOfService,
+  );
+
   const cells = new Map<string, PublicTransportStop[]>();
   const seenStopIds = new Set<string>();
   for (const rawRecord of payload.records) {
     const stop = parseLocalCatalogRecord(
       rawRecord,
-      meansOfTransport,
-      stopTypes,
+      modesByMeansOfTransportIndex,
+      outOfServiceByStopTypeIndex,
     );
     if (!stop || seenStopIds.has(stop.id)) continue;
     seenStopIds.add(stop.id);

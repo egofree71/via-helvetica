@@ -1,9 +1,9 @@
 /**
- * Business context: converts loosely typed GeoAdmin public-transport records
- * into the small passenger-stop model used by the map and timetable popup.
- * The official layer also contains operating points and retired facilities, so
- * this module owns the multilingual filtering rules that keep only useful
- * passenger access points for hiking-route planning.
+ * Business context: converts official public-transport records from GeoAdmin or
+ * the static FOT catalog into the small passenger-stop model used by the map and
+ * timetable popup. The source also contains operating points and retired
+ * facilities, so this module owns the multilingual filtering rules that keep only
+ * useful passenger access points for hiking-route planning.
  */
 import type { Coordinate } from 'ol/coordinate.js';
 
@@ -248,8 +248,17 @@ function detectTransportModesFromNameQualifier(
   return qualifier ? detectTransportModes(qualifier) : [];
 }
 
-/** Tests localized type values that explicitly describe an unavailable stop. */
-function isOutOfServiceType(value: string | null): boolean {
+/**
+ * Tests one provider stop-type value for an explicit unavailable-state marker.
+ * Dictionary-backed catalogs can memoize this result once per distinct value
+ * instead of repeating Unicode normalization for every stop record.
+ *
+ * @param value - Localized provider stop-type description.
+ * @returns `true` only when the source explicitly marks the stop unavailable.
+ */
+export function isPublicTransportStopTypeOutOfService(
+  value: string | null | undefined,
+): boolean {
   if (!value) {
     return false;
   }
@@ -257,6 +266,21 @@ function isOutOfServiceType(value: string | null): boolean {
   return /hors service|ausser betrieb|außer betrieb|out of service|fuori servizio|disused/.test(
     normalizeText(value),
   );
+}
+
+/**
+ * Classifies one provider transport description into normalized passenger modes.
+ * Static catalogs intern these descriptions, so callers may compute the result
+ * once per dictionary entry and reuse it for all referenced records.
+ *
+ * @param value - Raw localized means-of-transport description.
+ * @returns Stable, deduplicated passenger transport modes derived from metadata.
+ */
+export function classifyPublicTransportMeansOfTransport(
+  value: string | null | undefined,
+): PublicTransportMode[] {
+  const usableValue = value && value.trim() !== '-' ? value : '';
+  return normalizeModes(detectTransportModes(usableValue));
 }
 
 /** Returns the stable display priority of one normalized transport mode. */
@@ -289,19 +313,26 @@ export function getPrimaryPublicTransportMode(
 }
 
 /**
- * Normalizes source-independent FOT stop fields into the passenger-stop model.
+ * Normalizes one stop after provider metadata classification has already run.
  *
- * @param input - Validated official identifier, name, metadata, and LV95 point.
+ * Dictionary-backed sources use this entry point to reuse transport and stop-type
+ * classification across thousands of records while keeping name fallback and all
+ * passenger filtering rules centralized in this module.
+ *
+ * @param input - Validated official identifier, name, and LV95 point.
+ * @param metadataModes - Modes already classified from provider metadata.
+ * @param outOfService - Whether provider metadata explicitly retires this stop.
  * @returns A passenger stop or `null` when the record is retired, technical,
  * unsupported, or otherwise irrelevant to hiking-route planning.
  */
-export function normalizePublicTransportStop(
+export function normalizePublicTransportStopWithPrecomputedMetadata(
   input: PublicTransportStopInput,
+  metadataModes: PublicTransportMode[],
+  outOfService: boolean,
 ): PublicTransportStop | null {
-  const { id, stationId = id, name, meansOfTransport, stopType, coordinate } =
-    input;
+  const { id, stationId = id, name, coordinate } = input;
 
-  if (!name || isOutOfServiceType(stopType ?? null)) {
+  if (!name || outOfService) {
     return null;
   }
 
@@ -312,20 +343,15 @@ export function normalizePublicTransportStop(
     return null;
   }
 
-  const usableMeansOfTransport =
-    meansOfTransport && meansOfTransport.trim() !== '-'
-      ? meansOfTransport
-      : '';
-  const metadataModes = detectTransportModes(usableMeansOfTransport);
-  const modes =
+  const fallbackModes =
     metadataModes.length > 0
       ? metadataModes
-      : detectTransportModesFromNameQualifier(name);
+      : normalizeModes(detectTransportModesFromNameQualifier(name));
 
   // The FOT source intentionally includes pure operating points. A record is
   // passenger-relevant only when metadata, or the explicit cableway qualifier
   // fallback above, resolves to one of the accepted transport categories.
-  if (modes.length === 0) {
+  if (fallbackModes.length === 0) {
     return null;
   }
 
@@ -333,9 +359,28 @@ export function normalizePublicTransportStop(
     id,
     stationId,
     name,
-    modes: normalizeModes(modes),
+    // Local catalog dictionary entries are shared across many records. Copy the
+    // tiny mode array so one stop cannot mutate another stop's presentation data.
+    modes: [...fallbackModes],
     coordinate,
   };
+}
+
+/**
+ * Normalizes source-independent FOT stop fields into the passenger-stop model.
+ *
+ * @param input - Validated official identifier, name, metadata, and LV95 point.
+ * @returns A passenger stop or `null` when the record is retired, technical,
+ * unsupported, or otherwise irrelevant to hiking-route planning.
+ */
+export function normalizePublicTransportStop(
+  input: PublicTransportStopInput,
+): PublicTransportStop | null {
+  return normalizePublicTransportStopWithPrecomputedMetadata(
+    input,
+    classifyPublicTransportMeansOfTransport(input.meansOfTransport),
+    isPublicTransportStopTypeOutOfService(input.stopType),
+  );
 }
 
 /**
