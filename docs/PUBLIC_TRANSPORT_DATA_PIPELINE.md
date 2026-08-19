@@ -193,12 +193,12 @@ Then configure:
 - `publication.publicRootUrl`: public custom-domain root for static data;
 - `publication.publicOrigin`: deployed Via Helvetica origin allowed by CORS.
 
-The public bucket/domain must permit browser `GET` requests. Because this is
-public open data served with a one-year immutable cache, configure R2 CORS with
-`Access-Control-Allow-Origin: *`. This avoids origin-dependent cached responses;
-the public verifier rejects origin-specific CORS unless `Vary: Origin` is present.
-A production custom domain is preferred over an `r2.dev` development endpoint so
-normal Cloudflare caching controls are available.
+The public bucket/domain must permit browser `GET` requests from the origins
+that use the catalog. The current Via Helvetica bucket allows
+`https://viahelvetica.ch` and `http://localhost:5173`. The public verifier accepts
+an exact matching origin (or `*`) and requires `Vary: Origin` when the response is
+origin-specific. A production custom domain is preferred over an `r2.dev`
+development endpoint so normal Cloudflare caching controls are available.
 
 ## 7. Publication metadata contract
 

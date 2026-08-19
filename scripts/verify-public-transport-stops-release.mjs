@@ -11,9 +11,16 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { brotliDecompressSync } from 'node:zlib';
 
+/** Minimum national record count; lower values indicate a truncated or wrong table. */
 const MIN_EXPECTED_RECORD_COUNT = 20_000;
+
+/** Official seven-digit DiDok service-number format preserved as a string. */
 const DIDOK_SERVICE_NUMBER_PATTERN = /^\d{7}$/;
+
+/** Broad LV95 envelope in metres used to reject wrong coordinate systems. */
 const PLAUSIBLE_LV95_EXTENT = [2_400_000, 1_000_000, 2_900_000, 1_400_000];
+
+/** Canonical source table name required by the immutable provenance contract. */
 const SOURCE_TABLE_NAME = 'PointExploitation.csv';
 
 function sha256(value) {
@@ -61,7 +68,12 @@ function assertManifestShape(manifest) {
   }
 }
 
-/** Returns independent artifact-level plausibility failures. */
+/**
+ * Re-checks decoded catalog invariants independently of the generator.
+ *
+ * @param {unknown} catalog - Parsed browser catalog produced by release preparation.
+ * @returns {string[]} Independent plausibility failures; an empty array means valid.
+ */
 export function validateCatalogPlausibility(catalog) {
   const errors = [];
   if (!Array.isArray(catalog?.meansOfTransport) || catalog.meansOfTransport.length === 0) {

@@ -893,11 +893,13 @@ retry a zero-padded nine-character representation required by some API examples.
 An optional static catalog can replace GeoAdmin viewport loading by setting
 `VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL`. The same browser contract accepts a
 root-relative development artifact or an immutable object-storage URL; leaving
-the setting empty preserves GeoAdmin as the fallback. The catalog is loaded
-lazily on first stop-layer use, validated against its source fingerprint and
-record count, normalized once, and indexed in a lightweight LV95 grid. Viewport
-calls query only intersecting cells, so the national catalog never becomes tens
-of thousands of OpenLayers features.
+the setting empty selects GeoAdmin instead. A configured catalog URL is
+authoritative for that build: a catalog loading failure does not switch to
+GeoAdmin automatically at runtime. The catalog is loaded lazily on first
+stop-layer use, validated against its source fingerprint and record count,
+normalized once, and indexed in a lightweight LV95 grid. Viewport calls query
+only intersecting cells, so the national catalog never becomes tens of thousands
+of OpenLayers features.
 
 The compact schema stores stop records as tuples and interns repeated provider
 transport descriptions and stop types into top-level dictionaries. The browser
@@ -918,8 +920,10 @@ one. Source acquisition, preparation safeguards, release layout, R2 upload, and
 public verification belong in `docs/PUBLIC_TRANSPORT_DATA_PIPELINE.md` rather
 than this application-wide architecture document.
 
-Official stop coordinates never change. Distinct stops within the close-stop
-threshold can be fanned out temporarily when their icons overlap. The anchored
+Stop coordinates are treated as static within one published catalog release.
+New official source data is published under a new immutable release path when
+stops are added, removed, or moved. Distinct stops within the close-stop threshold
+can be fanned out temporarily when their icons overlap. The anchored
 fan-out grouping uses a 60 m LV95 candidate grid, preserving deterministic
 identifier ordering while avoiding an all-pairs scan during proactive viewport
 refreshes. Newly loaded features start visually hidden until the first

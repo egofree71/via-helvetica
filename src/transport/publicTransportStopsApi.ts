@@ -1,8 +1,8 @@
 /**
  * Business context: loads official BAV public-transport stops around the current
- * map viewport. GeoAdmin identify remains the fallback, while an explicit static
- * catalog URL can use either a Vite-served local artifact or an immutable R2
- * release without changing map consumers.
+ * map viewport. A configured static catalog is authoritative for that build;
+ * GeoAdmin identify is used only when no static catalog URL is configured. Both
+ * providers expose the same normalized contract to map consumers.
  */
 import type { Extent } from 'ol/extent.js';
 import type { Language } from '../i18n/translations';
@@ -20,9 +20,9 @@ const IDENTIFY_ENDPOINT =
 
 /**
  * Returns the optional static catalog URL.
- * The generic setting supports local files and immutable object storage; the old
- * local-only name remains a temporary compatibility fallback for existing
- * `.env.local` files while the branch transitions toward R2 publication.
+ * The generic setting supports local files and immutable object storage. The
+ * legacy local-only setting remains accepted for existing `.env.local` files;
+ * new configuration should use `VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL`.
  */
 function getLocalPublicTransportStopsUrl(): string {
   const catalogUrl = (

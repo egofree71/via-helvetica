@@ -107,6 +107,12 @@ export function collectStacAssets(document, source) {
  * Metadata is preferred, while filename hints keep discovery compatible with
  * older GeoAdmin STAC records that predate standardized language/projection
  * fields. Ambiguity fails loudly instead of silently changing source format.
+ *
+ * @param {Array<{key: string, asset: Record<string, unknown>, source: string}>} candidates
+ *   STAC assets collected from the collection or its items.
+ * @returns {{key: string, asset: Record<string, unknown>, source: string, href: string}}
+ *   The unique French EPSG:2056 zipped CSV asset.
+ * @throws {Error} When no compatible asset exists or several distinct assets match.
  */
 export function selectOfficialCsvAsset(candidates) {
   const matches = candidates
@@ -184,6 +190,11 @@ async function fetchJson(url, fetchImplementation) {
  * Discovers the current source asset through STAC v1.
  * Collection-level assets are supported first; item pagination is followed when
  * the publisher exposes download assets on Items instead.
+ *
+ * @param {typeof fetch} fetchImplementation - Fetch implementation, injectable for tests.
+ * @returns {Promise<{key: string, asset: Record<string, unknown>, source: string, href: string}>}
+ *   The unique source asset selected for the pipeline.
+ * @throws {Error} When STAC cannot be read or no unique compatible asset is published.
  */
 export async function discoverOfficialCsvAsset(fetchImplementation = fetch) {
   const collection = await fetchJson(STAC_COLLECTION_URL, fetchImplementation);
@@ -231,6 +242,15 @@ function validateAssetUrl(href) {
   return url;
 }
 
+/**
+ * Downloads one validated official archive without replacing a good prior file
+ * until the new response has been written completely.
+ *
+ * @param {string} url - Validated official HTTPS asset URL.
+ * @param {string} destination - Final archive path outside the repository.
+ * @param {typeof fetch} fetchImplementation - Fetch implementation, injectable for tests.
+ * @throws {Error} When the download fails or returns an empty body.
+ */
 async function downloadAsset(url, destination, fetchImplementation = fetch) {
   const response = await fetchImplementation(url, { redirect: 'follow' });
   if (!response.ok) {
@@ -273,6 +293,14 @@ function runCommand(command, args) {
   });
 }
 
+/**
+ * Extracts the source archive into a temporary sibling directory and swaps it
+ * into place only after extraction succeeds, avoiding a publishable partial CSV.
+ *
+ * @param {string} archivePath - Downloaded official ZIP path.
+ * @param {string} destination - Canonical extraction directory to replace atomically.
+ * @throws {Error} When neither supported extraction path completes successfully.
+ */
 async function extractZip(archivePath, destination) {
   const stagingDirectory = `${destination}.tmp`;
   await rm(stagingDirectory, { recursive: true, force: true });

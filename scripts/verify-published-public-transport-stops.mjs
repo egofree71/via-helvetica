@@ -54,6 +54,16 @@ function parseArguments(argv) {
   return options;
 }
 
+/**
+ * Verifies that one public response can be read from the configured app origin.
+ * Origin-specific responses must advertise `Vary: Origin` so cached headers are
+ * not reused across incompatible request origins.
+ *
+ * @param {Response} response - Public HTTP response being validated.
+ * @param {string} origin - Expected browser origin.
+ * @param {string} label - Human-readable object label used in diagnostics.
+ * @throws {Error} When CORS metadata is missing or unsafe for the expected origin.
+ */
 export function assertCors(response, origin, label) {
   const allowed = response.headers.get('access-control-allow-origin');
   if (allowed === '*') return;
@@ -91,6 +101,8 @@ function assertImmutableJsonHeaders(response, origin, label, { brotli = false } 
 }
 
 async function fetchChecked(url, origin, label) {
+  // Millisecond backoff absorbs short R2/CDN propagation after manifest-last
+  // publication without hiding persistent 4xx errors behind long retries.
   const delays = [0, 1_000, 2_000, 4_000];
   let lastError = null;
   for (const delay of delays) {

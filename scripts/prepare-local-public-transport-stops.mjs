@@ -1,7 +1,8 @@
 /**
  * Business context: prepares the browser-readable public-transport stop catalog
- * from the manually downloaded and extracted FOT GeoAdmin CSV asset. The same
- * validated conversion supports local development and immutable R2 releases.
+ * from the official FOT CSV source discovered through GeoAdmin STAC, or from the
+ * equivalent manually downloaded fallback. The same validated conversion
+ * supports local development and immutable R2 releases.
  * Local mode writes readable JSON for Vite; release mode writes only the Brotli
  * transport representation plus provenance, avoiding a redundant decoded copy.
  */
@@ -364,8 +365,8 @@ export function parsePointGeometry(value) {
   }
 
   // Some CSV exporters flatten an INTERLIS coordinate as plain numeric tokens
-  // instead of WKT. Accepting that representation keeps the manual prototype
-  // independent from exporter formatting while still requiring LV95 numbers.
+  // instead of WKT. Accepting that representation tolerates exporter formatting
+  // differences while the downstream plausibility checks still require LV95.
   const numericTokens = trimmed.match(/[+-]?\d+(?:[.,]\d+)?/g);
   if (numericTokens && numericTokens.length >= 2) {
     const east = Number(numericTokens[0].replace(',', '.'));
@@ -731,6 +732,8 @@ async function main() {
   const serialized = `${JSON.stringify(payload)}
 `;
   const serializedBytes = Buffer.from(serialized, 'utf8');
+  // Release generation is offline and infrequent, so maximum Brotli quality
+  // trades preparation CPU time for a smaller immutable browser download.
   const compressedBytes = brotliCompressSync(serializedBytes, {
     params: {
       [zlibConstants.BROTLI_PARAM_QUALITY]: 11,

@@ -3,8 +3,9 @@
  * local development or immutable object-storage releases. The complete FOT
  * dataset is fetched only once, provenance-validated, normalized into passenger
  * stops, indexed in LV95 grid cells, and filtered by viewport extent so
- * OpenLayers still receives only geographically useful stops. GeoAdmin remains
- * the fallback whenever no static catalog URL is configured.
+ * OpenLayers still receives only geographically useful stops. GeoAdmin is used
+ * instead when no static catalog URL is configured; catalog load failures do not
+ * switch providers automatically at runtime.
  */
 import type { Extent } from 'ol/extent.js';
 import {
@@ -36,7 +37,7 @@ type LocalCatalogRecord = [
   north: number,
 ];
 
-/** Serialized local artifact loaded by the browser during the experiment. */
+/** Serialized static catalog contract loaded lazily by the browser. */
 interface LocalCatalogPayload {
   /** Schema version guarding incompatible static artifacts. */
   version: number;
@@ -60,7 +61,7 @@ interface LocalCatalogPayload {
   records: unknown[];
 }
 
-/** In-memory grid built once from one static local artifact. */
+/** In-memory grid built once from one validated static catalog. */
 interface LocalCatalogIndex {
   /** Passenger stops bucketed by 10 km LV95 cells. */
   cells: Map<string, PublicTransportStop[]>;
@@ -230,8 +231,8 @@ function throwIfAborted(signal: AbortSignal): void {
 /**
  * Loads passenger stops from one generated static catalog.
  *
- * The national file is intentionally not tied to a viewport AbortSignal: once a
- * developer opts into the experiment, finishing the single lazy download is more
+ * The national file is intentionally not tied to a viewport AbortSignal: once
+ * the stop layer needs the catalog, finishing the single lazy download is more
  * useful than repeatedly restarting it during pans. Superseded viewport calls
  * are still discarded before and after the shared load.
  *
