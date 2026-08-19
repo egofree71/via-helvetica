@@ -1,10 +1,10 @@
 /**
  * Business context: provides an opt-in static public-transport stop catalog for
- * local development experiments. The complete FOT dataset is fetched only once,
- * normalized into passenger stops, indexed in LV95 grid cells, and filtered by
- * viewport extent so OpenLayers still receives only geographically useful stops.
- * Production keeps the GeoAdmin identify provider unless an explicit local URL
- * is configured.
+ * local development or immutable object-storage releases. The complete FOT
+ * dataset is fetched only once, provenance-validated, normalized into passenger
+ * stops, indexed in LV95 grid cells, and filtered by viewport extent so
+ * OpenLayers still receives only geographically useful stops. GeoAdmin remains
+ * the fallback whenever no static catalog URL is configured.
  */
 import type { Extent } from 'ol/extent.js';
 import {
@@ -17,7 +17,7 @@ import {
 } from './publicTransportStopModel';
 
 /** Current generated-catalog schema version. */
-const LOCAL_CATALOG_VERSION = 2;
+const LOCAL_CATALOG_VERSION = 3;
 
 /**
  * Spatial grid size in metres.
@@ -38,12 +38,22 @@ type LocalCatalogRecord = [
 
 /** Serialized local artifact loaded by the browser during the experiment. */
 interface LocalCatalogPayload {
-  /** Schema version guarding incompatible local artifacts. */
+  /** Schema version guarding incompatible static artifacts. */
   version: number;
   /** Source dataset identifier kept for provenance validation. */
   source: string;
-  /** ISO generation timestamp for diagnostics only. */
-  generatedAt?: string;
+  /** Content-derived source release id used by immutable publication paths. */
+  sourceRelease: string;
+  /** Basename of the selected official CSV table. */
+  sourceFile: string;
+  /** Full SHA-256 digest of the downloaded official CSV bytes. */
+  sourceSha256: string;
+  /** Byte length of the downloaded source CSV used for provenance diagnostics. */
+  sourceByteLength: number;
+  /** ISO generation timestamp for diagnostics. */
+  generatedAt: string;
+  /** Declared compact-record count, validated before indexes are trusted. */
+  recordCount: number;
   /** Deduplicated raw transport descriptions referenced by record index. */
   meansOfTransport: unknown[];
   /** Deduplicated raw stop-type descriptions referenced by record index. */
@@ -116,20 +126,38 @@ function parseStringDictionary(value: unknown): string[] | null {
     : null;
 }
 
+function hasValidCatalogProvenance(payload: LocalCatalogPayload): boolean {
+  return (
+    /^sha256-[0-9a-f]{16}$/.test(payload.sourceRelease) &&
+    typeof payload.sourceFile === 'string' &&
+    payload.sourceFile.trim().length > 0 &&
+    /^[0-9a-f]{64}$/.test(payload.sourceSha256) &&
+    payload.sourceRelease === `sha256-${payload.sourceSha256.slice(0, 16)}` &&
+    Number.isInteger(payload.sourceByteLength) &&
+    payload.sourceByteLength > 0 &&
+    typeof payload.generatedAt === 'string' &&
+    Number.isFinite(Date.parse(payload.generatedAt)) &&
+    Number.isInteger(payload.recordCount) &&
+    payload.recordCount >= 0 &&
+    Array.isArray(payload.records) &&
+    payload.recordCount === payload.records.length
+  );
+}
+
 function buildLocalCatalogIndex(payload: LocalCatalogPayload): LocalCatalogIndex {
   const meansOfTransport = parseStringDictionary(payload.meansOfTransport);
   const stopTypes = parseStringDictionary(payload.stopTypes);
   if (
     payload.version !== LOCAL_CATALOG_VERSION ||
     payload.source !== PUBLIC_TRANSPORT_STOPS_LAYER_ID ||
+    !hasValidCatalogProvenance(payload) ||
     !meansOfTransport ||
-    !stopTypes ||
-    !Array.isArray(payload.records)
+    !stopTypes
   ) {
     throw new Error('Unsupported local public-transport stop catalog.');
   }
 
-  // Format v2 interns provider descriptions. Classify each dictionary entry
+  // Generated formats intern provider descriptions. Classify each dictionary entry
   // once so building the national index does not repeat Unicode normalization
   // and multilingual regex matching for every one of the ~29,000 raw records.
   const modesByMeansOfTransportIndex = meansOfTransport.map(
@@ -182,7 +210,7 @@ async function loadLocalCatalogIndex(url: string): Promise<LocalCatalogIndex> {
     );
   });
   const retryablePromise = loadPromise.catch((error) => {
-    // A failed first local experiment must be retryable after the generated
+    // A failed first static-catalog load must be retryable after the generated
     // file is corrected or replaced without requiring a page reload. Do not
     // clear a newer cache if a different URL was configured in the meantime.
     if (cachedCatalogUrl === url) {
@@ -204,14 +232,14 @@ function throwIfAborted(signal: AbortSignal): void {
 }
 
 /**
- * Loads passenger stops from one generated local static catalog.
+ * Loads passenger stops from one generated static catalog.
  *
  * The national file is intentionally not tied to a viewport AbortSignal: once a
  * developer opts into the experiment, finishing the single lazy download is more
  * useful than repeatedly restarting it during pans. Superseded viewport calls
  * are still discarded before and after the shared load.
  *
- * @param url - Vite-served URL of the generated local catalog.
+ * @param url - URL of the generated local or immutable published catalog.
  * @param extent - Buffered LV95 viewport extent to query.
  * @param signal - Abort signal used to discard superseded viewport results.
  * @returns Passenger stops contained by the requested extent.

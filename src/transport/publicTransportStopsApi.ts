@@ -1,8 +1,8 @@
 /**
  * Business context: loads official BAV public-transport stops around the current
- * map viewport. Production uses bounded GeoAdmin identify requests, while an
- * explicit development setting can swap in a manually prepared local catalog so
- * the static-data architecture can be evaluated without changing map consumers.
+ * map viewport. GeoAdmin identify remains the fallback, while an explicit static
+ * catalog URL can use either a Vite-served local artifact or an immutable R2
+ * release without changing map consumers.
  */
 import type { Extent } from 'ol/extent.js';
 import type { Language } from '../i18n/translations';
@@ -19,16 +19,21 @@ const IDENTIFY_ENDPOINT =
   'https://api3.geo.admin.ch/rest/services/ech/MapServer/identify';
 
 /**
- * Returns the optional Vite-served static catalog configured for local experiments.
- * Reading the value at call time lets tests explicitly choose their provider instead
- * of inheriting a developer's `.env.local` setting at module-import time.
+ * Returns the optional static catalog URL.
+ * The generic setting supports local files and immutable object storage; the old
+ * local-only name remains a temporary compatibility fallback for existing
+ * `.env.local` files while the branch transitions toward R2 publication.
  */
 function getLocalPublicTransportStopsUrl(): string {
+  const catalogUrl = (
+    import.meta.env.VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL ?? ''
+  ).trim();
+  if (catalogUrl) return catalogUrl;
   return (import.meta.env.VITE_PUBLIC_TRANSPORT_STOPS_LOCAL_URL ?? '').trim();
 }
 
 /**
- * Reports whether viewport stop loading currently uses the static local catalog.
+ * Reports whether viewport stop loading currently uses the static catalog.
  * The map runtime uses this capability flag to refresh cheap in-memory coverage
  * proactively during pans without applying the same request rate to GeoAdmin.
  */

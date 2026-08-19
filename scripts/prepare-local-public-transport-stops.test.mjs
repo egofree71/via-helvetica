@@ -6,6 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  createPublicTransportReleasePath,
+  createSourceReleaseId,
   parsePointGeometry,
   resolveColumns,
   validateCandidatePlausibility,
@@ -34,6 +36,16 @@ function createPlausibleRecords(count = 20_001) {
 }
 
 describe('public-transport stop catalog preparation', () => {
+  it('derives immutable release identity from the complete source fingerprint', () => {
+    const hash = '0123456789abcdef'.repeat(4);
+    const sourceRelease = createSourceReleaseId(hash);
+
+    expect(sourceRelease).toBe('sha256-0123456789abcdef');
+    expect(createPublicTransportReleasePath(sourceRelease)).toBe(
+      'public-transport-stops-sha256-0123456789abcdef/format-v3/ch',
+    );
+  });
+
   it('resolves the current PointExploitation columns exactly', () => {
     const columns = resolveColumns(REAL_POINT_EXPLOITATION_HEADERS);
 

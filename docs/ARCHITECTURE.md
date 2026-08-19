@@ -295,6 +295,7 @@ flowchart TB
 | Metrics | `src/metrics/routeMetrics.ts`, `src/metrics/useItineraryMetrics.ts`, `src/map/useRouteProfileSynchronization.ts` | Distance, elevation request identity, ascent/descent, hiking time, profile samples, and exclusive map/profile synchronisation for the active itinerary or selected public route |
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
 | Offline routing data | `routing-data.config.example.json`, `scripts/generate-routing-geometry-cells.py`, `scripts/generate-precomputed-binary-routing-graph.mjs`, `scripts/verify-routing-dataset.mjs`, `scripts/upload-routing-dataset-r2.ps1` | External source/work/release paths, national import, binary compilation, verification, and immutable R2 publication |
+| Public-transport stop data | `public-transport-data.config.example.json`, `scripts/prepare-local-public-transport-stops.mjs`, `scripts/upload-public-transport-stops-r2.ps1`, `scripts/verify-published-public-transport-stops.mjs` | Validated FOT import, compact static catalog preparation, source-fingerprint provenance, Brotli publication, and public R2 verification |
 | swisstopo hand-off | `src/share/`, `src/components/RouteExportDialog.tsx`, `workers/swisstopo-gpx-share/` | Builds the documented `/u/` URL, renders a desktop QR or an explicit mobile app link, uploads GPX only on explicit request, and expires temporary R2 objects |
 | Search | `src/search/locationSearch.ts`, `src/search/coordinateSearch.ts`, `src/components/LocationSearch.tsx` | Local WGS 84/LV95 parsing, provider contract, session cache, result UI, keyboard navigation, and request cancellation |
 | Localization | `src/i18n/`, `scripts/generate-localized-pages.mjs` | Typed dictionaries, language persistence, locale paths, runtime document metadata, and generated localized HTML entries |
@@ -889,34 +890,33 @@ feature id for `ch.bav.haltestellen-oev` expose that same value. Via Helvetica
 keeps it unchanged as both `id` and `stationId`; only the timetable adapter may
 retry a zero-padded nine-character representation required by some API examples.
 
-An opt-in development experiment can replace GeoAdmin viewport loading with a
-locally generated static catalog by setting
-`VITE_PUBLIC_TRANSPORT_STOPS_LOCAL_URL`. The catalog is prepared offline from
-the manually downloaded FOT `ch.bav.haltestellen-oev` CSV asset and loaded
-lazily on first stop-layer use. Its versioned JSON schema stores stop records as
-tuples and interns repeated provider transport descriptions and stop types into
-top-level dictionaries. The browser expands those dictionary indexes before
-calling the existing passenger-stop normalizer; keeping classification in one
-runtime module avoids duplicating multilingual transport and retirement rules in
-the offline generator merely to save bytes. When the browser builds the
-national index, transport-mode and retirement classification is computed once
-per interned dictionary value rather than repeated for every raw record.
-The offline importer deliberately treats future source-schema changes as a
-publication failure rather than guessing. Required columns must match known
-headers exactly, and the selected national table must satisfy coarse invariants
-for record count, seven-digit DiDok identifiers, LV95 coordinates, and transport
-metadata. The script logs the concrete resolved source columns so a regeneration
-can be audited before the artifact is published.
-Normalized stops are indexed in a lightweight LV95 grid. Viewport calls query
-only intersecting grid cells, so the national catalog never becomes tens of
-thousands of OpenLayers features. The generator reports raw, gzip, and Brotli
-sizes so distribution choices can be measured before R2 publication. The shared
-download deliberately survives superseded viewport calls; those calls are still
-discarded before and after the load, while completing one static local file
-avoids restarting the same transfer during pans. Leaving the environment
-variable unset preserves the production GeoAdmin identify provider.
-This experiment exists to validate data quality, memory use, and interaction
-latency before any R2 publication architecture is adopted.
+An optional static catalog can replace GeoAdmin viewport loading by setting
+`VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL`. The same browser contract accepts a
+root-relative development artifact or an immutable object-storage URL; leaving
+the setting empty preserves GeoAdmin as the fallback. The catalog is loaded
+lazily on first stop-layer use, validated against its source fingerprint and
+record count, normalized once, and indexed in a lightweight LV95 grid. Viewport
+calls query only intersecting cells, so the national catalog never becomes tens
+of thousands of OpenLayers features.
+
+The compact schema stores stop records as tuples and interns repeated provider
+transport descriptions and stop types into top-level dictionaries. The browser
+expands those dictionary indexes before calling the shared passenger-stop
+normalizer; transport classification and retirement rules therefore remain in
+one runtime module. The national index classifies each dictionary entry once
+rather than repeating Unicode and regex work for every raw record. The shared
+catalog download deliberately survives superseded viewport calls, while those
+calls are still discarded before and after the load.
+
+Published stop catalogs use content-derived immutable release identities. The
+offline preparation step records the source CSV basename, complete SHA-256,
+source byte length, generation timestamp, and final record count, and release
+paths include a short source fingerprint plus the schema version. A pre-compressed
+Brotli object is served as JSON with HTTP `Content-Encoding: br`; corrected or
+new source data must use a new release path rather than overwrite an existing
+one. Source acquisition, preparation safeguards, release layout, R2 upload, and
+public verification belong in `docs/PUBLIC_TRANSPORT_DATA_PIPELINE.md` rather
+than this application-wide architecture document.
 
 Official stop coordinates never change. Distinct stops within the close-stop
 threshold can be fanned out temporarily when their icons overlap. The anchored

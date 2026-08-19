@@ -9,6 +9,7 @@ dist/
 .env.*
 !.env.example
 /routing-data.config.local.json
+/public-transport-data.config.local.json
 
 # Logs
 *.log

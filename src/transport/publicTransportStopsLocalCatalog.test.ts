@@ -10,9 +10,15 @@ import {
 } from './publicTransportStopsLocalCatalog';
 
 const catalog = {
-  version: 2,
+  version: 3,
   source: 'ch.bav.haltestellen-oev',
+  sourceRelease: 'sha256-0123456789abcdef',
+  sourceFile: 'PointExploitation.csv',
+  sourceSha256:
+    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+  sourceByteLength: 25_000_000,
   generatedAt: '2026-08-19T00:00:00.000Z',
+  recordCount: 4,
   meansOfTransport: ['', 'Train, Tram, Bus', 'Métro', '-', 'Bus'],
   stopTypes: ['', 'Haltestelle', 'Bedienpunkt'],
   records: [
@@ -84,6 +90,7 @@ describe('publicTransportStopsLocalCatalog', () => {
   it('keeps extent boundaries inclusive across grid-cell edges', async () => {
     const boundaryCatalog = {
       ...catalog,
+      recordCount: 2,
       records: [
         ['8500001', 'Boundary west', 4, 1, 2_540_000, 1_150_000],
         ['8500002', 'Boundary east', 4, 1, 2_550_000, 1_150_000],
@@ -139,9 +146,40 @@ describe('publicTransportStopsLocalCatalog', () => {
     ).rejects.toThrow('Unsupported local public-transport stop catalog.');
   });
 
+  it('rejects catalog provenance whose release id does not match the source hash', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ ...catalog, sourceRelease: 'sha256-fedcba9876543210' }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(
+      loadPublicTransportStopsFromLocalCatalog(
+        '/local-data/public-transport-stops.json',
+        [2_537_000, 1_149_000, 2_540_000, 1_154_000],
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('Unsupported local public-transport stop catalog.');
+  });
+
+  it('rejects catalog provenance whose declared record count is inconsistent', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ...catalog, recordCount: 3 }), { status: 200 }),
+    );
+
+    await expect(
+      loadPublicTransportStopsFromLocalCatalog(
+        '/local-data/public-transport-stops.json',
+        [2_537_000, 1_149_000, 2_540_000, 1_154_000],
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('Unsupported local public-transport stop catalog.');
+  });
+
   it('rejects incompatible generated artifacts', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ ...catalog, version: 3 }), { status: 200 }),
+      new Response(JSON.stringify({ ...catalog, version: 2 }), { status: 200 }),
     );
 
     await expect(

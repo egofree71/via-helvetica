@@ -14,6 +14,7 @@ describe('public-transport stop identify requests', () => {
   it('queries the buffered envelope while preserving the real viewport scale', async () => {
     // A developer may have the local static provider enabled in `.env.local`.
     // This provider-contract test must explicitly exercise GeoAdmin regardless.
+    vi.stubEnv('VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL', '');
     vi.stubEnv('VITE_PUBLIC_TRANSPORT_STOPS_LOCAL_URL', '');
 
     const fetchMock = vi.fn().mockResolvedValue(

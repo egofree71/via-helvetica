@@ -1,0 +1,9 @@
+{
+  "releaseRoot": "C:/Path/To/PublicTransportData/releases/public-transport-stops-sha256-0123456789abcdef/format-v3/ch",
+  "publication": {
+    "remote": "r2",
+    "bucket": "your-static-data-bucket",
+    "publicRootUrl": "https://data.example.org",
+    "publicOrigin": "https://viahelvetica.example.org"
+  }
+}

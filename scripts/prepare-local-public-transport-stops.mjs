@@ -1,14 +1,16 @@
 /**
- * Business context: prepares a small browser-readable public-transport stop
- * catalog from the manually downloaded and extracted FOT GeoAdmin CSV asset.
- * The generated file is intentionally local-only so the static-data approach
- * can be validated before any Cloudflare R2 publication workflow is designed.
+ * Business context: prepares the browser-readable public-transport stop catalog
+ * from the manually downloaded and extracted FOT GeoAdmin CSV asset. The same
+ * validated conversion supports local development and immutable R2 releases;
+ * release mode additionally writes Brotli transport bytes plus a provenance
+ * manifest without moving provider-specific classification into the generator.
  */
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { brotliCompressSync, gzipSync } from 'node:zlib';
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
 
 const SCRIPT_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(SCRIPT_DIRECTORY, '..');
@@ -23,7 +25,16 @@ const DEFAULT_OUTPUT = path.join(
 const SOURCE_DATASET_ID = 'ch.bav.haltestellen-oev';
 
 /** Current compact artifact schema understood by the browser-side loader. */
-const OUTPUT_FORMAT_VERSION = 2;
+const OUTPUT_FORMAT_VERSION = 3;
+
+/** Publication scope used in immutable release paths. */
+const OUTPUT_SCOPE = 'ch';
+
+/** Short source fingerprint length used in human-readable immutable paths. */
+const SOURCE_RELEASE_HASH_LENGTH = 16;
+
+/** Publication manifest schema kept separate from the browser catalog schema. */
+const RELEASE_MANIFEST_VERSION = 1;
 
 /**
  * Minimum plausible operating-point count for the national FOT publication.
@@ -70,6 +81,28 @@ function formatBytes(bytes) {
   return `${bytes.toLocaleString('en-US')} bytes`;
 }
 
+
+/** Returns a lowercase SHA-256 digest used for source and artifact identity. */
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+/** Derives a stable path-safe release id directly from the downloaded source bytes. */
+export function createSourceReleaseId(sourceSha256) {
+  if (!/^[0-9a-f]{64}$/.test(sourceSha256)) {
+    throw new Error('Source SHA-256 must contain 64 lowercase hexadecimal characters.');
+  }
+  return `sha256-${sourceSha256.slice(0, SOURCE_RELEASE_HASH_LENGTH)}`;
+}
+
+/** Returns the immutable publication path for one source fingerprint and schema. */
+export function createPublicTransportReleasePath(sourceRelease) {
+  if (!/^sha256-[0-9a-f]{16}$/.test(sourceRelease)) {
+    throw new Error('Invalid public-transport source release id.');
+  }
+  return `public-transport-stops-${sourceRelease}/format-v${OUTPUT_FORMAT_VERSION}/${OUTPUT_SCOPE}`;
+}
+
 function normalizeText(value) {
   return value
     .normalize('NFD')
@@ -87,6 +120,7 @@ function parseArguments(argv) {
   const args = argv.slice(2);
   let input = null;
   let output = DEFAULT_OUTPUT;
+  let releaseRoot = null;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -97,6 +131,13 @@ function parseArguments(argv) {
       }
       output = path.resolve(outputArgument);
       index += 1;
+    } else if (argument === '--release-root') {
+      const releaseRootArgument = args[index + 1];
+      if (!releaseRootArgument) {
+        throw new Error('Missing value after --release-root.');
+      }
+      releaseRoot = path.resolve(releaseRootArgument);
+      index += 1;
     } else if (!argument.startsWith('--') && input === null) {
       input = argument;
     } else {
@@ -106,11 +147,14 @@ function parseArguments(argv) {
 
   if (!input) {
     throw new Error(
-      'Usage: npm run prepare:public-transport-stops-local -- <extracted CSV file or directory> [--output <file>]',
+      'Usage: npm run prepare:public-transport-stops-local -- <extracted CSV file or directory> [--output <file> | --release-root <directory>]',
     );
   }
+  if (releaseRoot && output !== DEFAULT_OUTPUT) {
+    throw new Error('--output and --release-root cannot be used together.');
+  }
 
-  return { input: path.resolve(input), output };
+  return { input: path.resolve(input), output, releaseRoot };
 }
 
 async function collectCsvFiles(inputPath) {
@@ -505,7 +549,7 @@ export function validateCandidatePlausibility(candidate) {
 }
 
 async function main() {
-  const { input, output } = parseArguments(process.argv);
+  const { input, output: configuredOutput, releaseRoot } = parseArguments(process.argv);
   const csvFiles = await collectCsvFiles(input);
   if (csvFiles.length === 0) {
     throw new Error(`No CSV files found under ${input}.`);
@@ -513,8 +557,12 @@ async function main() {
 
   const inspectedCandidates = [];
   for (const csvFile of csvFiles) {
-    const text = await readFile(csvFile, 'utf8');
-    inspectedCandidates.push(parseCandidateCsv(csvFile, text));
+    const sourceBytes = await readFile(csvFile);
+    inspectedCandidates.push({
+      ...parseCandidateCsv(csvFile, sourceBytes.toString('utf8')),
+      sourceSha256: sha256(sourceBytes),
+      sourceByteLength: sourceBytes.byteLength,
+    });
   }
   const candidates = inspectedCandidates.filter(
     (candidate) => candidate.records.length > 0,
@@ -576,22 +624,71 @@ async function main() {
       north,
     ],
   );
+  const generatedAt = new Date().toISOString();
+  const sourceRelease = createSourceReleaseId(selected.sourceSha256);
+  const releasePath = createPublicTransportReleasePath(sourceRelease);
+  const output = releaseRoot
+    ? path.join(releaseRoot, ...releasePath.split('/'), 'stops.json')
+    : configuredOutput;
   const payload = {
     version: OUTPUT_FORMAT_VERSION,
     source: SOURCE_DATASET_ID,
-    generatedAt: new Date().toISOString(),
+    sourceRelease,
+    sourceFile: path.basename(selected.filePath),
+    sourceSha256: selected.sourceSha256,
+    sourceByteLength: selected.sourceByteLength,
+    generatedAt,
+    recordCount: records.length,
     meansOfTransport,
     stopTypes,
     records,
   };
-  const serialized = JSON.stringify(payload);
+  const serialized = `${JSON.stringify(payload)}
+`;
+  const serializedBytes = Buffer.from(serialized, 'utf8');
+  const compressedBytes = brotliCompressSync(serializedBytes, {
+    params: {
+      [zlibConstants.BROTLI_PARAM_QUALITY]: 11,
+      [zlibConstants.BROTLI_PARAM_MODE]: zlibConstants.BROTLI_MODE_TEXT,
+    },
+  });
 
   await mkdir(path.dirname(output), { recursive: true });
-  await writeFile(output, `${serialized}\n`, 'utf8');
+  await writeFile(output, serializedBytes);
+  await writeFile(`${output}.br`, compressedBytes);
 
-  const bytes = Buffer.byteLength(serialized);
-  const gzipBytes = gzipSync(serialized).byteLength;
-  const brotliBytes = brotliCompressSync(serialized).byteLength;
+  const catalogSha256 = sha256(serializedBytes);
+  const releaseManifest = releaseRoot
+    ? {
+        version: RELEASE_MANIFEST_VERSION,
+        datasetId: `public-transport-stops-${sourceRelease}`,
+        formatId: `format-v${OUTPUT_FORMAT_VERSION}`,
+        scope: OUTPUT_SCOPE,
+        object: 'stops.json',
+        source: SOURCE_DATASET_ID,
+        sourceRelease,
+        sourceFile: path.basename(selected.filePath),
+        sourceSha256: selected.sourceSha256,
+        sourceByteLength: selected.sourceByteLength,
+        generatedAt,
+        recordCount: records.length,
+        catalogSha256,
+        catalogByteLength: serializedBytes.byteLength,
+        brotliByteLength: compressedBytes.byteLength,
+      }
+    : null;
+  if (releaseManifest) {
+    await writeFile(
+      path.join(path.dirname(output), 'release.json'),
+      `${JSON.stringify(releaseManifest, null, 2)}
+`,
+      'utf8',
+    );
+  }
+
+  const bytes = serializedBytes.byteLength;
+  const gzipBytes = gzipSync(serializedBytes).byteLength;
+  const brotliBytes = compressedBytes.byteLength;
   console.log(`Selected ${path.relative(PROJECT_ROOT, selected.filePath)}`);
   const resolvedColumns = describeResolvedColumns(selected.headers, selected.columns);
   console.log(
@@ -604,10 +701,17 @@ async function main() {
   console.log(
     `Interned ${meansOfTransport.length.toLocaleString('en-US')} transport descriptions and ${stopTypes.length.toLocaleString('en-US')} stop types.`,
   );
+  console.log(`Source release ${sourceRelease} (${selected.sourceSha256}).`);
   console.log(`Wrote ${path.relative(PROJECT_ROOT, output)} (${formatBytes(bytes)}).`);
   console.log(
-    `Estimated transfer sizes: gzip ${formatBytes(gzipBytes)}, Brotli ${formatBytes(brotliBytes)}.`,
+    `Wrote ${path.relative(PROJECT_ROOT, `${output}.br`)} (${formatBytes(brotliBytes)}, Brotli quality 11).`,
   );
+  console.log(`Estimated gzip transfer size: ${formatBytes(gzipBytes)}.`);
+  if (releaseManifest) {
+    console.log(
+      `Prepared immutable release ${releasePath} with release.json and catalog SHA-256 ${catalogSha256}.`,
+    );
+  }
 }
 
 const invokedScript = process.argv[1] ? path.resolve(process.argv[1]) : null;
