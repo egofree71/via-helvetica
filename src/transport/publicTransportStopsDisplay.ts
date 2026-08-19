@@ -722,6 +722,13 @@ export function createPublicTransportStopsDisplay(): PublicTransportStopsDisplay
     source,
     minZoom: PUBLIC_TRANSPORT_STOPS_MIN_ZOOM,
     zIndex: 15,
+    // Static/local catalogs make the next stop features available before the
+    // basemap finishes moving. Rebuild the vector batch during drag and kinetic
+    // animations so OpenLayers does not reveal symbols progressively from the
+    // edge of the replay extent. The layer only contains the buffered viewport,
+    // not the national catalog, which keeps this extra work geographically bounded.
+    updateWhileInteracting: true,
+    updateWhileAnimating: true,
     style: (feature, resolution) => {
       const stop = getPublicTransportStopFromFeature(feature);
 

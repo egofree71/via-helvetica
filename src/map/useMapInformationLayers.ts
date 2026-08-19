@@ -36,8 +36,10 @@ import {
   createPublicTransportStopsViewportCoverage,
   getPublicTransportStopChoicesForVisibleStop,
   getPublicTransportStopFromFeature,
+  isLocalPublicTransportStopsCatalogEnabled,
   loadPublicTransportStops,
   publicTransportStopsCoverageContainsViewport,
+  publicTransportStopsCoverageKeepsPrefetchMargin,
   PUBLIC_TRANSPORT_STOPS_MIN_ZOOM,
   type PublicTransportStop,
   type PublicTransportStopsViewportCoverage,
@@ -72,8 +74,9 @@ const PUBLIC_TRANSPORT_STOPS_VISIBILITY_STORAGE_KEY =
 /** Hit tolerance in screen pixels for selecting compact stop symbols. */
 const PUBLIC_TRANSPORT_STOP_HIT_TOLERANCE_PX = 8;
 /**
- * Brief delay for successive completed map movements. Buffer coverage handles
- * ordinary pans immediately; the debounce only coalesces rapid uncached moves.
+ * Brief delay for successive completed map movements when GeoAdmin owns stop
+ * loading. The static local catalog bypasses it because viewport filtering is
+ * already in-memory and can be refreshed proactively during the pan.
  */
 const PUBLIC_TRANSPORT_STOPS_MOVEEND_DEBOUNCE_MS = 180;
 
@@ -626,8 +629,11 @@ export function useMapInformationLayers(
       return;
     }
 
+    const usesLocalStaticStopCatalog =
+      isLocalPublicTransportStopsCatalogEnabled();
     let abortController: AbortController | null = null;
     let debounceTimer: number | null = null;
+    let localViewportRefreshFrame: number | null = null;
     let pendingCoverage: PublicTransportStopsViewportCoverage | null = null;
     let loadedCoverage: PublicTransportStopsViewportCoverage | null = null;
 
@@ -635,6 +641,13 @@ export function useMapInformationLayers(
       if (debounceTimer !== null) {
         window.clearTimeout(debounceTimer);
         debounceTimer = null;
+      }
+    };
+
+    const clearLocalViewportRefresh = () => {
+      if (localViewportRefreshFrame !== null) {
+        window.cancelAnimationFrame(localViewportRefreshFrame);
+        localViewportRefreshFrame = null;
       }
     };
 
@@ -675,7 +688,7 @@ export function useMapInformationLayers(
       display.source.clear();
     };
 
-    const loadVisibleStops = () => {
+    const loadVisibleStops = (keepLocalPrefetchMargin = false) => {
       clearDebounce();
       const viewport = readViewport();
 
@@ -684,20 +697,24 @@ export function useMapInformationLayers(
         return;
       }
 
-      const loadedCoverageMatches =
-        publicTransportStopsCoverageContainsViewport(
-          loadedCoverage,
-          viewport.viewportExtent,
-          viewport.zoom,
-          viewport.imageSize,
-        );
-      const pendingCoverageMatches =
-        publicTransportStopsCoverageContainsViewport(
-          pendingCoverage,
-          viewport.viewportExtent,
-          viewport.zoom,
-          viewport.imageSize,
-        );
+      const coverageMatchesViewport = (
+        coverage: PublicTransportStopsViewportCoverage | null,
+      ) =>
+        keepLocalPrefetchMargin && usesLocalStaticStopCatalog
+          ? publicTransportStopsCoverageKeepsPrefetchMargin(
+              coverage,
+              viewport.viewportExtent,
+              viewport.zoom,
+              viewport.imageSize,
+            )
+          : publicTransportStopsCoverageContainsViewport(
+              coverage,
+              viewport.viewportExtent,
+              viewport.zoom,
+              viewport.imageSize,
+            );
+      const loadedCoverageMatches = coverageMatchesViewport(loadedCoverage);
+      const pendingCoverageMatches = coverageMatchesViewport(pendingCoverage);
 
       if (loadedCoverageMatches || pendingCoverageMatches) {
         if (loadedCoverageMatches && !pendingCoverageMatches) {
@@ -764,6 +781,14 @@ export function useMapInformationLayers(
     };
 
     const scheduleVisibleStopsLoad = () => {
+      if (usesLocalStaticStopCatalog) {
+        // The static index query is cheap and contains no remote request fan-out.
+        // Refresh immediately at movement end while preserving an off-screen
+        // reserve for the next pan instead of inheriting GeoAdmin's debounce.
+        loadVisibleStops(true);
+        return;
+      }
+
       const viewport = readViewport();
 
       if (!viewport) {
@@ -804,6 +829,36 @@ export function useMapInformationLayers(
       );
     };
 
+    const scheduleLocalStopsDuringPan = () => {
+      if (
+        !usesLocalStaticStopCatalog ||
+        localViewportRefreshFrame !== null
+      ) {
+        return;
+      }
+
+      // Centre changes can fire many times per rendered frame during dragging and
+      // kinetic motion. One coverage check per animation frame is enough, and a
+      // refresh occurs only after the remaining off-screen reserve becomes small.
+      localViewportRefreshFrame = window.requestAnimationFrame(() => {
+        localViewportRefreshFrame = null;
+        const viewport = readViewport();
+        const activeCoverage = pendingCoverage ?? loadedCoverage;
+
+        if (
+          !viewport ||
+          !activeCoverage ||
+          activeCoverage.zoom !== viewport.zoom ||
+          activeCoverage.imageSize[0] !== viewport.imageSize[0] ||
+          activeCoverage.imageSize[1] !== viewport.imageSize[1]
+        ) {
+          return;
+        }
+
+        loadVisibleStops(true);
+      });
+    };
+
     const refreshStopDeclutterAfterRender = () => {
       // `getPixelFromCoordinate()` uses the last rendered frame transform. Run
       // collision decisions after a frame so symbol size and pixel positions
@@ -822,6 +877,7 @@ export function useMapInformationLayers(
     map.on('moveend', scheduleVisibleStopsLoad);
     map.on('change:size', scheduleVisibleStopsLoad);
     map.on('postrender', refreshStopDeclutterAfterRender);
+    map.getView().on('change:center', scheduleLocalStopsDuringPan);
     map.getView().on('change:rotation', refreshStopRotation);
     refreshStopRotation();
     loadVisibleStops();
@@ -830,8 +886,10 @@ export function useMapInformationLayers(
       map.un('moveend', scheduleVisibleStopsLoad);
       map.un('change:size', scheduleVisibleStopsLoad);
       map.un('postrender', refreshStopDeclutterAfterRender);
+      map.getView().un('change:center', scheduleLocalStopsDuringPan);
       map.getView().un('change:rotation', refreshStopRotation);
       clearDebounce();
+      clearLocalViewportRefresh();
       cancelPendingRequest();
     };
   }, [

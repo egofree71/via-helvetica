@@ -910,8 +910,16 @@ Buffered viewport refreshes reconcile features by official stop id instead of
 clearing and rebuilding the whole source. Stops shared with the previous buffer
 therefore keep their rendered visibility while newly entering stops wait for the
 next decluttering pass, avoiding a whole-layer blink when panning into new data.
-The vector layer is explicitly invalidated after decluttering only when at least
-one stop actually changes rendered visibility.
+The stop vector layer rebuilds its OpenLayers feature batches during interactions
+and view animations. For the static local catalog, centre changes are also checked
+at most once per animation frame. The current 1.5x data envelope is refreshed
+before its remaining off-screen reserve falls below 10 percent of the viewport
+width or height, so entering and leaving features are reconciled while they are
+still outside the visible map. This proactive policy is deliberately local-only:
+GeoAdmin keeps the `moveend` debounce and ordinary containment rule because a
+single refresh can recursively fan out into many remote `identify` calls. The
+vector layer is explicitly invalidated after decluttering only when at least one
+stop actually changes rendered visibility.
 
 A rendered stop hit may contribute hidden declutter neighbours to the common
 map-information chooser, but an invisible stop alone is never a click target. If

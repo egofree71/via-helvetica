@@ -11,6 +11,7 @@ export {
   type PublicTransportStop,
 } from './publicTransportStopModel';
 export {
+  isLocalPublicTransportStopsCatalogEnabled,
   loadPublicTransportStops,
   type PublicTransportStopsLoadContext,
 } from './publicTransportStopsApi';
@@ -31,5 +32,6 @@ export {
   createBufferedPublicTransportStopsExtent,
   createPublicTransportStopsViewportCoverage,
   publicTransportStopsCoverageContainsViewport,
+  publicTransportStopsCoverageKeepsPrefetchMargin,
   type PublicTransportStopsViewportCoverage,
 } from './publicTransportStopsViewport';

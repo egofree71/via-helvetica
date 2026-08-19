@@ -27,6 +27,15 @@ function getLocalPublicTransportStopsUrl(): string {
   return (import.meta.env.VITE_PUBLIC_TRANSPORT_STOPS_LOCAL_URL ?? '').trim();
 }
 
+/**
+ * Reports whether viewport stop loading currently uses the static local catalog.
+ * The map runtime uses this capability flag to refresh cheap in-memory coverage
+ * proactively during pans without applying the same request rate to GeoAdmin.
+ */
+export function isLocalPublicTransportStopsCatalogEnabled(): boolean {
+  return getLocalPublicTransportStopsUrl().length > 0;
+}
+
 /** Maximum number of features returned by one GeoAdmin identify request. */
 const IDENTIFY_RESULT_LIMIT = 200;
 
