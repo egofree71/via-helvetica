@@ -120,4 +120,70 @@ describe('AboutDialog', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    {
+      language: 'fr',
+      expected: [
+        'La Suisse à pied',
+        '© OFROU, SuisseMobile, Suisse Rando, cantons',
+        '© OFROU, cantons, Suisse Rando, SuisseMobile',
+        '© Armée suisse',
+        '© OFT',
+      ],
+    },
+    {
+      language: 'de',
+      expected: [
+        'Wanderland',
+        '© ASTRA, SchweizMobil, Schweizer Wanderwege, Kantone',
+        '© ASTRA, Kantone, Schweizer Wanderwege, SchweizMobil',
+        '© Schweizer Armee',
+        '© BAV',
+      ],
+    },
+    {
+      language: 'it',
+      expected: [
+        'La Svizzera a piedi',
+        '© USTRA, SvizzeraMobile, Sentieri Svizzeri, cantoni',
+        '© USTRA, cantoni, Sentieri Svizzeri, SvizzeraMobile',
+        '© Esercito svizzero',
+        '© UFT',
+      ],
+    },
+    {
+      language: 'en',
+      expected: [
+        'Hiking in Switzerland',
+        '© FEDRO, SwitzerlandMobility, Swiss Hiking Trail Federation, cantons',
+        '© FEDRO, cantons, Swiss Hiking Trail Federation, SwitzerlandMobility',
+        '© Swiss Armed Forces',
+        '© FOT',
+      ],
+    },
+  ])(
+    'localizes map and data credits in $language',
+    async ({ language, expected }) => {
+      window.localStorage.setItem('via-helvetica-language', language);
+      window.history.replaceState({}, '', `/${language}/`);
+
+      await act(async () => {
+        root?.render(
+          createElement(
+            I18nProvider,
+            null,
+            createElement(AboutDialog, {
+              isOpen: true,
+              onClose: vi.fn(),
+            }),
+          ),
+        );
+      });
+
+      for (const text of expected) {
+        expect(container.textContent).toContain(text);
+      }
+    },
+  );
 });

@@ -27,7 +27,12 @@ const PROJECT_LINKS = {
   // Replace this placeholder with the creator's final public profile before release.
   linkedin: 'https://www.linkedin.com/in/philippe-de-pol/',
   swisstopo: 'https://www.swisstopo.admin.ch/',
-  bav: 'https://www.bav.admin.ch/',
+  bav: {
+    fr: 'https://www.bav.admin.ch/fr',
+    de: 'https://www.bav.admin.ch/de',
+    it: 'https://www.bav.admin.ch/it',
+    en: 'https://www.bav.admin.ch/en',
+  },
   transportOpenData: 'https://transport.opendata.ch/',
 } as const;
 
@@ -199,25 +204,35 @@ export default function AboutDialog({
               </div>
               <div>
                 <dt>{t('about.switzerlandMobilityHiking')}</dt>
-                <dd>© ASTRA, SchweizMobil, Schweizer Wanderwege, Kantone</dd>
+                <dd>
+                  © {t('about.creditFederalRoadsOffice')},{' '}
+                  {t('about.creditSwitzerlandMobility')},{' '}
+                  {t('about.creditHikingFederation')},{' '}
+                  {t('about.creditCantons')}
+                </dd>
               </div>
               <div>
                 <dt>{t('about.closures')}</dt>
-                <dd>© ASTRA, Kantone, Schweizer Wanderwege, SchweizMobil</dd>
+                <dd>
+                  © {t('about.creditFederalRoadsOffice')},{' '}
+                  {t('about.creditCantons')},{' '}
+                  {t('about.creditHikingFederation')},{' '}
+                  {t('about.creditSwitzerlandMobility')}
+                </dd>
               </div>
               <div>
                 <dt>{t('about.dangerZones')}</dt>
-                <dd>© Schweizer Armee</dd>
+                <dd>© {t('about.creditSwissArmy')}</dd>
               </div>
               <div>
                 <dt>{t('about.transportStops')}</dt>
                 <dd>
                   <a
-                    href={PROJECT_LINKS.bav}
+                    href={PROJECT_LINKS.bav[language]}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    © BAV
+                    © {t('about.creditFederalTransportOffice')}
                   </a>
                 </dd>
               </div>
