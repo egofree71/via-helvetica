@@ -88,7 +88,7 @@ const STOP_OVERLAP_DISPLAY_RADIUS_PIXELS = 17;
 export interface PublicTransportStopsDisplay {
   /** Vector layer placed above hiking and closure information. */
   layer: VectorLayer<VectorSource<Feature<Point>>>;
-  /** Mutable source replaced after each completed viewport request. */
+  /** Mutable source reconciled by stop id after each completed viewport request. */
   source: VectorSource<Feature<Point>>;
   /** Halo layer that keeps the selected stop identifiable under the popup. */
   selectionLayer: VectorLayer<VectorSource<Feature<Point>>>;
@@ -304,6 +304,23 @@ function isStopDeclutterVisible(feature: FeatureLike): boolean {
   return feature.get(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME) !== false;
 }
 
+/**
+ * Updates one presentation-only decluttering flag and reports whether the
+ * rendered visibility actually changed. Silent writes keep the vector-source
+ * revision stable; the caller can invalidate the layer once for the whole pass.
+ */
+function setStopDeclutterVisible(
+  feature: Feature<Point>,
+  visible: boolean,
+): boolean {
+  if (isStopDeclutterVisible(feature) === visible) {
+    return false;
+  }
+
+  feature.set(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME, visible, true);
+  return true;
+}
+
 /** Screen-space placement derived from the exact fan-out used for rendering. */
 interface StopVisualPlacement {
   /** CSS-pixel centre after applying any close-stop fan-out. */
@@ -404,11 +421,18 @@ export function applyPublicTransportStopDeclutterVisibility(
   const rotation = map.getView().getRotation();
 
   if (!resolution || !Number.isFinite(resolution) || resolution <= 0) {
+    let hasVisibilityChange = false;
+
     for (const feature of display.source.getFeatures()) {
-      feature.set(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME, true, true);
+      hasVisibilityChange =
+        setStopDeclutterVisible(feature, true) || hasVisibilityChange;
     }
+
     display.declutterSnapshot = null;
-    display.layer.changed();
+
+    if (hasVisibilityChange) {
+      display.layer.changed();
+    }
     return;
   }
 
@@ -429,6 +453,7 @@ export function applyPublicTransportStopDeclutterVisibility(
   const separationSquared = separation * separation;
   const candidates: DeclutterCandidate[] = [];
   let hadUnresolvedPixel = false;
+  let hasVisibilityChange = false;
 
   for (const feature of display.source.getFeatures()) {
     const stop = getPublicTransportStopFromFeature(feature);
@@ -437,7 +462,8 @@ export function applyPublicTransportStopDeclutterVisibility(
     if (!stop || !placement) {
       // Missing frame transforms are transient. Degrade to visible and avoid
       // caching this incomplete pass so the next rendered frame can retry.
-      feature.set(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME, true, true);
+      hasVisibilityChange =
+        setStopDeclutterVisible(feature, true) || hasVisibilityChange;
       hadUnresolvedPixel = hadUnresolvedPixel || Boolean(stop);
       continue;
     }
@@ -504,11 +530,9 @@ export function applyPublicTransportStopDeclutterVisibility(
       }
     }
 
-    candidate.feature.set(
-      STOP_DECLUTTER_VISIBLE_PROPERTY_NAME,
-      !blocked,
-      true,
-    );
+    hasVisibilityChange =
+      setStopDeclutterVisible(candidate.feature, !blocked) ||
+      hasVisibilityChange;
 
     if (!blocked) {
       const key = declutterGridKey(cellX, cellY);
@@ -519,7 +543,13 @@ export function applyPublicTransportStopDeclutterVisibility(
   }
 
   display.declutterSnapshot = hadUnresolvedPixel ? null : snapshot;
-  display.layer.changed();
+
+  // Rebuilding an unchanged vector replay group is visible as a small "reload"
+  // on dense stop layers. Only ask OpenLayers for another frame when the pass
+  // actually changed which symbols survive decluttering.
+  if (hasVisibilityChange) {
+    display.layer.changed();
+  }
 }
 
 /**
@@ -728,34 +758,85 @@ export function createPublicTransportStopsDisplay(): PublicTransportStopsDisplay
   return display;
 }
 
-/** Replaces loaded stop features after one completed viewport request. */
+/** Reconciles loaded stop features after one completed viewport request. */
 export function updatePublicTransportStopsDisplay(
   display: PublicTransportStopsDisplay,
   stops: PublicTransportStop[],
 ): void {
   const overlapLayouts = createStopOverlapLayouts(stops);
-  const features = stops.map((stop) => {
-    const feature = new Feature<Point>({
-      geometry: new Point(stop.coordinate),
-    });
-    feature.setId(stop.id);
-    feature.set(STOP_PROPERTY_NAME, stop);
-    // New viewport data waits for the first coherent rendered-frame declutter
-    // pass instead of flashing every dense-city symbol for one frame.
-    feature.set(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME, false, true);
+  const existingFeaturesById = new Map<string, Feature<Point>>();
+
+  for (const feature of display.source.getFeatures()) {
+    const id = feature.getId();
+
+    if (id !== undefined) {
+      existingFeaturesById.set(String(id), feature);
+    }
+  }
+
+  const nextStopIds = new Set(stops.map((stop) => stop.id));
+  let sourceStructureChanged = false;
+
+  // Buffered viewports overlap substantially. Keep shared feature instances so
+  // their already-rendered visibility survives a coverage refresh instead of
+  // blanking the whole stop layer for one frame before postrender declutters it.
+  for (const [id, feature] of existingFeaturesById) {
+    if (!nextStopIds.has(id)) {
+      display.source.removeFeature(feature);
+      sourceStructureChanged = true;
+    }
+  }
+
+  const newFeatures: Feature<Point>[] = [];
+
+  for (const stop of stops) {
+    let feature = existingFeaturesById.get(stop.id);
+
+    if (!feature) {
+      feature = new Feature<Point>({
+        geometry: new Point(stop.coordinate),
+      });
+      feature.setId(stop.id);
+      // Brand-new stops stay hidden until the first coherent rendered-frame
+      // declutter pass; shared stops above keep their previous visibility.
+      feature.set(STOP_DECLUTTER_VISIBLE_PROPERTY_NAME, false, true);
+      newFeatures.push(feature);
+      sourceStructureChanged = true;
+    } else {
+      const geometry = feature.getGeometry();
+
+      if (
+        geometry instanceof Point &&
+        (geometry.getCoordinates()[0] !== stop.coordinate[0] ||
+          geometry.getCoordinates()[1] !== stop.coordinate[1])
+      ) {
+        geometry.setCoordinates(stop.coordinate);
+      }
+    }
+
+    feature.set(STOP_PROPERTY_NAME, stop, true);
 
     const overlapLayout = overlapLayouts.get(stop.id);
 
     if (overlapLayout) {
-      feature.set(STOP_OVERLAP_LAYOUT_PROPERTY_NAME, overlapLayout);
+      feature.set(STOP_OVERLAP_LAYOUT_PROPERTY_NAME, overlapLayout, true);
+    } else {
+      feature.set(STOP_OVERLAP_LAYOUT_PROPERTY_NAME, undefined, true);
     }
+  }
 
-    return feature;
-  });
+  if (newFeatures.length > 0) {
+    display.source.addFeatures(newFeatures);
+  }
 
-  display.source.clear();
-  display.source.addFeatures(features);
   display.declutterSnapshot = null;
+
+  // Reused features are updated silently. If the viewport contains exactly the
+  // same stop ids, explicitly refresh once so changed modes/fan-out metadata are
+  // reflected even though the vector-source structure itself did not change.
+  if (!sourceStructureChanged) {
+    display.layer.changed();
+  }
 
   // A buffered viewport reload can change a close-stop fan-out group. Refresh
   // the halo from the new source feature so it keeps the exact same displacement

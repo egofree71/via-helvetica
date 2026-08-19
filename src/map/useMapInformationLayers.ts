@@ -742,7 +742,7 @@ export function useMapInformationLayers(
           }
 
           loadedCoverage = coverage;
-          // Source replacement schedules a render. Let the post-render pass
+          // Source reconciliation schedules a render. Let the post-render pass
           // declutter against that frame instead of caching stale pixel geometry
           // if the buffered response arrives during an in-progress map movement.
           updatePublicTransportStopsDisplay(display, stops);
