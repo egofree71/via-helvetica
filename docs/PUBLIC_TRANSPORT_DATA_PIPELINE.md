@@ -13,15 +13,43 @@ and local publication configuration stay outside the repository.
 ## 2. Source data
 
 Use the complete official GeoAdmin download for `ch.bav.haltestellen-oev` in
-LV95 (`EPSG:2056`). The current pipeline expects the extracted
-`PointExploitation.csv` table and validates the resolved columns before accepting
-it as a national source.
+LV95 (`EPSG:2056`). The current pipeline expects the French CSV export because
+its `PointExploitation.csv` schema is covered by the importer tests.
 
-The source asset is discoverable through the official GeoAdmin STAC API. A
-manual download remains acceptable during development; the generator records a
-SHA-256 of the exact selected CSV bytes, so the release identity does not depend
-on a mutable download URL or a manually entered date.
+Download and extract the current official source through GeoAdmin STAC v1:
 
+```powershell
+npm run download:public-transport-stops-source -- "C:\Temp\haltestellen-oev"
+```
+
+The downloader:
+
+1. reads the official STAC collection for `ch.bav.haltestellen-oev`;
+2. discovers the French CSV ZIP in LV95 instead of hard-coding its current
+   object URL;
+3. downloads the untouched ZIP to the requested work directory;
+4. replaces the previous `extracted/` directory so stale CSV files cannot be
+   mixed with a new delivery;
+5. extracts the archive and requires exactly one `PointExploitation.csv`;
+6. prints the selected asset URL and the path of that table for auditability.
+
+The work directory stays outside the repository. Re-running the command replaces
+the downloaded archive and extracted files, but never modifies a generated or
+published immutable release.
+
+If STAC discovery is temporarily unavailable, the current direct official asset
+can be downloaded manually from:
+
+```text
+https://data.geo.admin.ch/ch.bav.haltestellen-oev/haltestellen-oev/haltestellen-oev_2056_fr.csv.zip
+```
+
+Manual download is a fallback, not the pipeline contract: GeoAdmin may change
+physical object names while keeping STAC discovery stable. Extract the ZIP into
+a clean work directory before generation.
+
+The generator records a SHA-256 of the exact selected CSV bytes, so release
+identity does not depend on the mutable download URL or a manually entered date.
 Do not edit the official CSV before generation. If the source schema changes,
 adapt and review the importer instead of weakening its plausibility checks.
 
@@ -236,14 +264,16 @@ while the static provider is still being rolled out and validated.
 
 For a new official source publication:
 
-1. download and extract the new official dataset;
-2. generate a new release from the untouched `PointExploitation.csv`;
-3. inspect the resolved columns, accepted row count, source SHA-256, and sizes;
-4. run `npm test` and `npm run build` when application code changed;
-5. publish under the newly derived immutable path;
-6. verify the public release;
-7. update `VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL` to the new immutable URL;
-8. retain the previous release until the application deployment using the new
+1. run `npm run download:public-transport-stops-source -- <work-directory>`;
+2. inspect the discovered official STAC asset URL and extracted
+   `PointExploitation.csv`;
+3. generate a new release from that untouched extracted table;
+4. inspect the resolved columns, accepted row count, source SHA-256, and sizes;
+5. run `npm test` and `npm run build` when application code changed;
+6. publish under the newly derived immutable path;
+7. verify the public release;
+8. update `VITE_PUBLIC_TRANSPORT_STOPS_CATALOG_URL` to the new immutable URL;
+9. retain the previous release until the application deployment using the new
    URL has been validated.
 
 Do not introduce GTFS or timetable joins into this pipeline merely to remove rare

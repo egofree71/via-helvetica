@@ -16,6 +16,7 @@
     "generate:precomputed-binary-routing": "node scripts/generate-precomputed-binary-routing-graph.mjs",
     "verify:precomputed-binary-routing": "node scripts/verify-routing-dataset.mjs",
     "verify:published-routing": "node scripts/verify-published-routing-dataset.mjs",
+    "download:public-transport-stops-source": "node scripts/download-public-transport-stops-source.mjs",
     "prepare:public-transport-stops-local": "node scripts/prepare-local-public-transport-stops.mjs",
     "prepare:public-transport-stops-release": "node scripts/prepare-local-public-transport-stops.mjs",
     "verify:published-public-transport-stops": "node scripts/verify-published-public-transport-stops.mjs",
