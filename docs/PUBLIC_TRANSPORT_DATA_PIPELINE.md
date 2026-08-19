@@ -37,16 +37,27 @@ The work directory stays outside the repository. Re-running the command replaces
 the downloaded archive and extracted files, but never modifies a generated or
 published immutable release.
 
-If STAC discovery is temporarily unavailable, the current direct official asset
-can be downloaded manually from:
+If STAC discovery is temporarily unavailable, use the official FOT/BAV dataset
+landing page as the manual fallback:
 
 ```text
-https://data.geo.admin.ch/ch.bav.haltestellen-oev/haltestellen-oev/haltestellen-oev_2056_fr.csv.zip
+https://www.bav.admin.ch/de/haltestellen-des-oeffentlichen-verkehrs-geoiv-id-982
 ```
 
-Manual download is a fallback, not the pipeline contract: GeoAdmin may change
-physical object names while keeping STAC discovery stable. Extract the ZIP into
-a clean work directory before generation.
+Open `Datendownload` from that page and select the **French CSV export in
+LV95 (`EPSG:2056`)**. Its filename follows this pattern:
+
+```text
+haltestellen-oev_2056_fr.csv.zip
+```
+
+The `_fr` suffix is important: do not select the German `_de` CSV or the
+FileGDB, GeoPackage, or INTERLIS variants. Do not copy a physical ZIP object URL
+into this documentation or automation: GeoAdmin may change object names or paths
+between publications while the official dataset page and STAC collection remain
+the stable discovery points.
+
+Extract the downloaded ZIP into a clean work directory before generation.
 
 The generator records a SHA-256 of the exact selected CSV bytes, so release
 identity does not depend on the mutable download URL or a manually entered date.
