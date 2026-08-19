@@ -11,6 +11,19 @@ import type { Coordinate } from 'ol/coordinate.js';
 export const PUBLIC_TRANSPORT_STOPS_LAYER_ID = 'ch.bav.haltestellen-oev';
 
 /**
+ * Official DiDok service-number format used by the FOT stop model.
+ * The seven digits are the two-digit UIC country code followed by five digits;
+ * GeoAdmin feature ids for this layer and the downloaded `Numero` field use the
+ * same value. Timetable providers may additionally accept a zero-padded form.
+ */
+const DIDOK_SERVICE_NUMBER_PATTERN = /^\d{7}$/;
+
+/** Tests whether one identifier satisfies the FOT DiDok service-number contract. */
+export function isDidokServiceNumber(value: string): boolean {
+  return DIDOK_SERVICE_NUMBER_PATTERN.test(value);
+}
+
+/**
  * Passenger transport categories accepted by the map overlay.
  *
  * Keeping this list explicit prevents unknown or empty provider values from
@@ -33,9 +46,9 @@ export type PublicTransportMode =
 
 /** Raw stop fields shared by remote identify and static-catalog providers. */
 export interface PublicTransportStopInput {
-  /** Stable identifier exposed by the source dataset. */
+  /** Seven-digit DiDok service number shared by GeoAdmin and the static catalog. */
   id: string;
-  /** Timetable identifier; defaults to `id` for the FOT GeoAdmin dataset. */
+  /** DiDok timetable identifier; defaults to the same official service number. */
   stationId?: string;
   /** Official stop name. */
   name: string;
@@ -49,9 +62,9 @@ export interface PublicTransportStopInput {
 
 /** Passenger stop displayed on the map and in the compact information popup. */
 export interface PublicTransportStop {
-  /** Stable official feature identifier used by OpenLayers and React. */
+  /** Seven-digit DiDok service number used by OpenLayers and React. */
   id: string;
-  /** Official BAV identifier used by the timetable API. */
+  /** Same DiDok service number passed to the timetable API. */
   stationId: string;
   /** Official stop name in the selected GeoAdmin language when available. */
   name: string;
@@ -332,7 +345,12 @@ export function normalizePublicTransportStopWithPrecomputedMetadata(
 ): PublicTransportStop | null {
   const { id, stationId = id, name, coordinate } = input;
 
-  if (!name || outOfService) {
+  if (
+    !name ||
+    outOfService ||
+    !isDidokServiceNumber(id) ||
+    !isDidokServiceNumber(stationId)
+  ) {
     return null;
   }
 

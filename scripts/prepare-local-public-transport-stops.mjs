@@ -25,6 +25,31 @@ const SOURCE_DATASET_ID = 'ch.bav.haltestellen-oev';
 /** Current compact artifact schema understood by the browser-side loader. */
 const OUTPUT_FORMAT_VERSION = 2;
 
+/**
+ * Minimum plausible operating-point count for the national FOT publication.
+ * A much smaller compatible table usually means the exporter schema changed or
+ * the wrong CSV table was selected, so publication must fail rather than emit a
+ * syntactically valid but incomplete national catalog.
+ */
+const MIN_EXPECTED_RECORD_COUNT = 20_000;
+
+/**
+ * Minimum fraction of rows carrying useful transport metadata.
+ * The FOT operating-point table includes technical records, but passenger and
+ * transport-bearing rows still form the majority of the national publication.
+ */
+const MIN_TRANSPORT_METADATA_RATIO = 0.5;
+
+/** Official DiDok service number: two-digit UIC country code plus five digits. */
+const DIDOK_SERVICE_NUMBER_PATTERN = /^\d{7}$/;
+
+/**
+ * Broad LV95 plausibility envelope in metres.
+ * It deliberately includes a margin around Switzerland and nearby foreign
+ * operating points while rejecting WGS84 or LV03 columns selected by mistake.
+ */
+const PLAUSIBLE_LV95_EXTENT = [2_400_000, 1_000_000, 2_900_000, 1_400_000];
+
 /** Candidate delimiters used by the official CSV exporter. */
 const CSV_DELIMITERS = [';', ',', '\t'];
 
@@ -194,24 +219,13 @@ function findColumn(headers, candidates, { required = true } = {}) {
     if (exact >= 0) return exact;
   }
 
-  for (const candidate of normalizedCandidates) {
-    // One-letter coordinate headers such as `E`, `N`, `X`, and `Y` must only
-    // match exactly; suffix matching them would incorrectly accept unrelated
-    // columns such as `Designation`.
-    if (candidate.length < 2) continue;
-    const suffix = normalizedHeaders.findIndex((header) =>
-      header.endsWith(candidate),
-    );
-    if (suffix >= 0) return suffix;
-  }
-
   if (!required) return -1;
   throw new Error(
     `Missing CSV column (${candidates.join(', ')}). Available headers: ${headers.join(' | ')}`,
   );
 }
 
-function parsePointGeometry(value) {
+export function parsePointGeometry(value) {
   const trimmed = value.trim();
   if (!trimmed) return null;
 
@@ -254,7 +268,7 @@ function parsePointGeometry(value) {
   return null;
 }
 
-function resolveColumns(headers) {
+export function resolveColumns(headers) {
   const id = findColumn(headers, [
     'Betriebspunkt.Nummer',
     'Betriebspunkt_Nummer',
@@ -355,6 +369,20 @@ function resolveColumns(headers) {
   return { id, name, meansOfTransport, stopType, geometry, east, north };
 }
 
+/** Returns the concrete source header selected for each semantic field. */
+function describeResolvedColumns(headers, columns) {
+  const headerAt = (index) => (index >= 0 ? headers[index] : '(not present)');
+  return {
+    id: headerAt(columns.id),
+    name: headerAt(columns.name),
+    meansOfTransport: headerAt(columns.meansOfTransport),
+    stopType: headerAt(columns.stopType),
+    geometry: headerAt(columns.geometry),
+    east: headerAt(columns.east),
+    north: headerAt(columns.north),
+  };
+}
+
 function readCoordinate(row, columns) {
   if (columns.geometry >= 0) {
     const coordinate = parsePointGeometry(row[columns.geometry] ?? '');
@@ -410,7 +438,70 @@ function parseCandidateCsv(filePath, text) {
     ]);
   }
 
-  return { filePath, records, headers, rejectionReason: null };
+  return {
+    filePath,
+    records,
+    headers,
+    columns,
+    sourceRowCount: Math.max(0, rows.length - 1),
+    rejectionReason: null,
+  };
+}
+
+/**
+ * Validates assumptions that distinguish the national operating-point table
+ * from another compatible-looking CSV or a silently changed exporter schema.
+ *
+ * @param candidate - Parsed CSV candidate with resolved source columns.
+ * @returns Human-readable failures; an empty array means publication is plausible.
+ */
+export function validateCandidatePlausibility(candidate) {
+  const errors = [];
+  const records = candidate.records;
+  if (records.length < MIN_EXPECTED_RECORD_COUNT) {
+    errors.push(
+      `only ${records.length.toLocaleString('en-US')} usable records (expected at least ${MIN_EXPECTED_RECORD_COUNT.toLocaleString('en-US')})`,
+    );
+  }
+
+  const invalidDidokCount = records.reduce(
+    (count, record) => count + (DIDOK_SERVICE_NUMBER_PATTERN.test(record[0]) ? 0 : 1),
+    0,
+  );
+  if (invalidDidokCount > 0) {
+    errors.push(
+      `${invalidDidokCount.toLocaleString('en-US')} records do not use a seven-digit DiDok service number`,
+    );
+  }
+
+  const [minEast, minNorth, maxEast, maxNorth] = PLAUSIBLE_LV95_EXTENT;
+  const implausibleCoordinateCount = records.reduce((count, record) => {
+    const east = record[4];
+    const north = record[5];
+    return count +
+      (east >= minEast && east <= maxEast && north >= minNorth && north <= maxNorth
+        ? 0
+        : 1);
+  }, 0);
+  if (implausibleCoordinateCount > 0) {
+    errors.push(
+      `${implausibleCoordinateCount.toLocaleString('en-US')} records fall outside the broad LV95 plausibility envelope`,
+    );
+  }
+
+  const transportMetadataCount = records.reduce((count, record) => {
+    const value = record[2].trim();
+    return count + (value && value !== '-' ? 1 : 0);
+  }, 0);
+  const transportMetadataRatio =
+    records.length > 0 ? transportMetadataCount / records.length : 0;
+  if (transportMetadataRatio < MIN_TRANSPORT_METADATA_RATIO) {
+    errors.push(
+      `only ${(transportMetadataRatio * 100).toFixed(1)}% of records carry transport metadata (expected at least ${(MIN_TRANSPORT_METADATA_RATIO * 100).toFixed(0)}%)`,
+    );
+  }
+
+  return errors;
 }
 
 async function main() {
@@ -441,11 +532,33 @@ async function main() {
     );
   }
 
-  // The download can contain several model tables. The passenger/operating-point
-  // table is expected to be the largest compatible table, while platform-edge
-  // tables either lack the transport-mode field or use a different identifier.
-  candidates.sort((first, second) => second.records.length - first.records.length);
-  const selected = candidates[0];
+  // The download can contain several model tables. Prefer the largest candidate
+  // only after validating national-scale invariants; schema drift must fail
+  // loudly instead of silently publishing whichever table happens to be largest.
+  const plausibleCandidates = candidates
+    .map((candidate) => ({
+      candidate,
+      plausibilityErrors: validateCandidatePlausibility(candidate),
+    }))
+    .filter(({ plausibilityErrors }) => plausibilityErrors.length === 0)
+    .sort(
+      (first, second) =>
+        second.candidate.records.length - first.candidate.records.length,
+    );
+
+  if (plausibleCandidates.length === 0) {
+    const diagnostics = candidates
+      .map((candidate) => {
+        const errors = validateCandidatePlausibility(candidate);
+        return `${candidate.filePath}: ${errors.join('; ') || 'no plausibility error'}`;
+      })
+      .join('\n');
+    throw new Error(
+      `No extracted CSV passed the FOT national-catalog plausibility checks.\n${diagnostics}`,
+    );
+  }
+
+  const selected = plausibleCandidates[0].candidate;
   const unique = new Map();
   for (const record of selected.records) unique.set(record[0], record);
 
@@ -480,6 +593,13 @@ async function main() {
   const gzipBytes = gzipSync(serialized).byteLength;
   const brotliBytes = brotliCompressSync(serialized).byteLength;
   console.log(`Selected ${path.relative(PROJECT_ROOT, selected.filePath)}`);
+  const resolvedColumns = describeResolvedColumns(selected.headers, selected.columns);
+  console.log(
+    `Resolved columns: id=${resolvedColumns.id}, name=${resolvedColumns.name}, transport=${resolvedColumns.meansOfTransport}, type=${resolvedColumns.stopType}, geometry=${resolvedColumns.geometry}, east=${resolvedColumns.east}, north=${resolvedColumns.north}`,
+  );
+  console.log(
+    `Accepted ${selected.records.length.toLocaleString('en-US')} of ${selected.sourceRowCount.toLocaleString('en-US')} source rows after required-field validation.`,
+  );
   console.log(`Prepared ${payload.records.length.toLocaleString('en-US')} records.`);
   console.log(
     `Interned ${meansOfTransport.length.toLocaleString('en-US')} transport descriptions and ${stopTypes.length.toLocaleString('en-US')} stop types.`,
@@ -490,7 +610,10 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+const invokedScript = process.argv[1] ? path.resolve(process.argv[1]) : null;
+if (invokedScript === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

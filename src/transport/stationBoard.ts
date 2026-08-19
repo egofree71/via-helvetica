@@ -272,8 +272,10 @@ function hasMatchedStation(value: unknown): boolean {
 
 /**
  * Generates the raw and zero-padded ID forms accepted by different datasets.
- * BAV features commonly expose seven digits, while the API documentation also
- * uses nine-character identifiers prefixed with two zeros.
+ * FOT/GeoAdmin stop features expose the seven-digit DiDok service number. The
+ * timetable API documentation also accepts nine-character forms prefixed with
+ * two zeros, so outbound lookup may retry that representation without changing
+ * the application's canonical stop identifier.
  */
 function createStationIdCandidates(stationId: string): string[] {
   const normalized = stationId.trim();

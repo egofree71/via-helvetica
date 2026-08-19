@@ -882,6 +882,13 @@ The stop workflow separates:
 - selected-stop presentation;
 - on-demand timetable loading.
 
+Both position providers use the same canonical stop identity: the FOT DiDok
+service number stored as seven digits (two-digit UIC country code plus five
+digits). The downloaded `PointExploitation.Numero` field and the GeoAdmin
+feature id for `ch.bav.haltestellen-oev` expose that same value. Via Helvetica
+keeps it unchanged as both `id` and `stationId`; only the timetable adapter may
+retry a zero-padded nine-character representation required by some API examples.
+
 An opt-in development experiment can replace GeoAdmin viewport loading with a
 locally generated static catalog by setting
 `VITE_PUBLIC_TRANSPORT_STOPS_LOCAL_URL`. The catalog is prepared offline from
@@ -894,6 +901,12 @@ runtime module avoids duplicating multilingual transport and retirement rules in
 the offline generator merely to save bytes. When the browser builds the
 national index, transport-mode and retirement classification is computed once
 per interned dictionary value rather than repeated for every raw record.
+The offline importer deliberately treats future source-schema changes as a
+publication failure rather than guessing. Required columns must match known
+headers exactly, and the selected national table must satisfy coarse invariants
+for record count, seven-digit DiDok identifiers, LV95 coordinates, and transport
+metadata. The script logs the concrete resolved source columns so a regeneration
+can be audited before the artifact is published.
 Normalized stops are indexed in a lightweight LV95 grid. Viewport calls query
 only intersecting grid cells, so the national catalog never becomes tens of
 thousands of OpenLayers features. The generator reports raw, gzip, and Brotli
