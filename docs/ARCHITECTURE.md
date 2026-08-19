@@ -882,6 +882,20 @@ The stop workflow separates:
 - selected-stop presentation;
 - on-demand timetable loading.
 
+An opt-in development experiment can replace GeoAdmin viewport loading with a
+locally generated static catalog by setting
+`VITE_PUBLIC_TRANSPORT_STOPS_LOCAL_URL`. The catalog is prepared offline from
+the manually downloaded FOT `ch.bav.haltestellen-oev` CSV asset, loaded lazily
+on first stop-layer use, normalized through the same passenger-stop rules, and
+indexed in a lightweight LV95 grid. Viewport calls query only intersecting grid
+cells, so the national catalog never becomes tens of thousands of OpenLayers
+features. The shared download deliberately survives superseded viewport calls;
+those calls are still discarded before and after the load, while completing one
+static local file avoids restarting the same transfer during pans. Leaving the
+environment variable unset preserves the production GeoAdmin identify provider.
+This experiment exists to validate data quality, memory use, and interaction
+latency before any R2 publication architecture is adopted.
+
 Official stop coordinates never change. Distinct stops within the close-stop
 threshold can be fanned out temporarily when their icons overlap. Newly loaded
 features start visually hidden until the first rendered-frame decluttering pass,
@@ -892,6 +906,12 @@ fan-out group do not suppress each other while that fan-out is active; once real
 coordinates are sufficiently separated and fan-out is released, ordinary
 collision rules apply again. Decluttering is refreshed from a rendered map state
 so symbol sizes and coordinate-to-pixel transforms describe the same view.
+Buffered viewport refreshes reconcile features by official stop id instead of
+clearing and rebuilding the whole source. Stops shared with the previous buffer
+therefore keep their rendered visibility while newly entering stops wait for the
+next decluttering pass, avoiding a whole-layer blink when panning into new data.
+The vector layer is explicitly invalidated after decluttering only when at least
+one stop actually changes rendered visibility.
 
 A rendered stop hit may contribute hidden declutter neighbours to the common
 map-information chooser, but an invisible stop alone is never a click target. If

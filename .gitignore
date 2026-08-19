@@ -44,3 +44,6 @@ Thumbs.db
 
 # Local Cloudflare Worker deployment configuration
 /workers/swisstopo-gpx-share/wrangler.toml
+
+# Generated local public-transport dataset used only for provider experiments.
+public/local-data/

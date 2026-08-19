@@ -1,8 +1,8 @@
 /**
- * Business context: loads official BAV public-transport stop features around
- * the current map viewport. Dense Swiss city centres can reach the GeoAdmin result
- * cap, so requests are recursively subdivided while keeping the operation
- * bounded and abortable for responsive map navigation.
+ * Business context: loads official BAV public-transport stops around the current
+ * map viewport. Production uses bounded GeoAdmin identify requests, while an
+ * explicit development setting can swap in a manually prepared local catalog so
+ * the static-data architecture can be evaluated without changing map consumers.
  */
 import type { Extent } from 'ol/extent.js';
 import type { Language } from '../i18n/translations';
@@ -12,10 +12,20 @@ import {
   PUBLIC_TRANSPORT_STOPS_LAYER_ID,
   type PublicTransportStop,
 } from './publicTransportStopModel';
+import { loadPublicTransportStopsFromLocalCatalog } from './publicTransportStopsLocalCatalog';
 
 /** GeoAdmin identify endpoint used for viewport feature loading. */
 const IDENTIFY_ENDPOINT =
   'https://api3.geo.admin.ch/rest/services/ech/MapServer/identify';
+
+/**
+ * Returns the optional Vite-served static catalog configured for local experiments.
+ * Reading the value at call time lets tests explicitly choose their provider instead
+ * of inheriting a developer's `.env.local` setting at module-import time.
+ */
+function getLocalPublicTransportStopsUrl(): string {
+  return (import.meta.env.VITE_PUBLIC_TRANSPORT_STOPS_LOCAL_URL ?? '').trim();
+}
 
 /** Maximum number of features returned by one GeoAdmin identify request. */
 const IDENTIFY_RESULT_LIMIT = 200;
@@ -179,12 +189,21 @@ async function fetchStopsForExtent(
  * @param context - Request envelope, real viewport scale, and interface language.
  * @param signal - Abort signal for superseded pans, zooms, or layer hiding.
  * @returns Passenger stops deduplicated strictly by official feature identifier.
- * @throws {Error} When the official GeoAdmin service fails.
+ * @throws {Error} When the configured stop provider cannot load valid data.
  */
 export async function loadPublicTransportStops(
   context: PublicTransportStopsLoadContext,
   signal: AbortSignal,
 ): Promise<PublicTransportStop[]> {
+  const localCatalogUrl = getLocalPublicTransportStopsUrl();
+  if (localCatalogUrl) {
+    return loadPublicTransportStopsFromLocalCatalog(
+      localCatalogUrl,
+      context.requestExtent,
+      signal,
+    );
+  }
+
   const rawResults = await fetchStopsForExtent(
     context.requestExtent,
     context,

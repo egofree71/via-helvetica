@@ -31,6 +31,22 @@ export const ACCEPTED_PUBLIC_TRANSPORT_MODES = [
 export type PublicTransportMode =
   (typeof ACCEPTED_PUBLIC_TRANSPORT_MODES)[number];
 
+/** Raw stop fields shared by remote identify and static-catalog providers. */
+export interface PublicTransportStopInput {
+  /** Stable identifier exposed by the source dataset. */
+  id: string;
+  /** Timetable identifier; defaults to `id` for the FOT GeoAdmin dataset. */
+  stationId?: string;
+  /** Official stop name. */
+  name: string;
+  /** Provider description of served passenger transport modes. */
+  meansOfTransport?: string | null;
+  /** Provider stop type used to reject explicitly retired facilities. */
+  stopType?: string | null;
+  /** Official LV95 point coordinate. */
+  coordinate: Coordinate;
+}
+
 /** Passenger stop displayed on the map and in the compact information popup. */
 export interface PublicTransportStop {
   /** Stable official feature identifier used by OpenLayers and React. */
@@ -273,6 +289,56 @@ export function getPrimaryPublicTransportMode(
 }
 
 /**
+ * Normalizes source-independent FOT stop fields into the passenger-stop model.
+ *
+ * @param input - Validated official identifier, name, metadata, and LV95 point.
+ * @returns A passenger stop or `null` when the record is retired, technical,
+ * unsupported, or otherwise irrelevant to hiking-route planning.
+ */
+export function normalizePublicTransportStop(
+  input: PublicTransportStopInput,
+): PublicTransportStop | null {
+  const { id, stationId = id, name, meansOfTransport, stopType, coordinate } =
+    input;
+
+  if (!name || isOutOfServiceType(stopType ?? null)) {
+    return null;
+  }
+
+  // Very close zoom levels and complete source downloads can expose technical
+  // operating points named only `01`, `02`, and similar platform identifiers.
+  // Passenger stop names always contain at least one letter.
+  if (!/\p{L}/u.test(name)) {
+    return null;
+  }
+
+  const usableMeansOfTransport =
+    meansOfTransport && meansOfTransport.trim() !== '-'
+      ? meansOfTransport
+      : '';
+  const metadataModes = detectTransportModes(usableMeansOfTransport);
+  const modes =
+    metadataModes.length > 0
+      ? metadataModes
+      : detectTransportModesFromNameQualifier(name);
+
+  // The FOT source intentionally includes pure operating points. A record is
+  // passenger-relevant only when metadata, or the explicit cableway qualifier
+  // fallback above, resolves to one of the accepted transport categories.
+  if (modes.length === 0) {
+    return null;
+  }
+
+  return {
+    id,
+    stationId,
+    name,
+    modes: normalizeModes(modes),
+    coordinate,
+  };
+}
+
+/**
  * Converts one loosely typed identify result into a passenger stop.
  *
  * @param value - One untrusted result from the GeoAdmin identify response.
@@ -334,43 +400,15 @@ export function parsePublicTransportStop(
     'haltestellentyp',
   ]);
 
-  // Explicitly retired stops remain hidden even when their name contains a
-  // transport word. Empty or unknown transport fields are handled below by a
-  // narrowly scoped final-parenthesis fallback for useful cableway records.
-  if (!name || isOutOfServiceType(stopType)) {
+  if (!name) {
     return null;
   }
 
-  // Very close zoom levels can expose technical operating points named only
-  // `01`, `02`, and similar platform identifiers. Passenger stop names always
-  // contain at least one letter, so rejecting numeric-only labels removes
-  // those duplicates without hiding legitimate named stations.
-  if (!/\p{L}/u.test(name)) {
-    return null;
-  }
-
-  const usableMeansOfTransport =
-    meansOfTransport && meansOfTransport.trim() !== '-'
-      ? meansOfTransport
-      : '';
-  const metadataModes = detectTransportModes(usableMeansOfTransport);
-  const modes =
-    metadataModes.length > 0
-      ? metadataModes
-      : detectTransportModesFromNameQualifier(name);
-
-  // The BAV layer intentionally includes pure operating points. A feature is
-  // passenger-relevant only when its metadata, or the explicit name qualifier
-  // fallback above, resolves to one of the accepted transport categories.
-  if (modes.length === 0) {
-    return null;
-  }
-
-  return {
+  return normalizePublicTransportStop({
     id: String(featureId),
-    stationId: String(featureId),
     name,
-    modes: normalizeModes(modes),
+    meansOfTransport,
+    stopType,
     coordinate,
-  };
+  });
 }

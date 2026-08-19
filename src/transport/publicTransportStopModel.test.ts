@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getPrimaryPublicTransportMode,
+  normalizePublicTransportStop,
   parsePublicTransportStop,
   PUBLIC_TRANSPORT_STOPS_LAYER_ID,
 } from './publicTransportStopModel';
@@ -27,6 +28,24 @@ function createFeature(
 }
 
 describe('publicTransportStopModel', () => {
+  it('normalizes source-independent static catalog records with the same rules', () => {
+    expect(
+      normalizePublicTransportStop({
+        id: '8501008',
+        name: 'Lausanne, gare',
+        meansOfTransport: 'Train, Tram, Bus',
+        stopType: 'Haltestelle',
+        coordinate: [2_538_200, 1_152_300],
+      }),
+    ).toEqual({
+      id: '8501008',
+      stationId: '8501008',
+      name: 'Lausanne, gare',
+      modes: ['train', 'tram', 'bus'],
+      coordinate: [2_538_200, 1_152_300],
+    });
+  });
+
   it('normalizes and prioritizes multimodal passenger stops', () => {
     expect(
       parsePublicTransportStop(
