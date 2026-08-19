@@ -102,7 +102,7 @@ describe('AboutDialog', () => {
     );
     expect(container.querySelector('.about-dialog-footer')).toBeNull();
     expect(container.querySelectorAll('.about-dialog button')).toHaveLength(1);
-    expect(container.textContent).toContain('1.7.0');
+    expect(container.textContent).toContain('1.7.1');
     expect(container.textContent).toContain(
       'le fichier GPX est hébergé pendant 24 heures, sans être associé à votre identité',
     );

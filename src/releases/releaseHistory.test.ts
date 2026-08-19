@@ -32,14 +32,8 @@ function createStorage() {
 
 describe('release history', () => {
   it('provides the same current release structure in every language', () => {
-    const expectedItemIds = [
-      'clearerMapInformation',
-      'desktopPositionInspection',
-    ];
-    const expectedDialogItemIds = [
-      'clearerMapInformation',
-      'desktopPositionInspection',
-    ];
+    const expectedItemIds = ['publicTransportStaticCatalog'];
+    const expectedDialogItemIds: string[] = [];
 
     for (const language of SUPPORTED_LANGUAGES) {
       const release = getCurrentRelease(language);
@@ -50,6 +44,13 @@ describe('release history', () => {
         .toEqual(expectedDialogItemIds);
       expect(release.items.every((item) => item.title.endsWith(':'))).toBe(true);
       expect(releaseHistoryPath(language)).toBe(`/${language}/releases/`);
+    }
+  });
+
+
+  it('keeps a history-only patch release out of the one-time announcement', () => {
+    for (const language of SUPPORTED_LANGUAGES) {
+      expect(getCurrentReleaseDialogItems(language)).toEqual([]);
     }
   });
 
