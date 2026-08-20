@@ -640,7 +640,7 @@ sequenceDiagram
     User->>Import: Select local GPX file
     Import->>Parser: Validate and parse locally
     Parser-->>Import: Independent WGS 84 segments, elevations, and route name
-    Import->>Import: Retain source XML; batch-project to LV95
+    Import->>Import: Retain source XML and batch-project to LV95
     Import->>Route: Leave editing and clear editable history
     Import->>Map: Replace current itinerary with purple read-only display
     Import->>Map: Fit geometry after viewport stabilizes
