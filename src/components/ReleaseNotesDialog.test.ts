@@ -99,9 +99,9 @@ describe('ReleaseNotesDialog', () => {
     expect(
       container.querySelectorAll('.release-notes-list > li'),
     ).toHaveLength(0);
-    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.7.1');
+    expect(container.textContent).toContain('Nouveautés de Via Helvetica 1.7.2');
     expect(container.textContent).not.toContain(
-      'Chargement des arrêts de transports publics optimisé :',
+      'Horaires des avis de tir plus lisibles :',
     );
 
     const historyLink = container.querySelector<HTMLAnchorElement>(

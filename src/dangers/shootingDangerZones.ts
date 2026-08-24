@@ -142,20 +142,70 @@ function readDangerZoneGeometry(value: unknown): Geometry | null {
   }
 }
 
+/** Compact or already formatted 24-hour values around a shooting-time dash. */
+const SHOOTING_TIME_RANGE_PATTERN =
+  /\b((?:[01]\d|2[0-3])(?::?[0-5]\d)|24(?::?00))(\s*[-–—]\s*)((?:[01]\d|2[0-3])(?::?[0-5]\d)|24(?::?00))\b/g;
+
+/** Adds the conventional separator only when GeoAdmin supplies compact `HHMM`. */
+function formatShootingTime(value: string): string {
+  return value.includes(':') ? value : `${value.slice(0, 2)}:${value.slice(2)}`;
+}
+
+/**
+ * Normalizes time ranges inside one official shooting-notice row.
+ * Restricting the transformation to rows carrying a PDF notice avoids treating
+ * unrelated numeric ranges elsewhere in the popup as hours.
+ */
+function normalizeShootingTimeRanges(root: Element): void {
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  let textNode = walker.nextNode();
+
+  // Collect first so rewriting text cannot disturb TreeWalker traversal.
+  while (textNode) {
+    textNodes.push(textNode as Text);
+    textNode = walker.nextNode();
+  }
+
+  for (const node of textNodes) {
+    const value = node.textContent ?? '';
+    const normalized = value.replace(
+      SHOOTING_TIME_RANGE_PATTERN,
+      (_match, from: string, separator: string, to: string) =>
+        `${formatShootingTime(from)}${separator}${formatShootingTime(to)}`,
+    );
+
+    if (normalized !== value) {
+      node.textContent = normalized;
+    }
+  }
+}
+
+/** Tests whether one sanitized popup anchor is a PDF notice link. */
+function isPdfLink(anchor: HTMLAnchorElement): boolean {
+  const href = anchor.getAttribute('href') ?? '';
+  const label = anchor.textContent?.trim().toLowerCase() ?? '';
+  return /\.pdf(?:$|[?#])/i.test(href) || label === 'pdf';
+}
+
 /**
  * Removes PDF download links while preserving the corresponding shooting dates
- * and the rest of the official metadata. The application only needs the key
- * planning information in its compact panel.
+ * and the rest of the official metadata. Compact shooting hours are normalized
+ * only in rows that carry an official PDF notice, keeping the transformation
+ * away from unrelated numeric ranges elsewhere in the popup.
  */
 function removePdfLinks(html: string): string {
   const documentNode = new DOMParser().parseFromString(html, 'text/html');
+  const shootingNoticeRows = new Set<Element>();
 
   for (const anchor of Array.from(documentNode.querySelectorAll('a'))) {
-    const href = anchor.getAttribute('href') ?? '';
-    const label = anchor.textContent?.trim().toLowerCase() ?? '';
-
-    if (!/\.pdf(?:$|[?#])/i.test(href) && label !== 'pdf') {
+    if (!(anchor instanceof HTMLAnchorElement) || !isPdfLink(anchor)) {
       continue;
+    }
+
+    const row = anchor.closest('tr');
+    if (row) {
+      shootingNoticeRows.add(row);
     }
 
     const tableCell = anchor.closest('td, th');
@@ -168,6 +218,10 @@ function removePdfLinks(html: string): string {
     ) {
       tableCell.remove();
     }
+  }
+
+  for (const row of shootingNoticeRows) {
+    normalizeShootingTimeRanges(row);
   }
 
   for (const row of Array.from(documentNode.querySelectorAll('tr'))) {
@@ -278,8 +332,8 @@ export async function identifyShootingDangerZone(
 }
 
 /**
- * Loads localized official metadata for one danger zone and removes only PDF
- * download links from the sanitized result.
+ * Loads localized official metadata for one danger zone, removes PDF download
+ * links, and normalizes compact shooting-hour ranges for readability.
  *
  * @param dangerZone - Feature and map context returned by identification.
  * @param signal - Abort signal for superseded clicks or panel closure.

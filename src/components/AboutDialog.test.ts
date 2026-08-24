@@ -102,7 +102,13 @@ describe('AboutDialog', () => {
     );
     expect(container.querySelector('.about-dialog-footer')).toBeNull();
     expect(container.querySelectorAll('.about-dialog button')).toHaveLength(1);
-    expect(container.textContent).toContain('1.7.1');
+    expect(container.textContent).toContain('1.7.2');
+    expect(container.textContent).toContain(
+      'Via Helvetica est conçue principalement pour préparer un itinéraire sur un grand écran',
+    );
+    expect(container.textContent).toContain(
+      'Elle n’est pas destinée au suivi d’un itinéraire ni à la navigation en temps réel sur le terrain',
+    );
     expect(container.textContent).toContain(
       'le fichier GPX est hébergé pendant 24 heures, sans être associé à votre identité',
     );
@@ -120,6 +126,50 @@ describe('AboutDialog', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    {
+      language: 'fr',
+      expected:
+        'Via Helvetica est conçue principalement pour préparer un itinéraire sur un grand écran',
+    },
+    {
+      language: 'de',
+      expected:
+        'Via Helvetica ist in erster Linie für die Planung einer Route auf einem grossen Bildschirm konzipiert',
+    },
+    {
+      language: 'it',
+      expected:
+        'Via Helvetica è pensata principalmente per preparare un itinerario su uno schermo grande',
+    },
+    {
+      language: 'en',
+      expected:
+        'Via Helvetica is designed primarily for planning a route on a large screen',
+    },
+  ])(
+    'localizes the intended-use guidance in $language',
+    async ({ language, expected }) => {
+      window.localStorage.setItem('via-helvetica-language', language);
+      window.history.replaceState({}, '', `/${language}/`);
+
+      await act(async () => {
+        root?.render(
+          createElement(
+            I18nProvider,
+            null,
+            createElement(AboutDialog, {
+              isOpen: true,
+              onClose: vi.fn(),
+            }),
+          ),
+        );
+      });
+
+      expect(container.textContent).toContain(expected);
+    },
+  );
 
   it.each([
     {

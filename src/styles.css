@@ -1343,6 +1343,26 @@ select {
   text-underline-offset: 2px;
 }
 
+/* GeoAdmin can split shooting dates, times, and PDF links across adjacent
+   inline/table nodes with no reliable visible whitespace after sanitization.
+   Project-owned spacing keeps the official content readable without changing
+   the source values, while the complete time range may wrap as one unit. */
+.map-information-popup-content .shooting-notice-date {
+  margin-inline-start: 0.3em;
+}
+
+.map-information-popup-content .shooting-time-range {
+  display: inline-block;
+  margin-inline-start: 0.3em;
+  white-space: nowrap;
+}
+
+.map-information-popup-content .shooting-notice-pdf-link {
+  display: inline-block;
+  margin-inline-start: 0.65rem;
+  white-space: nowrap;
+}
+
 .map-information-popup-content img {
   max-width: 100%;
   height: auto;

@@ -30,6 +30,8 @@ const frenchTranslations = {
     'Planifiez vos itinéraires de randonnée en Suisse sur les cartes officielles.',
   'about.description':
     'Via Helvetica est une application web gratuite et open source. Elle permet de créer ou d’importer un itinéraire, d’en consulter la distance, le dénivelé et le profil d’altitude, puis de l’exporter au format GPX.',
+  'about.intendedUse':
+    'Via Helvetica est conçue principalement pour préparer un itinéraire sur un grand écran. Elle n’est pas destinée au suivi d’un itinéraire ni à la navigation en temps réel sur le terrain. Pour la randonnée, vous pouvez transférer votre itinéraire vers l’application swisstopo.',
   'about.privacy':
     'Aucun compte n’est nécessaire. Les itinéraires ne sont pas enregistrés sur un serveur de Via Helvetica, sauf lorsque vous choisissez le transfert vers swisstopo. Dans ce cas, le fichier GPX est hébergé pendant 24 heures, sans être associé à votre identité.',
   'about.safetyTitle': 'À savoir',
@@ -283,6 +285,8 @@ const germanTranslations: Record<TranslationKey, string> = {
     'Planen Sie Wanderungen in der Schweiz auf offiziellen Karten.',
   'about.description':
     'Via Helvetica ist eine kostenlose Open-Source-Webanwendung. Sie können eine Route erstellen oder importieren, Distanz, Höhenunterschiede und Höhenprofil prüfen und die Route als GPX exportieren.',
+  'about.intendedUse':
+    'Via Helvetica ist in erster Linie für die Planung einer Route auf einem grossen Bildschirm konzipiert. Sie ist nicht dafür gedacht, einer Route unterwegs zu folgen oder eine Echtzeitnavigation zu bieten. Für unterwegs können Sie Ihre Route an die swisstopo-App übertragen.',
   'about.privacy':
     'Es ist kein Konto erforderlich. Routen werden nicht auf einem Server von Via Helvetica gespeichert, ausser wenn Sie die Übertragung zu swisstopo wählen. In diesem Fall wird die GPX-Datei 24 Stunden lang gehostet, ohne mit Ihrer Identität verknüpft zu werden.',
   'about.safetyTitle': 'Hinweis',
@@ -535,6 +539,8 @@ const italianTranslations: Record<TranslationKey, string> = {
     'Pianifica itinerari escursionistici in Svizzera sulle carte ufficiali.',
   'about.description':
     'Via Helvetica è un’applicazione web gratuita e open source. Permette di creare o importare un itinerario, consultarne distanza, dislivello e profilo altimetrico, quindi esportarlo in formato GPX.',
+  'about.intendedUse':
+    'Via Helvetica è pensata principalmente per preparare un itinerario su uno schermo grande. Non è pensata per seguire un itinerario o per la navigazione in tempo reale sul terreno. Durante l’escursione puoi trasferire il tuo itinerario nell’app swisstopo.',
   'about.privacy':
     'Non è necessario alcun account. Gli itinerari non vengono salvati su un server di Via Helvetica, salvo quando scegli il trasferimento a swisstopo. In questo caso, il file GPX viene ospitato per 24 ore senza essere associato alla tua identità.',
   'about.safetyTitle': 'Da sapere',
@@ -788,6 +794,8 @@ const englishTranslations: Record<TranslationKey, string> = {
     'Plan hiking routes in Switzerland on official maps.',
   'about.description':
     'Via Helvetica is a free, open-source web application. It lets you create or import a route, review its distance, elevation gain and profile, and export it as GPX.',
+  'about.intendedUse':
+    'Via Helvetica is designed primarily for planning a route on a large screen. It is not intended for following a route or for real-time navigation in the field. For use during the hike, you can transfer your route to the swisstopo app.',
   'about.privacy':
     'No account is required. Routes are not stored on a Via Helvetica server unless you choose the swisstopo transfer. In that case, the GPX file is hosted for 24 hours without being associated with your identity.',
   'about.safetyTitle': 'Important',

@@ -111,6 +111,7 @@ export default function AboutDialog({
         <div className="about-dialog-content">
           <section className="about-dialog-section">
             <p id="about-dialog-description">{t('about.description')}</p>
+            <p>{t('about.intendedUse')}</p>
             <p>{t('about.privacy')}</p>
           </section>
 

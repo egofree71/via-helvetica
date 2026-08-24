@@ -1,9 +1,9 @@
 {
-  "currentVersion": "1.7.1",
+  "currentVersion": "1.7.2",
   "locales": {
     "fr": {
       "dialog": {
-        "title": "Nouveautés de Via Helvetica 1.7.1",
+        "title": "Nouveautés de Via Helvetica 1.7.2",
         "historyLink": "Voir l’historique complet",
         "historyLinkNewTabLabel": "s’ouvre dans un nouvel onglet"
       },
@@ -18,6 +18,26 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.7.2",
+          "summary": "Cette version apporte de petites améliorations de lisibilité et de localisation.",
+          "items": [
+            {
+              "id": "clearerShootingNoticeTimes",
+              "title": "Horaires des avis de tir plus lisibles :",
+              "description": "Les horaires des avis de tir sont désormais affichés avec les deux-points entre les heures et les minutes, par exemple 07:30 au lieu de 0730.",
+              "details": [],
+              "showInDialog": false
+            },
+            {
+              "id": "localizedDataSourceCredits",
+              "title": "Crédits des sources de données localisés :",
+              "description": "Les crédits des sources de données affichés dans « À propos de Via Helvetica » sont désormais présentés dans la langue de l’interface.",
+              "details": [],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.7.1",
           "summary": "Cette version optimise le chargement des arrêts de transports publics sans modifier leur utilisation sur la carte.",
@@ -240,7 +260,7 @@
     },
     "de": {
       "dialog": {
-        "title": "Neu in Via Helvetica 1.7.1",
+        "title": "Neu in Via Helvetica 1.7.2",
         "historyLink": "Vollständigen Versionsverlauf anzeigen",
         "historyLinkNewTabLabel": "öffnet in einem neuen Tab"
       },
@@ -255,6 +275,26 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.7.2",
+          "summary": "Diese Version bringt kleine Verbesserungen bei Lesbarkeit und Lokalisierung.",
+          "items": [
+            {
+              "id": "clearerShootingNoticeTimes",
+              "title": "Besser lesbare Zeiten bei Schiessanzeigen:",
+              "description": "Die Zeiten in Schiessanzeigen werden nun mit Doppelpunkt zwischen Stunden und Minuten angezeigt, zum Beispiel 07:30 statt 0730.",
+              "details": [],
+              "showInDialog": false
+            },
+            {
+              "id": "localizedDataSourceCredits",
+              "title": "Lokalisierte Angaben zu Datenquellen:",
+              "description": "Die Angaben zu den Datenquellen unter „Über Via Helvetica“ werden nun in der Sprache der Benutzeroberfläche angezeigt.",
+              "details": [],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.7.1",
           "summary": "Diese Version optimiert das Laden der Haltestellen des öffentlichen Verkehrs, ohne ihre Bedienung auf der Karte zu ändern.",
@@ -477,7 +517,7 @@
     },
     "it": {
       "dialog": {
-        "title": "Novità di Via Helvetica 1.7.1",
+        "title": "Novità di Via Helvetica 1.7.2",
         "historyLink": "Vedi la cronologia completa",
         "historyLinkNewTabLabel": "si apre in una nuova scheda"
       },
@@ -492,6 +532,26 @@
         "versionLabel": "Versione"
       },
       "releases": [
+        {
+          "version": "1.7.2",
+          "summary": "Questa versione introduce piccoli miglioramenti alla leggibilità e alla localizzazione.",
+          "items": [
+            {
+              "id": "clearerShootingNoticeTimes",
+              "title": "Orari degli avvisi di tiro più leggibili:",
+              "description": "Gli orari degli avvisi di tiro sono ora visualizzati con i due punti tra ore e minuti, ad esempio 07:30 invece di 0730.",
+              "details": [],
+              "showInDialog": false
+            },
+            {
+              "id": "localizedDataSourceCredits",
+              "title": "Crediti delle fonti dati localizzati:",
+              "description": "I crediti delle fonti dati mostrati in «Informazioni su Via Helvetica» sono ora visualizzati nella lingua dell’interfaccia.",
+              "details": [],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.7.1",
           "summary": "Questa versione ottimizza il caricamento delle fermate dei trasporti pubblici senza modificarne l’uso sulla carta.",
@@ -714,7 +774,7 @@
     },
     "en": {
       "dialog": {
-        "title": "What’s new in Via Helvetica 1.7.1",
+        "title": "What’s new in Via Helvetica 1.7.2",
         "historyLink": "View full release history",
         "historyLinkNewTabLabel": "opens in a new tab"
       },
@@ -729,6 +789,26 @@
         "versionLabel": "Version"
       },
       "releases": [
+        {
+          "version": "1.7.2",
+          "summary": "This release brings small improvements to readability and localization.",
+          "items": [
+            {
+              "id": "clearerShootingNoticeTimes",
+              "title": "Clearer shooting-notice times:",
+              "description": "Shooting-notice times are now displayed with a colon between hours and minutes, for example 07:30 instead of 0730.",
+              "details": [],
+              "showInDialog": false
+            },
+            {
+              "id": "localizedDataSourceCredits",
+              "title": "Localized data-source credits:",
+              "description": "Data-source credits shown in “About Via Helvetica” are now displayed in the interface language.",
+              "details": [],
+              "showInDialog": false
+            }
+          ]
+        },
         {
           "version": "1.7.1",
           "summary": "This release optimizes how public-transport stops are loaded without changing how they are used on the map.",

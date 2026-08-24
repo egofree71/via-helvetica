@@ -32,7 +32,10 @@ function createStorage() {
 
 describe('release history', () => {
   it('provides the same current release structure in every language', () => {
-    const expectedItemIds = ['publicTransportStaticCatalog'];
+    const expectedItemIds = [
+      'clearerShootingNoticeTimes',
+      'localizedDataSourceCredits',
+    ];
     const expectedDialogItemIds: string[] = [];
 
     for (const language of SUPPORTED_LANGUAGES) {
