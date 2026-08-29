@@ -186,20 +186,20 @@ describe('RouteExportDialog', () => {
     ).toBe(false);
   });
 
-  it('offers a direct swisstopo app action on a small coarse-pointer device', async () => {
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn().mockReturnValue({
-        matches: true,
-        media: '',
-        onchange: null,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      }),
-    );
+  it('keeps phone-width layouts on local GPX export without creating a swisstopo share', async () => {
+    const matchMedia = vi.fn().mockReturnValue({
+      matches: true,
+      media: '',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    });
+    vi.stubGlobal('matchMedia', matchMedia);
+    const onExportGpx = vi.fn();
+    const onCreateSwisstopoShare = vi.fn();
 
     await act(async () => {
       root?.render(
@@ -211,81 +211,40 @@ describe('RouteExportDialog', () => {
             defaultName: 'Mobile route',
             canShareWithSwisstopo: true,
             onCancel: vi.fn(),
-            onExportGpx: vi.fn(),
-            onCreateSwisstopoShare: vi.fn(),
-          }),
-        ),
-      );
-    });
-
-    const buttonLabels = Array.from(container.querySelectorAll('button')).map(
-      (button) => button.textContent,
-    );
-
-    expect(buttonLabels).toContain('Prepare to open in swisstopo');
-    expect(buttonLabels).not.toContain(
-      'Create a QR code to import into swisstopo',
-    );
-  });
-
-  it('waits for a second explicit mobile action before leaving Via Helvetica', async () => {
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn().mockReturnValue({
-        matches: true,
-        media: '',
-        onchange: null,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      }),
-    );
-    const onCreateSwisstopoShare = vi.fn().mockResolvedValue({
-      gpxUrl: 'https://share.example.org/gpx/route.gpx',
-      swisstopoUrl: 'https://swisstopo.app/u/example',
-      expiresAt: '2026-08-09T12:00:00.000Z',
-    });
-
-    await act(async () => {
-      root?.render(
-        createElement(
-          I18nProvider,
-          null,
-          createElement(RouteExportDialog, {
-            isOpen: true,
-            defaultName: 'Mobile route',
-            canShareWithSwisstopo: true,
-            onCancel: vi.fn(),
-            onExportGpx: vi.fn(),
+            onExportGpx,
             onCreateSwisstopoShare,
           }),
         ),
       );
     });
 
-    const prepareButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Prepare to open in swisstopo',
+    expect(matchMedia).toHaveBeenCalledWith('(max-width: 700px)');
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const exportButton = buttons.find(
+      (button) => button.textContent === 'Export the GPX file',
     );
 
-    await act(async () => {
-      prepareButton?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true, cancelable: true }),
-      );
-      await Promise.resolve();
-    });
-
-    const openLink = container.querySelector<HTMLAnchorElement>(
-      '.route-export-dialog-mobile-fallback',
-    );
-    expect(openLink?.textContent).toBe('Open in the swisstopo app');
-    expect(openLink?.href).toBe('https://swisstopo.app/u/example');
+    expect(exportButton).toBeDefined();
     expect(
-      Array.from(container.querySelectorAll('button')).some(
-        (button) => button.textContent === 'Export the GPX file',
+      buttons.some(
+        (button) =>
+          button.textContent === 'Create a QR code to import into swisstopo',
       ),
     ).toBe(false);
+    expect(
+      container.querySelector('.route-export-dialog-storage-note'),
+    ).toBeNull();
+    expect(container.querySelector('.route-export-dialog-share')).toBeNull();
+
+    await act(async () => {
+      container.querySelector('form')?.dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(onExportGpx).toHaveBeenCalledWith('Mobile route');
+    expect(onCreateSwisstopoShare).not.toHaveBeenCalled();
   });
 
   it('shows a specific message when the GPX is too large to share', async () => {

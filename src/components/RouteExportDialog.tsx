@@ -1,8 +1,8 @@
 /**
- * Business context: names the current itinerary once, then offers the two
- * transfer paths useful after planning: a normal local GPX download or a
- * temporary swisstopo hand-off (desktop QR, direct mobile link). The dialog
- * remains transient so these export details do not consume permanent map space.
+ * Business context: names the current itinerary once, then offers a normal
+ * local GPX download and, outside phone-width layouts, the optional temporary
+ * swisstopo QR hand-off. The dialog remains transient so export details do not
+ * consume permanent map space.
  */
 import {
   useEffect,
@@ -42,15 +42,13 @@ interface RouteExportDialogProps {
 /** Maximum route-name length accepted by the export form. */
 const ROUTE_NAME_MAX_LENGTH = 120;
 /**
- * Mobile hand-off should avoid showing a QR code on the same device that must
- * scan it. `any-pointer` keeps touch-capable devices eligible even when another
- * available input, such as a stylus, is reported as the primary pointer.
+ * Phone-width breakpoint in CSS pixels for hiding the temporary swisstopo
+ * hand-off. Keep this aligned with the 700 px phone layout rules in styles.css.
  */
-const MOBILE_SWISSTOPO_MEDIA_QUERY =
-  '(max-width: 64rem) and (any-pointer: coarse)';
+const MOBILE_SWISSTOPO_MEDIA_QUERY = '(max-width: 700px)';
 
-/** Reads the current device characteristics without assuming `matchMedia` exists. */
-function isMobileSwisstopoHandoff(): boolean {
+/** Reads the current phone-width layout without assuming `matchMedia` exists. */
+function matchesMobileSwisstopoLayout(): boolean {
   return (
     typeof window.matchMedia === 'function' &&
     window.matchMedia(MOBILE_SWISSTOPO_MEDIA_QUERY).matches
@@ -76,8 +74,8 @@ export default function RouteExportDialog({
   const [share, setShare] = useState<SwisstopoShare | null>(null);
   const [isSharePending, setIsSharePending] = useState(false);
   const [shareError, setShareError] = useState<SwisstopoShareErrorCode | null>(null);
-  const [useDirectSwisstopoHandoff, setUseDirectSwisstopoHandoff] = useState(
-    isMobileSwisstopoHandoff,
+  const [isMobileSwisstopoLayout, setIsMobileSwisstopoLayout] = useState(
+    matchesMobileSwisstopoLayout,
   );
 
   useEffect(() => {
@@ -86,7 +84,7 @@ export default function RouteExportDialog({
     }
 
     const mediaQuery = window.matchMedia(MOBILE_SWISSTOPO_MEDIA_QUERY);
-    const updateMode = () => setUseDirectSwisstopoHandoff(mediaQuery.matches);
+    const updateMode = () => setIsMobileSwisstopoLayout(mediaQuery.matches);
 
     updateMode();
     mediaQuery.addEventListener('change', updateMode);
@@ -249,7 +247,7 @@ export default function RouteExportDialog({
         />
         <p id="route-export-dialog-hint">{t('gpx.nameHint')}</p>
 
-        {share && qrCode && !useDirectSwisstopoHandoff && (
+        {share && qrCode && !isMobileSwisstopoLayout && (
           <section
             className="route-export-dialog-share"
             aria-labelledby="route-export-dialog-share-title"
@@ -275,22 +273,7 @@ export default function RouteExportDialog({
           </section>
         )}
 
-        {share && useDirectSwisstopoHandoff && (
-          <div
-            className="route-export-dialog-mobile-result"
-            role="status"
-            aria-live="polite"
-          >
-            <a
-              className="route-export-dialog-button route-export-dialog-mobile-fallback"
-              href={share.swisstopoUrl}
-            >
-              {t('gpx.openSwisstopoApp')}
-            </a>
-          </div>
-        )}
-
-        {shareError && (
+        {shareError && !isMobileSwisstopoLayout && (
           <p className="route-export-dialog-error" role="alert">
             {t(
               shareError === 'tooLarge'
@@ -302,7 +285,7 @@ export default function RouteExportDialog({
           </p>
         )}
 
-        {!share && (
+        {(!share || isMobileSwisstopoLayout) && (
           <div className="route-export-dialog-options">
             <button
               type="submit"
@@ -312,7 +295,7 @@ export default function RouteExportDialog({
               {t('gpx.download')}
             </button>
 
-            {canShareWithSwisstopo && (
+            {canShareWithSwisstopo && !isMobileSwisstopoLayout && (
               <div className="route-export-dialog-swisstopo-option">
                 <button
                   type="button"
@@ -322,9 +305,7 @@ export default function RouteExportDialog({
                 >
                   {isSharePending
                     ? t('gpx.preparingSwisstopo')
-                    : useDirectSwisstopoHandoff
-                      ? t('gpx.prepareSwisstopoMobile')
-                      : t('gpx.createSwisstopoQr')}
+                    : t('gpx.createSwisstopoQr')}
                 </button>
                 <p className="route-export-dialog-storage-note">
                   {t('gpx.swisstopoStorageNotice')}

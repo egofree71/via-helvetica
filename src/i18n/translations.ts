@@ -256,8 +256,6 @@ const frenchTranslations = {
   'gpx.close': 'Fermer',
   'gpx.download': 'Exporter le fichier GPX',
   'gpx.createSwisstopoQr': 'Créer un QR code pour importer dans swisstopo',
-  'gpx.openSwisstopoApp': 'Ouvrir dans l’application swisstopo',
-  'gpx.prepareSwisstopoMobile': 'Préparer l’ouverture dans swisstopo',
   'gpx.swisstopoStorageNotice':
     'Pour le transfert vers swisstopo, le fichier GPX est hébergé pendant 24 heures, sans être associé à votre identité.',
   'gpx.preparingSwisstopo': 'Préparation…',
@@ -513,8 +511,6 @@ const germanTranslations: Record<TranslationKey, string> = {
   'gpx.close': 'Schliessen',
   'gpx.download': 'GPX-Datei exportieren',
   'gpx.createSwisstopoQr': 'QR-Code zum Import in swisstopo erstellen',
-  'gpx.openSwisstopoApp': 'In der swisstopo-App öffnen',
-  'gpx.prepareSwisstopoMobile': 'Öffnen in swisstopo vorbereiten',
   'gpx.swisstopoStorageNotice':
     'Für die Übertragung zu swisstopo wird die GPX-Datei 24 Stunden lang bereitgestellt, ohne mit Ihrer Identität verknüpft zu werden.',
   'gpx.preparingSwisstopo': 'Wird vorbereitet…',
@@ -768,8 +764,6 @@ const italianTranslations: Record<TranslationKey, string> = {
   'gpx.close': 'Chiudi',
   'gpx.download': 'Esporta il file GPX',
   'gpx.createSwisstopoQr': 'Crea un codice QR per importare in swisstopo',
-  'gpx.openSwisstopoApp': 'Apri nell’app swisstopo',
-  'gpx.prepareSwisstopoMobile': 'Prepara l’apertura in swisstopo',
   'gpx.swisstopoStorageNotice':
     'Per il trasferimento a swisstopo, il file GPX viene ospitato per 24 ore senza essere associato alla tua identità.',
   'gpx.preparingSwisstopo': 'Preparazione…',
@@ -1021,8 +1015,6 @@ const englishTranslations: Record<TranslationKey, string> = {
   'gpx.close': 'Close',
   'gpx.download': 'Export the GPX file',
   'gpx.createSwisstopoQr': 'Create a QR code to import into swisstopo',
-  'gpx.openSwisstopoApp': 'Open in the swisstopo app',
-  'gpx.prepareSwisstopoMobile': 'Prepare to open in swisstopo',
   'gpx.swisstopoStorageNotice':
     'For the swisstopo transfer, the GPX file is hosted for 24 hours without being associated with your identity.',
   'gpx.preparingSwisstopo': 'Preparing…',

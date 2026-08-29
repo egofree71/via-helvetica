@@ -2201,15 +2201,6 @@ select {
   background: #ffffff;
 }
 
-.route-export-dialog-mobile-result {
-  display: grid;
-  margin-top: 0.2rem;
-}
-
-.route-export-dialog-mobile-fallback {
-  width: 100%;
-}
-
 .route-export-dialog-form .route-export-dialog-error {
   color: #b42318;
   font-weight: 600;

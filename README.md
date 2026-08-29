@@ -7,9 +7,9 @@ Via Helvetica is a free, open-source web application for planning hiking
 routes in Switzerland with official swisstopo maps and geodata. It stays
 focused on one route at a time. Core planning and normal GPX export run entirely
 in the browser; an optional tiny Cloudflare Worker can host a GPX temporarily
-when the user explicitly asks to transfer it to the swisstopo app: desktop
-users get a QR code, while small touch devices receive a direct app-opening
-action after the temporary share is prepared.
+when the user explicitly asks to transfer it to the swisstopo app from a
+larger-screen layout. The hand-off is presented as a QR code; phone-width
+layouts keep the normal local GPX export only.
 
 Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 
@@ -39,7 +39,7 @@ Built with React, TypeScript, Vite, OpenLayers, and Vitest.
 | Map | Full-screen OpenLayers map in native Swiss LV95 (`EPSG:2056`), with official swisstopo color, grey, and aerial backgrounds, hiking trails, optional clickable SwitzerlandMobility hiking routes, persistent visibility and opacity controls for information layers, place and WGS 84/LV95 coordinate search, desktop right-click coordinate/elevation inspection, geolocation, scale, and fullscreen mode |
 | Route planning | Editable ordered waypoints, start and finish markers, sparse direction arrows, optional swissTLM3D snapping in a dedicated routing Worker, undo, redo, reversal, loop closure, route deletion, and straight fallback segments when no routable path is found |
 | Route information | Distance, ascent, descent, Swiss hiking-time estimate, and a collapsible elevation profile with pointer synchronisation between the chart and the map |
-| Import and export | Read-only GPX loading with route statistics and elevation profile, optional lossless conversion of one continuous GPX trace into editable waypoints without rerouting the initial geometry, named GPX export for editable, imported, and selected SwitzerlandMobility routes, plus an optional swisstopo hand-off that temporarily exposes the current GPX, using a QR code on desktop and an explicit direct app link on small touch devices |
+| Import and export | Read-only GPX loading with route statistics and elevation profile, optional lossless conversion of one continuous GPX trace into editable waypoints without rerouting the initial geometry, named GPX export for editable, imported, and selected SwitzerlandMobility routes, plus an optional swisstopo hand-off that temporarily exposes the current GPX and presents a QR code on larger-screen layouts; phone-width layouts keep local GPX export only |
 | Safety | Official hiking-trail closures and detours, plus military shooting notices and danger zones with localized details |
 | Public transport | Passenger-relevant stops, mode-specific symbols, next departures grouped by date, and links to the official SBB/CFF/FFS timetable |
 | Interface | Compact floating controls, no permanent toolbar, French, German, Italian, and English translations with shareable localized URLs, a one-time release-highlights dialog, and localized About and static release-history pages |
@@ -166,11 +166,11 @@ Machine-specific infrastructure and credentials remain outside version control.
   is still pristine, so metadata and extensions can still be preserved after
   entering edit mode. Once an edit is committed, Via Helvetica exports a generated
   GPX while retaining untouched imported section vertices.
-- When the optional share Worker is configured, use **Open in swisstopo** to
-  upload that same named GPX for up to 24 hours by default. Desktop shows a QR
-  code for the official `swisstopo.app/u/` hand-off; small touch devices expose
-  an explicit app-opening link after preparation. Temporary transfer is limited
-  to 2 MiB; larger GPX files remain available through the normal local export.
+- When the optional share Worker is configured, larger-screen layouts can use
+  **Open in swisstopo** to upload that same named GPX for up to 24 hours by
+  default and display a QR code for the official `swisstopo.app/u/` hand-off.
+  Phone-width layouts keep the normal local GPX export only. Temporary transfer
+  is limited to 2 MiB; larger GPX files remain available through local export.
 - Starting a new route replaces the imported itinerary.
 
 ### Inspect route and map information

@@ -10,9 +10,9 @@ files on GitHub Pages and still requires no account, user database, or persisten
 route storage. An optional Cloudflare Worker exists only for the explicit
 swisstopo hand-off: it stores the current named GPX temporarily in R2 so the
 swisstopo app can fetch it by public URL. The default retention is 24 hours.
-Desktop users receive a locally rendered QR code; small touch devices first
-prepare the temporary share and then expose an explicit link to the same
-swisstopo hand-off.
+Larger-screen layouts receive a locally rendered QR code. Phone-width layouts
+keep normal local GPX export only and do not expose the temporary swisstopo
+hand-off.
 Localized static entries at `/fr/`, `/de/`, `/it/`, and `/en/` expose
 language-specific discovery metadata while
 loading the same React/OpenLayers application.
@@ -296,7 +296,7 @@ flowchart TB
 | Routing | `src/routing/` | Worker protocol, bounded provider loading, caches, graph construction, snapping, and A* |
 | Offline routing data | `routing-data.config.example.json`, `scripts/generate-routing-geometry-cells.py`, `scripts/generate-precomputed-binary-routing-graph.mjs`, `scripts/verify-routing-dataset.mjs`, `scripts/upload-routing-dataset-r2.ps1` | External source/work/release paths, national import, binary compilation, verification, and immutable R2 publication |
 | Public-transport stop data | `public-transport-data.config.example.json`, `scripts/download-public-transport-stops-source.mjs`, `scripts/prepare-local-public-transport-stops.mjs`, `scripts/verify-public-transport-stops-release.mjs`, `scripts/upload-public-transport-stops-r2.ps1`, `scripts/verify-published-public-transport-stops.mjs` | STAC source discovery, validated FOT import, compact static catalog preparation, source-fingerprint provenance, Brotli publication, and local/public verification |
-| swisstopo hand-off | `src/share/`, `src/components/RouteExportDialog.tsx`, `workers/swisstopo-gpx-share/` | Builds the documented `/u/` URL, renders a desktop QR or an explicit mobile app link, uploads GPX only on explicit request, and expires temporary R2 objects |
+| swisstopo hand-off | `src/share/`, `src/components/RouteExportDialog.tsx`, `workers/swisstopo-gpx-share/` | Builds the documented `/u/` URL, renders a QR outside phone-width layouts, uploads GPX only on explicit request, and expires temporary R2 objects |
 | Search | `src/search/locationSearch.ts`, `src/search/coordinateSearch.ts`, `src/components/LocationSearch.tsx` | Local WGS 84/LV95 parsing, provider contract, session cache, result UI, keyboard navigation, and request cancellation |
 | Localization | `src/i18n/`, `scripts/generate-localized-pages.mjs` | Typed dictionaries, language persistence, locale paths, runtime document metadata, and generated localized HTML entries |
 | Release history | `src/releases/`, `src/components/ReleaseNotesDialog.tsx`, `scripts/templates/releases.html` | Returning-visitor release acknowledgement, compact localized highlights with one explicit footer dismissal, a signposted new-tab history link, a distinct current-version display and history action in About, and generated indexable release-history pages |
@@ -618,10 +618,9 @@ GPX export and swisstopo hand-off share the same naming workflow:
 - the swisstopo transfer action, when configured, POSTs that same GPX to the
   optional Worker and receives a temporary HTTPS URL;
 - the browser base64url-encodes that URL behind the official
-  `https://swisstopo.app/u/` prefix; desktop layouts render the QR code locally,
-  while small coarse-pointer layouts expose the resulting swisstopo link as a
-  second explicit action because a phone cannot conveniently scan a QR code
-  displayed on its own screen;
+  `https://swisstopo.app/u/` prefix; layouts wider than the 700 CSS px phone
+  breakpoint render the QR code locally, while phone-width layouts keep only
+  normal local GPX export and never expose the temporary share action;
 - changing the route name invalidates a generated QR because the uploaded GPX no
   longer corresponds to the current form value.
 
@@ -1242,8 +1241,9 @@ manual checks include:
 - the contextual pencil position beside the statistics bar at intermediate/tablet
   widths and directly above the full-width statistics bar on phones, including
   compact layouts with the elevation profile open;
-- local GPX export versus explicit swisstopo upload, desktop QR scanning, direct
-  mobile hand-off, and expiry behaviour of the temporary GPX URL;
+- local GPX export versus explicit swisstopo upload, QR scanning outside
+  phone-width layouts, suppression of the temporary share action on phones, and
+  expiry behaviour of the temporary GPX URL;
 - map/profile pointer synchronisation;
 - provider portrayals and official popup content;
 - stop, closure, and danger-zone clicks near panel and viewport edges on desktop
