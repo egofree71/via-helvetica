@@ -43,11 +43,11 @@ interface RouteExportDialogProps {
 const ROUTE_NAME_MAX_LENGTH = 120;
 /**
  * Mobile hand-off should avoid showing a QR code on the same device that must
- * scan it. Combining viewport size with a coarse pointer avoids treating most
- * touch-enabled laptops as phones or tablets.
+ * scan it. `any-pointer` keeps touch-capable devices eligible even when another
+ * available input, such as a stylus, is reported as the primary pointer.
  */
 const MOBILE_SWISSTOPO_MEDIA_QUERY =
-  '(max-width: 64rem) and (hover: none) and (pointer: coarse)';
+  '(max-width: 64rem) and (any-pointer: coarse)';
 
 /** Reads the current device characteristics without assuming `matchMedia` exists. */
 function isMobileSwisstopoHandoff(): boolean {
